@@ -1,6 +1,6 @@
 # OWASP LLM Top 10 — coverage statement
 
-**As of:** `main` at `bc735e5c` (2026-11-10, PR #378 sandbox credential hardening).
+**As of:** `main` at `b444f1bf` (2026-11-11, through PR #423).
 
 This statement answers one question for each of the ten OWASP LLM risks: what
 SOP covers, where the evidence is, and what it does not cover, with the reason.
@@ -16,7 +16,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 
 | OWASP 2025 | Repo plan / label | Risk                                                  | Coverage                                                                                                                                                                                                                                                                                    | Main remaining gap                                                                                                                                                                                   |
 | ---------- | ----------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| LLM01      | Plan 02 / LLM01   | Prompt Injection                                      | Covered (controls + bounded live campaigns)                                                                                                                                                                                                                                                 | One model per platform; no universal claim                                                                                                                                                           |
+| LLM01      | Plan 02 / LLM01   | Prompt Injection                                      | Covered (controls + bounded live campaigns)                                                                                                                                                                                                                                                 | One merged model per platform; second-model macOS evidence is unmerged; no universal claim                                                                                                                                                           |
 | LLM02      | Plan 03 / LLM02   | Sensitive Information Disclosure                      | Covered for the user prompt and tool results (trace + macOS/Linux live campaigns); bounded evidence acceptance `RECORDED`; C1 unknown-format redaction `IMPLEMENTED` opt-in (PRs #361/#362/#364) with bounded Linux live `PASS`; focused C1 hardlink verification `PASS` for 4 scoped cases | Not general DLP; four pre-C1 Linux residual exposures; hardlink path bypass with one unlisted-value residual; full Plan 03 acceptance `NEEDS_HUMAN`; C1 disabled by default; broader coverage `OPEN` |
 | LLM03      | Plan 04 / LLM04   | Supply Chain                                          | Partial                                                                                                                                                                                                                                                                                     | Model provenance and publisher signatures out of SOP's control                                                                                                                                       |
 | LLM04      | Plan 05 / LLM05   | Data and Model Poisoning                              | Partial                                                                                                                                                                                                                                                                                     | Integrity proves bytes, not benign content; provider training external                                                                                                                               |
@@ -33,11 +33,14 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 
 - **Covered:** tool authorization, command policy and sandboxed live campaigns.
   On macOS, 4 of 4 injection cases were blocked and the positive control was
-  allowed. On Linux, 3 of 4 cases were denied and 1 timed out with no verdict.
+  allowed. On Linux arm64 with `qwen3.5:4b`, all 4 injection cases were denied
+  and the positive control was allowed after the campaign disabled model thinking
+  for forced JSON output (PR #422). Earlier timeout evidence remains preserved.
   Evidence: [llm01-injection.md](llm01-injection.md).
 - **Not covered, and why:** prompt injection cannot be prevented in general. The
-  evidence is one model per platform, run once per case, so it is not a claim
-  about other models or providers.
+  merged evidence is one model per platform, run once per case, so it is not a
+  claim about other models or providers. A second-model macOS campaign is
+  committed but unmerged in PR #424.
 
 ### LLM02 Sensitive Information Disclosure — covered, bounded
 
@@ -142,7 +145,8 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   - SOP cannot verify the provenance of a provider's hosted model.
   - Publisher signatures are not checked.
   - Binary pins are opt-in and platform-specific, so none are committed.
-  - A small window exists between hashing a binary and running it.
+  - PR #410 closes the hash-then-exec race by running a verified private copy.
+    Binary pins remain opt-in and publisher signatures are not checked.
 
 ### LLM04 Data and Model Poisoning — partial
 
@@ -171,10 +175,12 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   Evidence: [llm10-output-handling.md](llm10-output-handling.md).
 
 - **Not covered, and why:** rendering in third-party terminals and IDEs,
-  persisted Markdown, and Slack unfurl are outside SOP. How Slack rendered the
-  message was not observed. All six Plan 10 manual criteria were accepted, and
-  Plan 10 was historicalized `COMPLETE`; one Slack transport event was
-  `DELIVERED` on attempt 1. Slack rendering and channel binding remain unobserved.
+  persisted Markdown, and Slack unfurl are outside SOP. The operator observed a
+  plain `sop notify test` event reach the intended Slack channel with literal text
+  and no unexpected unfurl or mention (PR #412). The fixed test event contains no
+  markup, link, or mention-shaped canary, so escaped-markup rendering remains
+  `NOT_OBSERVED`. All six Plan 10 manual criteria were accepted, and Plan 10 was
+  historicalized `COMPLETE`.
 
 ### LLM06 Excessive Agency — covered by policy, with opt-in sandboxing on macOS and Linux
 
@@ -196,8 +202,9 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   - The sandbox is off by default.
   - On Linux the sandbox uses its own network namespace, so a test cannot
     reach a server on the host's loopback; one it starts itself works. Host
-    Unix sockets under `/tmp` and `/run` are hidden; one elsewhere (for example
-    under `$HOME`) stays connectable.
+    Unix sockets under `/tmp` and `/run` are hidden. PR #421 also masks sockets
+    found under the Linux home directory with a bounded, fail-closed scan.
+    Sockets outside those masked roots remain connectable.
   - The agent process itself runs outside SOP.
   - Every sandboxed build starts with a cold build cache (about 10 s for three
     of this repository's packages), and a module missing from the module cache
@@ -272,14 +279,14 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 
 These cannot be closed by code in this repository:
 
-1. Plan 03 acceptance of the live campaign artifact
+1. Plan 03 per-criterion acceptance and the remaining LLM02 risk decisions
    ([llm02-acceptance-request.md](llm02-acceptance-request.md)).
-2. Plan 10 Slack rendering and channel-binding observation
-   ([llm10-acceptance-request.md](llm10-acceptance-request.md)).
-3. Linux live runs for Plans 03, 07 and 08, and a live RAG deployment for
-   Plan 09.
+2. Whether to add a one-shot Slack probe for escaped markup and mention-shaped
+   strings; plain rendering and channel binding are already observed in PR #412.
+3. Linux live retrieval/notification sinks and a live RAG deployment with
+   PostgreSQL and embeddings.
 
 ## Code follow-ups worth doing
 
-- A dollar cap, if needed: it would need per-model pricing on top of the token
-  budget.
+- No dollar-cap follow-up is active: the operator selected token-budget-only
+  option A in PR #417. Reconsidering it requires a new policy decision.

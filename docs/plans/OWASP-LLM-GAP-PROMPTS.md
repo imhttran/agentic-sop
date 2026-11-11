@@ -1,6 +1,6 @@
 # OWASP LLM Top 10 — end-to-end prompts for the remaining gaps
 
-**As of:** `main` at `6bea81b1` (2026-11-10). **Status:** working aid, not a plan
+**As of:** `main` at `b444f1bf` (2026-11-11). **Status:** working aid, not a plan
 of record and not normative.
 
 One prompt per open gap, taken from
@@ -34,7 +34,7 @@ To use one: start a fresh agent session in this repository and paste the
 | 15  | LLM09        | Subprocess can write SOP state with the sandbox off; live `NOT_RUN` | Code + evidence | Waiting on operator | fingerprint check was NO-GO (2026-11-09); the sandbox that denies .agent-sdlc writes is opt-in; default-on waits on gap 13 |
 | 16  | LLM10        | Five subprocess paths without process-group termination             | Code            | Done        | PR #398 (merged) |
 | 17  | LLM10        | Token budget is off by default and is not a dollar cap              | Code, optional  | Done | PR #417 (merged): option A, token budget only |
-| 18  | All          | Coverage statement and evidence matrix lag PRs #393 and #394        | Docs            | Open        |                  |
+| 18  | All          | Coverage statement and evidence matrix lag current merged evidence  | Docs            | In progress | PR #425          |
 
 **Tracking.** The Status and PR / evidence columns track progress on this list
 only. Statuses: `Open`, `In progress`, `Waiting on operator` (a proposal or
