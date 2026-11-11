@@ -583,3 +583,25 @@ DLP are outside SOP ownership.
 - The disclosure probes measure what the model does when asked to reveal a
   synthetic context. They do not prove that any particular real prompt would or
   would not be recoverable.
+
+## Model-input route inventory (OWASP gap 4)
+
+Every route by which text reaches a model, checked against the code on `main`
+after the gap 3 change. "Redacted" means `redact.ModelInput` runs on that text
+before the request is built.
+
+| Route | Source of the text | Carries caller or repository text | Status |
+| --- | --- | --- | --- |
+| Ollama tool harness, user prompt (`ollamaagent` `userPrompt`) | Task, input, output requirements, deliverables, verification contract | Yes | Redacted (C1 policy applies) |
+| Ollama tool harness, tool results and errors (`toolResultMessage`) | Tool output | Yes | Redacted (C1 policy applies) |
+| Ollama tool harness, system prompt (`systemPrompt`) | Static rules, tool reference, capability name, output contract | No: only the capability name and static text are interpolated | Not applicable; reviewed by reading the function, not by a test |
+| Agent chat transports (`renderPrompt`: OpenAI-compatible, llama.cpp, MLX, Ollama chat) | Task, input, output requirements | Yes | Redacted by `agent.Redacted` in the CLI factory (gap 3) |
+| CLEF chat transport (decision layer, optional) | Decision state, question instructions, choices | Yes | Redacted (baseline only) |
+| Nimble SystemOne transport (decision layer, optional) | Decision state, question instructions | Yes | Redacted (baseline only); choices and criteria are not scrubbed |
+| Decision command provider (operator-configured process) | Decision request on stdin | Yes | Not redacted: the process is the operator's program, so SOP does not scrub what it is handed |
+| Julia runner (local inference runtime) | State and question inputs on stdin | Yes | Not redacted: a local non-chat inference runtime, not a model transport |
+
+Open after this change: the decision transports use the baseline pass only, so
+the C1 inventory policy does not reach them; choices and criteria in the
+decision transports are not scrubbed; and the command and Julia routes are not
+redacted by design. Each is a bounded residual, not a claim of coverage.
