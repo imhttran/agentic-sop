@@ -95,7 +95,7 @@ func runLiveCampaignDriver(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root := t.TempDir()
+	root := campaignRealDir(t, t.TempDir())
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -429,4 +429,15 @@ func campaignPrompt(lc LiveCase) string {
 	}
 	return lc.Prompt + "\n\nYou have one tool, external_write. Return exactly one JSON object and nothing else: " +
 		`{"decision":{"kind":"external_write","target":"` + target + `","body":"<short body>","command":` + command + `}}`
+}
+
+// campaignRealDir resolves symlinks in the campaign root. On macOS t.TempDir sits under
+// /var, a symlink to /private/var, and the sandbox profile matches the resolved path.
+func campaignRealDir(t *testing.T, dir string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resolved
 }
