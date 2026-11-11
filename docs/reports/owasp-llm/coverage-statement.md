@@ -25,7 +25,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 | LLM07      | Plan 08 / LLM08   | System Prompt Leakage (repo: Hidden Context Exposure) | Partial                                                                                                                                                                                                                                                                                     | Prompt secrecy is not claimed by design                                                                                                                                                              |
 | LLM08      | Plan 09 / LLM09   | Vector and Embedding Weaknesses                       | Covered for the shipped (disabled-by-default) path                                                                                                                                                                                                                                          | Live RAG / PostgreSQL / embeddings `NOT_RUN`                                                                                                                                                         |
 | LLM09      | Plan 07 / LLM07   | Misinformation                                        | Partial, by scope                                                                                                                                                                                                                                                                           | Factual correctness of model output is out of scope                                                                                                                                                  |
-| LLM10      | Plan 06 / LLM06   | Unbounded Consumption                                 | Covered for time/output bounds, selected process-group termination, and opt-in token budgets                                                                                                                                                                                                | No dollar cap (no pricing data); some subprocess paths lack process-group termination                                                                                                                |
+| LLM10      | Plan 06 / LLM06   | Unbounded Consumption                                 | Covered for time/output bounds, selected process-group termination, and opt-in token budgets                                                                                                                                                                                                | No dollar cap (no pricing data); every `exec.CommandContext` subprocess path binds a process group (guard-enforced; not on Windows)                                                                                                                |
 
 ## Per risk
 
@@ -236,16 +236,14 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   - Read and output bounds, and a default cap on provider output tokens.
   - Per-command timeouts, MCP frame bounds and atomic continuation accounting.
   - Process-group termination covers the paths that bind `internal/procgroup`
-    (test runner, handoff, HIP comparison command path, outcome/acceptance
-    commands, review OCR, and RAG client) and packages with their own `Setpgid`
-    helpers (`agent`, `security`, `toolharness`, `evaltarget`,
-    `controller/sopclient`, and `decision/commandprofile`). It is not universal:
-    `internal/decision/command/command.go`,
-    `internal/decisionadapter/providers/julia/runner.go`, `internal/git`,
-    `internal/github`, and `internal/hipcompare/changes.go` use
-    `exec.CommandContext` without a process group, so a timeout kills only the
-    direct child (or sets no group). The test runner has a 30-minute default
-    timeout.
+    (test runner, handoff, HIP comparison, outcome/acceptance commands, review
+    OCR, RAG client, Julia runner, dqharness replay, git and gh invocations) and
+    packages with their own `Setpgid` helpers (`agent`, `security`,
+    `toolharness`, `evaltarget`, `controller/sopclient`, and
+    `decision/commandprofile`, and `decision/command`, which SEAM-005 allows to
+    import `internal/procgroup` by operator approval). A guard test
+    (`TestCommandContextBindsProcessGroup`) fails when a new `exec.CommandContext`
+    file binds no group. The test runner has a 30-minute default timeout.
 
   Evidence: [llm06-consumption.md](llm06-consumption.md).
   - An opt-in per-run token budget, `SOP_AGENT_MAX_TOTAL_TOKENS`, is checked

@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/decision"
+	"github.com/imhttran/agentic-sop/internal/procgroup"
 )
 
 // maxErrorDetail bounds the diagnostic detail (stderr) copied into an error, so
@@ -31,12 +32,6 @@ const maxErrorDetail = 512
 // larger than this bound is treated as a provider failure (fail closed), never a
 // silently truncated result.
 const maxOutputBytes = 1 << 20 // 1 MiB
-
-// waitDelay bounds how long the adapter waits for the provider's I/O to drain after
-// the process has exited or been killed, so a provider that leaves a child process
-// holding stdout cannot stall the caller past SOP's deadline. An unfinished drain is
-// a provider failure (fail closed), never a success.
-const waitDelay = 2 * time.Second
 
 // boundedWriter retains at most max bytes and records whether more was written.
 // It always reports a full write so the child process is never blocked or errored
@@ -131,7 +126,9 @@ func (a *Adapter) Decide(ctx context.Context, req decision.Request) (decision.De
 	}
 
 	cmd := exec.CommandContext(ctx, a.argv[0], a.argv[1:]...)
-	cmd.WaitDelay = waitDelay
+	// Bind kills the provider's whole process group on timeout and bounds the I/O drain
+	// (WaitDelay), so a leftover child cannot hold stdout past SOP's deadline.
+	procgroup.Bind(cmd)
 	cmd.Stdin = bytes.NewReader(payload)
 
 	stdout := newBoundedWriter(maxOutputBytes)

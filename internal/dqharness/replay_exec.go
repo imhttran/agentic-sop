@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/imhttran/agentic-sop/internal/procgroup"
 )
 
 // ReplayFixture is the auditable input for one executable case. Every field is
@@ -271,6 +273,7 @@ func IsolatedReplay(ctx context.Context, parent string, f ReplayFixture, timeout
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	cmd := exec.CommandContext(runCtx, iso.Tool, args...)
+	procgroup.Bind(cmd)
 	cmd.Dir = dir
 	// A scrubbed environment: no API keys, tokens, or provider configuration.
 	// The backend builders also re-create this reduced environment inside the
