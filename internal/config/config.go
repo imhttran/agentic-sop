@@ -793,6 +793,7 @@ func parseWithEnv(data []byte, getenv func(string) string) (*Config, error) {
 	// The webhook URL is a secret, so it is read from the environment when the
 	// YAML field is empty. The value is never rendered by status, logs, events,
 	// or errors.
+	c.applyNotifyChannelEnv(getenv)
 	c.resolveNotifyWebhookURL(getenv)
 	c.applyDefaults()
 	if err := c.Validate(); err != nil {
