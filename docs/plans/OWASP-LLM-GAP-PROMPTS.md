@@ -15,26 +15,33 @@ To use one: start a fresh agent session in this repository and paste the
 
 ## Gap index
 
-| #   | OWASP        | Gap                                                                 | Kind            |
-| --- | ------------ | ------------------------------------------------------------------- | --------------- |
-| 1   | LLM01        | Linux case with no verdict; one model per platform                  | Evidence        |
-| 2   | LLM02        | Live campaigns predate the task-input fix; Linux sinks `NOT_RUN`    | Evidence        |
-| 3   | LLM02        | C1 redaction not on the OpenAI-compatible provider path             | Code            |
-| 4   | LLM02, LLM07 | Model context outside the user prompt and tool results              | Code            |
-| 5   | LLM02        | Hardlink alias: no `Nlink > 1` check; macOS not covered             | Code, gated     |
-| 6   | LLM02        | macOS sandbox: parent environment readable via `kern.procargs2`     | Investigation   |
-| 7   | LLM02        | Model-output artifacts persisted verbatim                           | Investigation   |
-| 8   | LLM02        | Operator decisions: Plan 03 acceptance, C1 default, residuals       | Decision packet |
-| 9   | LLM03        | Scanner integrity: hash-then-exec race, pins, signatures            | Code, gated     |
-| 10  | LLM04        | No production reader verifies repository index rows                 | Code            |
-| 11  | LLM04        | RAG producer does not emit `chunk_hash`                             | Cross-repo code |
-| 12  | LLM05        | Slack rendering and channel binding unobserved                      | Evidence        |
-| 13  | LLM06        | Sandbox off by default; Linux host sockets outside `/tmp`, `/run`   | Code, gated     |
-| 14  | LLM08        | Live RAG with PostgreSQL and embeddings `NOT_RUN`                   | Evidence        |
-| 15  | LLM09        | Subprocess can write SOP state with the sandbox off; live `NOT_RUN` | Code + evidence |
-| 16  | LLM10        | Five subprocess paths without process-group termination             | Code            |
-| 17  | LLM10        | Token budget is off by default and is not a dollar cap              | Code, optional  |
-| 18  | All          | Coverage statement and evidence matrix lag PRs #393 and #394        | Docs            |
+| #   | OWASP        | Gap                                                                 | Kind            | Status | PR / evidence |
+| --- | ------------ | ------------------------------------------------------------------- | --------------- | ------ | ------------- |
+| 1   | LLM01        | Linux case with no verdict; one model per platform                  | Evidence        | Open   |               |
+| 2   | LLM02        | Live campaigns predate the task-input fix; Linux sinks `NOT_RUN`    | Evidence        | Open   |               |
+| 3   | LLM02        | C1 redaction not on the OpenAI-compatible provider path             | Code            | Open   |               |
+| 4   | LLM02, LLM07 | Model context outside the user prompt and tool results              | Code            | Open   |               |
+| 5   | LLM02        | Hardlink alias: no `Nlink > 1` check; macOS not covered             | Code, gated     | Open   |               |
+| 6   | LLM02        | macOS sandbox: parent environment readable via `kern.procargs2`     | Investigation   | Open   |               |
+| 7   | LLM02        | Model-output artifacts persisted verbatim                           | Investigation   | Open   |               |
+| 8   | LLM02        | Operator decisions: Plan 03 acceptance, C1 default, residuals       | Decision packet | Open   |               |
+| 9   | LLM03        | Scanner integrity: hash-then-exec race, pins, signatures            | Code, gated     | Open   |               |
+| 10  | LLM04        | No production reader verifies repository index rows                 | Code            | Open   |               |
+| 11  | LLM04        | RAG producer does not emit `chunk_hash`                             | Cross-repo code | Open   |               |
+| 12  | LLM05        | Slack rendering and channel binding unobserved                      | Evidence        | Open   |               |
+| 13  | LLM06        | Sandbox off by default; Linux host sockets outside `/tmp`, `/run`   | Code, gated     | Open   |               |
+| 14  | LLM08        | Live RAG with PostgreSQL and embeddings `NOT_RUN`                   | Evidence        | Open   |               |
+| 15  | LLM09        | Subprocess can write SOP state with the sandbox off; live `NOT_RUN` | Code + evidence | Open   |               |
+| 16  | LLM10        | Five subprocess paths without process-group termination             | Code            | Open   |               |
+| 17  | LLM10        | Token budget is off by default and is not a dollar cap              | Code, optional  | Open   |               |
+| 18  | All          | Coverage statement and evidence matrix lag PRs #393 and #394        | Docs            | Open   |               |
+
+**Tracking.** The Status and PR / evidence columns track progress on this list
+only. Statuses: `Open`, `In progress`, `Waiting on operator` (a proposal or
+decision packet is open), `Done` (merged, with the evidence files updated). The
+session that works a gap updates its own row in the same pull request. `Done`
+here is not acceptance and not a coverage claim; the coverage statement and gap
+register decide those.
 
 Not promptable, because SOP does not own them: provider model provenance and
 training, preventing prompt injection in general, factual correctness of model
@@ -77,6 +84,8 @@ Evidence and documents
 - Update the matching evidence file under docs/reports/owasp-llm/, then the coverage
   statement and the gap register, and docs/reference/PROJECT-STATUS.md if it lists the item.
   State what is still not covered and why.
+- Update this gap's row in the gap index of docs/plans/OWASP-LLM-GAP-PROMPTS.md: set
+  Status and add the pull request and evidence file. Touch no other row.
 
 Delivery
 - main is protected. Work on a branch, run the code-review-standards and /simplify
