@@ -148,7 +148,9 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 
 - **Covered:**
   - Provenance on decision memory.
-  - Per-row index digests (schema 2) and RAG `chunk_hash` verification (PR #330).
+  - RAG `chunk_hash` verification (PR #330). Per-row index digests (schema 2) exist,
+    but no production code reads `context/index.json` back, so they are latent:
+    `TestPersistedRepoIndexReadersVerifyRows` fails if a reader skips `repoindex.VerifyRows`.
   - Recovery by reindexing and by removing decision-memory entries.
 
   Evidence: [llm05-poisoning.md](llm05-poisoning.md).
