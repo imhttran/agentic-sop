@@ -60,6 +60,8 @@ decision is recorded in [RAG-SOP-004-DECISION.md](specs/RAG-SOP-004-DECISION.md)
 
 - [architecture/OVERVIEW.md](architecture/OVERVIEW.md) — the architecture: goal, system context, component map, the
   state-machine/retry/TDD/review/CI design, data model, and evolution.
+- [architecture/DIAGRAMS.md](architecture/DIAGRAMS.md) — two pictures: the top-level components, and one task run
+  with retrieval, review, the quality gate, the fix loop, and the security guards.
 - [architecture/COMPONENTS.md](architecture/COMPONENTS.md) — the top-level components and their responsibilities, one
   per section (the detail behind OVERVIEW §3–§4).
 - [architecture/SOP-BOUNDARY.md](architecture/SOP-BOUNDARY.md) — what SOP owns vs what agents, models, and optional capabilities own; the single-source-of-truth rule.
