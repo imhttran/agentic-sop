@@ -98,6 +98,22 @@ func (c Config) NotifyWebhookPayload() string {
 	return p
 }
 
+// NotifyChannelEnv names the environment variable that enables a notification channel
+// the project left at "none". An explicit project channel is never overridden, so a
+// committed config stays predictable; a machine can switch its own channel on.
+const NotifyChannelEnv = "SOP_NOTIFY_CHANNEL"
+
+// applyNotifyChannelEnv sets notifications.channel from the environment only when the
+// project's channel is none or omitted.
+func (c *Config) applyNotifyChannelEnv(getenv func(string) string) {
+	if getenv == nil || c.NotifyChannel() != NotifyChannelNone {
+		return
+	}
+	if ch := strings.TrimSpace(getenv(NotifyChannelEnv)); ch != "" {
+		c.Notifications.Channel = ch
+	}
+}
+
 // resolveNotifyWebhookURL fills notifications.webhook.url from the environment
 // when the YAML value is empty. A non-empty YAML value takes precedence. The
 // value is never logged: only the resolved setting is used by the webhook

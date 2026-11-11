@@ -134,3 +134,8 @@ verification:
       test: ["go test ./internal/quality/..."]
     - paths: ["internal/config/**"]
       test: ["go test ./internal/config/..."]
+
+notifications:
+  channel: none
+  webhook:
+    payload: slack
