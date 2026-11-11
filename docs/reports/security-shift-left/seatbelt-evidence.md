@@ -264,3 +264,26 @@ this host because `bwrap` is absent, and `--tmpfs` on a symlinked credential pat
 is unverified there. Seatbelt
 cannot nest, so the tests skip inside another sandbox. The outbound-deny test is
 only meaningful on a host with network access.
+
+## Parent environment via kern.procargs2: narrow-deny attempts (OWASP gap 6)
+
+Probe: a Go binary using `unix.SysctlRaw("kern.procargs2", getppid())`, launched
+with a synthetic canary in its parent's environment. Build: `go` 1.27.1 with
+`golang.org/x/sys` v0.47.0, macOS arm64.
+
+| Profile | Result |
+| --- | --- |
+| Base profile (`deny default`, `allow process*`, `allow file-read*`, `allow sysctl-read`, `allow mach-lookup`) | canary visible |
+| Base + `(deny sysctl-read (sysctl-name "kern.procargs2"))` | canary visible |
+| Base + `(deny sysctl-read (sysctl-name-prefix "kern.procargs"))` | canary visible |
+| Base + `(deny sysctl-read (sysctl-name-prefix "kern.proc"))` | canary visible |
+| Base + `(deny sysctl-read (sysctl-name-regex "^kern\.procargs"))` | canary visible |
+| Base + `(deny sysctl-read)` | Go runtime aborts in `runtime.rt0_go` (`go version` and the probe both) |
+
+Conclusion: Seatbelt does not apply a sysctl name filter to this read, and a full
+sysctl deny stops the Go runtime. No narrow profile change was found, so none is
+applied. The sandbox default is unchanged.
+
+Status: known limit, not fixed. Closing it needs either an allow-list of the sysctl
+names the Go runtime and the tools it runs need, which is untested and fragile, or
+an operator decision to accept the residual for the opt-in sandbox.
