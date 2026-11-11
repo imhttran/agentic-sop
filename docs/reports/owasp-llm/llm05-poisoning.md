@@ -460,3 +460,15 @@ Required checks for POISON-003:
 
 This report does not claim a live-model run. POISON-003 changes no production code.
 The only file this task writes is this report.
+
+## Index row digests are latent (OWASP gap 10)
+
+`sop index` writes `.agent-sdlc/context/index.json`, and each row carries a digest that
+`repoindex.VerifyRows` recomputes. Checked on `main`: nothing reads that file back.
+`sop retrieve` and the RAG evaluation build the index in memory, so no consumer
+relies on the persisted file, and the digests protect nothing in the current flows.
+
+The guard `TestPersistedRepoIndexReadersVerifyRows` (`internal/archtest`) fails if a
+file reads the persisted index without calling `repoindex.VerifyRows`. It was checked by
+adding an unverified reader and confirming the failure. Unchanged: a digest proves the
+bytes and resolved rows, not that the content is benign.
