@@ -19,27 +19,32 @@ import (
 // error before any process starts, so the adapter reports a non-clean failure.
 // On success the observed binary is the pinned one, and the pin is part of the
 // adapter config digest that provenance records.
-// ponytail: the hash is taken on the resolved absolute path and the inner
-// executor runs that same path, so a writer racing between the two is not
-// excluded; executing an opened file descriptor would close that window.
+// The check copies the resolved binary into a private directory while hashing
+// the same bytes, then executes that copy. A writer racing the original cannot
+// change what runs.
+// shortcut: each scan copies the scanner binary once, which costs time on large
+// binaries; a binary on a noexec temp mount fails to start (ErrUnavailable).
+// Upgrade: execute an opened descriptor where the platform allows it.
 type pinnedExecutor struct {
 	inner        Executor
 	binarySHA256 string
 }
 
 func (p pinnedExecutor) Run(ctx context.Context, dir string, argv []string, stdin []byte, maxOut int) ([]byte, []byte, int, error) {
-	argv, err := p.check(dir, argv)
+	argv, cleanup, err := p.check(dir, argv)
 	if err != nil {
 		return nil, nil, -1, err
 	}
+	defer cleanup()
 	return p.inner.Run(ctx, dir, argv, stdin, maxOut)
 }
 
 func (p pinnedExecutor) RunEnv(ctx context.Context, dir string, argv []string, env []string, stdin []byte, maxOut int) ([]byte, []byte, int, error) {
-	argv, err := p.check(dir, argv)
+	argv, cleanup, err := p.check(dir, argv)
 	if err != nil {
 		return nil, nil, -1, err
 	}
+	defer cleanup()
 	inner, ok := p.inner.(EnvExecutor)
 	if !ok {
 		return nil, nil, -1, errors.New("executor does not support an explicit environment")
@@ -47,12 +52,13 @@ func (p pinnedExecutor) RunEnv(ctx context.Context, dir string, argv []string, e
 	return inner.RunEnv(ctx, dir, argv, env, stdin, maxOut)
 }
 
-// check verifies the binary pin and returns argv with argv[0] replaced by the
-// absolute path that was hashed, so the executed file is the checked file.
-func (p pinnedExecutor) check(dir string, argv []string) ([]string, error) {
+// check verifies the binary pin and returns argv with argv[0] replaced by a
+// private copy of the verified bytes, plus a cleanup that removes the copy.
+func (p pinnedExecutor) check(dir string, argv []string) ([]string, func(), error) {
+	noop := func() {}
 	if p.binarySHA256 != "" { // BuildAdapter wraps only when this is set
 		if len(argv) == 0 {
-			return nil, errors.New("security: empty command")
+			return nil, noop, errors.New("security: empty command")
 		}
 		// The child runs with Dir=dir, so a relative path with a separator is
 		// relative to dir, not to this process's working directory.
@@ -62,21 +68,54 @@ func (p pinnedExecutor) check(dir string, argv []string) ([]string, error) {
 		}
 		path, err := exec.LookPath(name)
 		if err != nil {
-			return nil, fmt.Errorf("binary pin: %w", ErrUnavailable)
+			return nil, noop, fmt.Errorf("binary pin: %w", ErrUnavailable)
 		}
 		if path, err = filepath.Abs(path); err != nil {
-			return nil, fmt.Errorf("binary pin: %w", ErrUnavailable)
+			return nil, noop, fmt.Errorf("binary pin: %w", ErrUnavailable)
 		}
-		got, err := fileSHA256(path)
+		staged, cleanup, err := stageVerified(path, p.binarySHA256)
 		if err != nil {
-			return nil, fmt.Errorf("binary pin: cannot read the resolved executable: %w", ErrUnavailable)
+			return nil, noop, err
 		}
-		if got != p.binarySHA256 {
-			return nil, fmt.Errorf("binary pin mismatch: the resolved executable is not the pinned binary (sha256 %s)", got)
-		}
-		argv = append([]string{path}, argv[1:]...)
+		return append([]string{staged}, argv[1:]...), cleanup, nil
 	}
-	return argv, nil
+	return argv, noop, nil
+}
+
+// stageVerified copies src into a new private directory while hashing the same
+// bytes, and fails if the copy's digest is not want. The copy is what gets executed.
+func stageVerified(src, want string) (string, func(), error) {
+	in, err := os.Open(src)
+	if err != nil {
+		return "", nil, fmt.Errorf("binary pin: cannot read the resolved executable: %w", ErrUnavailable)
+	}
+	defer in.Close()
+	dir, err := os.MkdirTemp("", "sop-pinned-")
+	if err != nil {
+		return "", nil, fmt.Errorf("binary pin: %w", ErrUnavailable)
+	}
+	cleanup := func() { _ = os.RemoveAll(dir) }
+	dst := filepath.Join(dir, filepath.Base(src))
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o700)
+	if err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("binary pin: %w", ErrUnavailable)
+	}
+	h := sha256.New()
+	if _, err := io.Copy(io.MultiWriter(out, h), in); err != nil {
+		_ = out.Close()
+		cleanup()
+		return "", nil, fmt.Errorf("binary pin: cannot copy the resolved executable: %w", ErrUnavailable)
+	}
+	if err := out.Close(); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("binary pin: %w", ErrUnavailable)
+	}
+	if got := hex.EncodeToString(h.Sum(nil)); got != want {
+		cleanup()
+		return "", nil, fmt.Errorf("binary pin mismatch: the resolved executable is not the pinned binary (sha256 %s)", got)
+	}
+	return dst, cleanup, nil
 }
 
 // checkRulesPin verifies an optional rules pin against the exact resolved
