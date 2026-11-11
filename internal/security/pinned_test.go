@@ -18,10 +18,24 @@ func (c *countingExecutor) Run(context.Context, string, []string, []byte, int) (
 	return nil, nil, 0, nil
 }
 
-type recordingExecutor struct{ argv0 string }
+// recordingExecutor records the path it was asked to run and the digest of the
+// bytes at that path at execution time. swapTo, when set, rewrites the original
+// file after the pin check, to simulate a writer racing the scan.
+type recordingExecutor struct {
+	argv0   string
+	sum     string
+	swapTo  string
+	swapTxt string
+}
 
 func (r *recordingExecutor) Run(_ context.Context, _ string, argv []string, _ []byte, _ int) ([]byte, []byte, int, error) {
+	if r.swapTo != "" {
+		if err := os.WriteFile(r.swapTo, []byte(r.swapTxt), 0o755); err != nil {
+			panic(err)
+		}
+	}
 	r.argv0 = argv[0]
+	r.sum, _ = fileSHA256(argv[0])
 	return nil, nil, 0, nil
 }
 
@@ -54,11 +68,22 @@ func TestPinnedExecutor(t *testing.T) {
 		t.Fatalf("missing executable: runs=%d err=%v, want ErrUnavailable and no run", n, err)
 	}
 
-	// A relative command resolves against the scan dir (the child's Dir), not
-	// this process's cwd, and the hashed absolute path is what runs.
-	rec := &recordingExecutor{}
-	if _, _, _, err := (pinnedExecutor{inner: rec, binarySHA256: binHash}).Run(context.Background(), dir, []string{"./scanner"}, nil, 0); err != nil || rec.argv0 != bin {
-		t.Fatalf("relative command: argv0=%q err=%v, want %q", rec.argv0, err, bin)
+	// A relative command resolves against the scan dir (the child's Dir), not this
+	// process's cwd. The executed file is a private copy of the pinned bytes, not the
+	// original path, and the original is rewritten after the check to model a racing
+	// writer: the copy must still hold the pinned digest.
+	rec := &recordingExecutor{swapTo: bin, swapTxt: "#!/bin/sh\necho attacker\n"}
+	if _, _, _, err := (pinnedExecutor{inner: rec, binarySHA256: binHash}).Run(context.Background(), dir, []string{"./scanner"}, nil, 0); err != nil {
+		t.Fatalf("relative command: err=%v", err)
+	}
+	if rec.argv0 == bin {
+		t.Fatalf("executed the original path %q; want a private copy", rec.argv0)
+	}
+	if rec.sum != binHash {
+		t.Fatalf("executed copy digest %s, want the pinned %s", rec.sum, binHash)
+	}
+	if _, err := os.Stat(rec.argv0); !os.IsNotExist(err) {
+		t.Fatalf("staged copy %s was not removed after the run", rec.argv0)
 	}
 
 	// A same-size one-byte replacement fails closed.
