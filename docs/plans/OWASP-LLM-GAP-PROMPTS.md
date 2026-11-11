@@ -22,7 +22,7 @@ To use one: start a fresh agent session in this repository and paste the
 | 3   | LLM02        | C1 redaction not on the OpenAI-compatible provider path             | Code            | Done        | PR #400 (merged) |
 | 4   | LLM02, LLM07 | Model context outside the user prompt and tool results              | Code            | Done        | PR #402 (merged) |
 | 5   | LLM02        | Hardlink alias: no `Nlink > 1` check; macOS not covered             | Code, gated     | Waiting on operator | PR #404 (merged) |
-| 6   | LLM02        | macOS sandbox: parent environment readable via `kern.procargs2`     | Investigation   | Open        |                  |
+| 6   | LLM02        | macOS sandbox: parent environment readable via `kern.procargs2`     | Investigation   | Waiting on operator | PR #406 |
 | 7   | LLM02        | Model-output artifacts persisted verbatim                           | Investigation   | In progress | PR #408 (option C); option A pending |
 | 8   | LLM02        | Operator decisions: Plan 03 acceptance, C1 default, residuals       | Decision packet | Open        |                  |
 | 9   | LLM03        | Scanner integrity: hash-then-exec race, pins, signatures            | Code, gated     | Open        |                  |
