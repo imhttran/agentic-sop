@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-// TestHomeSocketsAreMasked proves a Unix socket under $HOME is found and masked in the
-// bubblewrap arguments, and that one beyond the depth bound is not scanned.
+// TestHomeSocketsAreMasked proves a Unix socket under $HOME is found, at any depth, and
+// masked in the bubblewrap arguments.
 func TestHomeSocketsAreMasked(t *testing.T) {
 	home, err := os.MkdirTemp("", "sop-home-")
 	if err != nil {
@@ -17,6 +17,10 @@ func TestHomeSocketsAreMasked(t *testing.T) {
 	}
 	defer os.RemoveAll(home)
 	t.Setenv("HOME", home)
+	home, err = filepath.EvalSymlinks(home)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	near := filepath.Join(home, "agent.sock")
 	ln, err := net.Listen("unix", near)
@@ -47,8 +51,8 @@ func TestHomeSocketsAreMasked(t *testing.T) {
 	if !contains(paths, near) {
 		t.Fatalf("socket %s not found; got %v", near, paths)
 	}
-	if contains(paths, deep) {
-		t.Fatalf("socket beyond the depth bound was scanned: %v", paths)
+	if !contains(paths, deep) {
+		t.Fatalf("socket at depth 6 was not scanned: %v", paths)
 	}
 
 	args := strings.Join(bubblewrapArgs("/repo", nil, socks), " ")
@@ -64,4 +68,26 @@ func contains(xs []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// TestHomeSymlinkToDirectoryFailsClosed proves a symlink to a directory under home
+// refuses the sandbox rather than leaving its sockets unmasked.
+func TestHomeSymlinkToDirectoryFailsClosed(t *testing.T) {
+	home, err := os.MkdirTemp("", "sop-home-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(home)
+	outside, err := os.MkdirTemp("", "sop-out-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(outside)
+	t.Setenv("HOME", home)
+	if err := os.Symlink(outside, filepath.Join(home, "linked")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := homeSocketPaths(); err == nil {
+		t.Fatal("a symlink to a directory must fail closed")
+	}
 }

@@ -198,32 +198,30 @@ func homeCredentials() ([]credentialPath, error) {
 	return out, nil
 }
 
-const (
-	// maxHomeSocketDepth and maxHomeSocketEntries bound the home scan. Exceeding either
-	// fails closed, so the command is refused rather than run with a socket unmasked.
-	maxHomeSocketDepth   = 4
-	maxHomeSocketEntries = 20000
-)
+// maxHomeSocketEntries bounds the home scan. Exceeding it fails closed, so the command
+// is refused rather than run with a socket unmasked.
+const maxHomeSocketEntries = 20000
 
-// homeSocketPaths lists the Unix sockets under the user's home directory, up to a
-// bounded depth and entry count. Symlinks are not followed. An unreadable home fails
-// closed.
-// ponytail: an unreadable subdirectory under home is skipped, so a socket in one is
-// not masked; sockets created after the scan are not masked either. Upgrade: mask at
-// connect time, or hide the home tree.
+// homeSocketPaths lists the Unix sockets under the user's home directory, with symlinks
+// resolved. Any error during the scan fails closed. A symlink to a socket masks its real
+// target; a symlink to a directory fails closed, since its contents cannot be bounded
+// here. Dangling symlinks have no target yet and are skipped.
+// ponytail: a socket created after the scan is not masked. Upgrade: mask at connect
+// time, or hide the home tree.
 func homeSocketPaths() ([]credentialPath, error) {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		return nil, fmt.Errorf("%w: cannot resolve home for socket masking", errIsolationUnavailable)
 	}
+	home, err = filepath.EvalSymlinks(home)
+	if err != nil {
+		return nil, fmt.Errorf("%w: cannot resolve home for socket masking: %v", errIsolationUnavailable, err)
+	}
 	var out []credentialPath
 	entries := 0
 	err = filepath.WalkDir(home, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
-			if p == home {
-				return err
-			}
-			return nil
+			return err
 		}
 		if p == home {
 			return nil
@@ -232,15 +230,24 @@ func homeSocketPaths() ([]credentialPath, error) {
 		if entries > maxHomeSocketEntries {
 			return fmt.Errorf("home has more than %d entries; socket masking cannot complete", maxHomeSocketEntries)
 		}
-		rel, _ := filepath.Rel(home, p)
-		if strings.Count(rel, string(filepath.Separator))+1 > maxHomeSocketDepth {
-			if d.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if d.Type()&fs.ModeSocket != 0 {
+		switch {
+		case d.Type()&fs.ModeSocket != 0:
 			out = append(out, credentialPath{path: p, dir: false})
+		case d.Type()&fs.ModeSymlink != 0:
+			target, err := filepath.EvalSymlinks(p)
+			if err != nil {
+				return nil // dangling: no target to connect to yet
+			}
+			info, err := os.Stat(target)
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return fmt.Errorf("symlink %s points to a directory; its sockets cannot be bounded", p)
+			}
+			if info.Mode()&fs.ModeSocket != 0 {
+				out = append(out, credentialPath{path: target, dir: false})
+			}
 		}
 		return nil
 	})
