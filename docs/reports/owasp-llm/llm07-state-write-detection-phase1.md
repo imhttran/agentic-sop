@@ -96,3 +96,11 @@ The Linux bubblewrap backend mounts `.agent-sdlc/` read-only for the same purpos
   `.agent-sdlc/`, including `state.db` and run artifacts, and SOP neither prevents
   nor detects it. This report makes no detection or prevention claim, and
   `TestSubprocessStateWriteIsOutsideFileToolBoundary` still pins that boundary.
+
+## Gap 15 disposition (OWASP gap prompts)
+
+Gap 15 asked for a before/after detection. That approach was decided NO-GO above, so no
+detection was implemented. The closure in place is the opt-in `run_command` sandbox,
+which denies `.agent-sdlc/` writes on macOS and mounts it read-only on Linux. Making that
+default-on is the same decision as gap 13 and waits on the module-cache question there.
+Live model runs for this plan are still `NOT_RUN`.
