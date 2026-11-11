@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -107,7 +108,14 @@ func sandboxArgv(root string) (prefix []string, detail, cache string, err error)
 		if err := refuseSymlinkedState(canon); err != nil {
 			return nil, "", "", err
 		}
-		args = bubblewrapArgs(canon, writableDirs(canon), denyRead)
+		// A Unix socket under $HOME is connectable by the same user, so each one is
+		// masked with /dev/null like a credential file. Fail closed if the scan cannot
+		// complete within its bounds.
+		socks, err := homeSocketPaths()
+		if err != nil {
+			return nil, "", "", err
+		}
+		args = bubblewrapArgs(canon, writableDirs(canon), append(denyRead, socks...))
 	}
 	// Under the temp dir, which both backends keep writable (on Linux it is
 	// the sandbox's private /tmp, so the host dir only reserves the name).
@@ -186,6 +194,58 @@ func homeCredentials() ([]credentialPath, error) {
 	}
 	for _, f := range envFiles {
 		add(f, false)
+	}
+	return out, nil
+}
+
+const (
+	// maxHomeSocketDepth and maxHomeSocketEntries bound the home scan. Exceeding either
+	// fails closed, so the command is refused rather than run with a socket unmasked.
+	maxHomeSocketDepth   = 4
+	maxHomeSocketEntries = 20000
+)
+
+// homeSocketPaths lists the Unix sockets under the user's home directory, up to a
+// bounded depth and entry count. Symlinks are not followed. An unreadable home fails
+// closed.
+// ponytail: an unreadable subdirectory under home is skipped, so a socket in one is
+// not masked; sockets created after the scan are not masked either. Upgrade: mask at
+// connect time, or hide the home tree.
+func homeSocketPaths() ([]credentialPath, error) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return nil, fmt.Errorf("%w: cannot resolve home for socket masking", errIsolationUnavailable)
+	}
+	var out []credentialPath
+	entries := 0
+	err = filepath.WalkDir(home, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if p == home {
+				return err
+			}
+			return nil
+		}
+		if p == home {
+			return nil
+		}
+		entries++
+		if entries > maxHomeSocketEntries {
+			return fmt.Errorf("home has more than %d entries; socket masking cannot complete", maxHomeSocketEntries)
+		}
+		rel, _ := filepath.Rel(home, p)
+		if strings.Count(rel, string(filepath.Separator))+1 > maxHomeSocketDepth {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.Type()&fs.ModeSocket != 0 {
+			out = append(out, credentialPath{path: p, dir: false})
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: home socket scan: %v", errIsolationUnavailable, err)
 	}
 	return out, nil
 }
