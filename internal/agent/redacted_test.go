@@ -84,3 +84,25 @@ func TestRedactedBeforeChatTransports(t *testing.T) {
 		}
 	}
 }
+
+// TestRenderPromptSendsOnlyRedactedFields guards the field list Redacted scrubs. The
+// chat transports render only Task, Input, and OutputRequirements. If a later change
+// renders another Request field, this fails so that field gets redaction too.
+// ValidationCommands, Deliverables, and the other caller-owned lists are deliberately
+// not scrubbed, since changing them would change the verification contract.
+func TestRenderPromptSendsOnlyRedactedFields(t *testing.T) {
+	const canary = "canary-field-4418"
+	req := Request{
+		Capability:         Plan,
+		Task:               "task",
+		Input:              "input",
+		OutputRequirements: "reqs",
+		AcceptanceCriteria: []string{canary},
+		ValidationCommands: []string{canary},
+		Deliverables:       []string{canary},
+		ValidationWaivers:  []string{canary},
+	}
+	if got := renderPrompt(req); strings.Contains(got, canary) {
+		t.Fatalf("renderPrompt sends a field Redacted does not scrub:\n%s", got)
+	}
+}
