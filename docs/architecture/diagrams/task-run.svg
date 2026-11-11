@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="722" viewBox="0 0 680 722" role="img" aria-labelledby="t d">
+<title id="t">SOP task run pipeline with guards</title>
+<desc id="d">Evidence from retrieval flows through the context engine and prompt compiler into a task run of implement, validate, review and quality gate, with a bounded fix loop back to implement. The outcome is local done, then human approval, then the remote path. Eight guards surround the run. Tool authorization and command policy address OWASP LLM01 prompt injection. Redaction and credential-path refusal address LLM02 sensitive information disclosure. Pinned scanners address LLM03 supply chain. Digest checks address LLM04 data and model poisoning. The optional security scan feeds the quality gate, and the optional decision layer is not yet consulted.</desc>
+<defs>
+<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#5F5E5A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<style>
+text{font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;text-anchor:middle;dominant-baseline:central}
+.th{font-size:14px;font-weight:500}.ts{font-size:12px}
+.arr{stroke:#5F5E5A;stroke-width:1.5;fill:none}
+rect{stroke-width:.5}
+.band{fill:none;stroke:#888780;stroke-dasharray:4 4}
+.purple rect,rect.purple{fill:#EEEDFE;stroke:#534AB7}.purple .th{fill:#3C3489}.purple .ts{fill:#534AB7}
+.teal rect,rect.teal{fill:#E1F5EE;stroke:#0F6E56}.teal .th{fill:#085041}.teal .ts{fill:#0F6E56}
+.gray rect,rect.gray{fill:#F1EFE8;stroke:#5F5E5A}.gray .th{fill:#444441}.gray .ts{fill:#5F5E5A}
+.legend{fill:#5F5E5A;text-anchor:start}.note{fill:#5F5E5A}
+</style>
+</defs>
+<rect width="680" height="722" fill="#FFFFFF" stroke="none"/>
+<rect class="band" x="40" y="30" width="600" height="110" rx="8"/><text class="ts legend" x="56" y="50">Evidence in</text>
+<g class="purple"><rect x="60" y="64" width="170" height="56" rx="8"/><text class="th" x="145" y="82">Retrieval</text><text class="ts" x="145" y="100">BM25, optional RAG</text></g>
+<line x1="230" y1="92" x2="253" y2="92" class="arr" marker-end="url(#arrow)"/>
+<g class="purple"><rect x="255" y="64" width="170" height="56" rx="8"/><text class="th" x="340" y="82">Context engine</text><text class="ts" x="340" y="100">Bounded evidence</text></g>
+<line x1="425" y1="92" x2="448" y2="92" class="arr" marker-end="url(#arrow)"/>
+<g class="purple"><rect x="450" y="64" width="170" height="56" rx="8"/><text class="th" x="535" y="82">Prompt compiler</text><text class="ts" x="535" y="100">Builds agent prompt</text></g>
+<line x1="340" y1="140" x2="340" y2="168" class="arr" marker-end="url(#arrow)"/>
+<rect class="band" x="40" y="170" width="600" height="160" rx="8"/><text class="ts legend" x="56" y="190">Task run</text>
+<g class="teal"><rect x="60" y="204" width="125" height="56" rx="8"/><text class="th" x="122" y="222">Implement</text><text class="ts" x="122" y="240">Agent edits code</text></g>
+<line x1="185" y1="232" x2="203" y2="232" class="arr" marker-end="url(#arrow)"/>
+<g class="purple"><rect x="205" y="204" width="125" height="56" rx="8"/><text class="th" x="267" y="222">Validate</text><text class="ts" x="267" y="240">Build, test, lint</text></g>
+<line x1="330" y1="232" x2="348" y2="232" class="arr" marker-end="url(#arrow)"/>
+<g class="teal"><rect x="350" y="204" width="125" height="56" rx="8"/><text class="th" x="412" y="222">Review</text><text class="ts" x="412" y="240">Findings only</text></g>
+<line x1="475" y1="232" x2="493" y2="232" class="arr" marker-end="url(#arrow)"/>
+<g class="purple"><rect x="495" y="204" width="125" height="56" rx="8"/><text class="th" x="557" y="222">Quality gate</text><text class="ts" x="557" y="240">Pass, fail, human</text></g>
+<path d="M557 260 L557 284 L122 284 L122 263" class="arr" marker-end="url(#arrow)"/>
+<text class="ts note" x="340" y="304">Fix loop, bounded by max fix cycles</text>
+<line x1="340" y1="330" x2="340" y2="358" class="arr" marker-end="url(#arrow)"/>
+<rect class="band" x="40" y="360" width="600" height="110" rx="8"/><text class="ts legend" x="56" y="380">Outcome</text>
+<g class="purple"><rect x="60" y="394" width="170" height="56" rx="8"/><text class="th" x="145" y="412">Local done</text><text class="ts" x="145" y="430">Gate passed</text></g>
+<line x1="230" y1="422" x2="253" y2="422" class="arr" marker-end="url(#arrow)"/>
+<g class="gray"><rect x="255" y="394" width="170" height="56" rx="8"/><text class="th" x="340" y="412">Human approval</text><text class="ts" x="340" y="430">Before any commit</text></g>
+<line x1="425" y1="422" x2="448" y2="422" class="arr" marker-end="url(#arrow)"/>
+<g class="purple"><rect x="450" y="394" width="170" height="56" rx="8"/><text class="th" x="535" y="412">Remote path</text><text class="ts" x="535" y="430">Commit, PR, CI, merge</text></g>
+<rect class="band" x="40" y="490" width="600" height="182" rx="8"/><text class="ts legend" x="56" y="510">Guards around the run, with the OWASP LLM risk each addresses</text>
+<g class="purple"><rect x="60" y="524" width="128" height="56" rx="8"/><text class="th" x="124" y="542">Tool auth</text><text class="ts" x="124" y="560">LLM01 injection</text></g>
+<g class="purple"><rect x="204" y="524" width="128" height="56" rx="8"/><text class="th" x="268" y="542">Command policy</text><text class="ts" x="268" y="560">LLM01 injection</text></g>
+<g class="purple"><rect x="348" y="524" width="128" height="56" rx="8"/><text class="th" x="412" y="542">Redaction</text><text class="ts" x="412" y="560">LLM02 disclosure</text></g>
+<g class="purple"><rect x="492" y="524" width="128" height="56" rx="8"/><text class="th" x="556" y="542">Secret paths</text><text class="ts" x="556" y="560">LLM02 disclosure</text></g>
+<g class="purple"><rect x="60" y="596" width="128" height="56" rx="8"/><text class="th" x="124" y="614">Pinned scanners</text><text class="ts" x="124" y="632">LLM03 supply chain</text></g>
+<g class="purple"><rect x="204" y="596" width="128" height="56" rx="8"/><text class="th" x="268" y="614">Digest checks</text><text class="ts" x="268" y="632">LLM04 poisoning</text></g>
+<g class="gray"><rect x="348" y="596" width="128" height="56" rx="8"/><text class="th" x="412" y="614">Security scan</text><text class="ts" x="412" y="632">Feeds quality gate</text></g>
+<g class="gray"><rect x="492" y="596" width="128" height="56" rx="8"/><text class="th" x="556" y="614">Decision layer</text><text class="ts" x="556" y="632">Not yet consulted</text></g>
+<rect class="purple" x="40" y="690" width="12" height="12" rx="2"/><text class="ts legend" x="60" y="696">Deterministic code</text>
+<rect class="teal" x="200" y="690" width="12" height="12" rx="2"/><text class="ts legend" x="220" y="696">Agent or model</text>
+<rect class="gray" x="340" y="690" width="12" height="12" rx="2"/><text class="ts legend" x="360" y="696">Human or optional</text>
+</svg>
