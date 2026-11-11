@@ -15,10 +15,12 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/imhttran/agentic-sop/decision"
+	"github.com/imhttran/agentic-sop/internal/redact"
 )
 
 // DefaultChatBaseURL is the conventional local oMLX endpoint.
@@ -152,7 +154,7 @@ func BuildChatRequest(model string, req decision.DecisionRequest) (chatRequest, 
 	b.WriteString("Reply with the JSON described in the system message.")
 	return chatRequest{
 		Model:       model,
-		Messages:    []chatMessage{{Role: "system", Content: chatSystemPrompt}, {Role: "user", Content: b.String()}},
+		Messages:    []chatMessage{{Role: "system", Content: chatSystemPrompt}, {Role: "user", Content: redact.ModelInput(b.String(), os.Environ())}},
 		Temperature: 0,
 	}, nil
 }

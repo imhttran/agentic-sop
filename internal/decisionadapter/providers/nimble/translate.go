@@ -2,9 +2,11 @@ package nimble
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/imhttran/agentic-sop/decision"
+	"github.com/imhttran/agentic-sop/internal/redact"
 )
 
 // ProviderName is the stable identifier reported by this adapter.
@@ -40,12 +42,15 @@ func BuildSystemOneRequest(model string, req decision.DecisionRequest) (systemOn
 		if err != nil {
 			return systemOneRequest{}, err
 		}
+		// Instructions are model-bound text; choices stay exact because they are
+		// the answer keys the model must echo back.
+		translated.Instructions = redact.ModelInput(translated.Instructions, os.Environ())
 		questions[q.ID] = translated
 	}
 
 	return systemOneRequest{
 		Model:     model,
-		State:     req.State,
+		State:     redact.ModelInput(req.State, os.Environ()),
 		Questions: questions,
 	}, nil
 }
