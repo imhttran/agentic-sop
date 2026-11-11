@@ -85,7 +85,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     `kern.procargs2` (measured; `process-info*` does not cover it), and a
     pre-existing hardlink alias remains readable through `read_file` (Option C
     Phase 1, PR #381, denies aliases to protected workspace credentials on Linux
-    only). This is a separate, unaccepted residual; the `Nlink > 1` check is not
+    only) A macOS live run (`llm02-option-c-phase1-macos-campaign.json`) denied all five protected aliases; its positive control missed the marker in the model reply, so the run is recorded as not passed.. This is a separate, unaccepted residual; the `Nlink > 1` check is not
     implemented.
   - Linux live retrieval and notification sinks are `NOT_RUN`.
   - Model-output artifacts remain verbatim; retrieval/handoff/caller prose and
