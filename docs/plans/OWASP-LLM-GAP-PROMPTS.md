@@ -19,8 +19,8 @@ To use one: start a fresh agent session in this repository and paste the
 | --- | ------------ | ------------------------------------------------------------------- | --------------- | ----------- | ---------------- |
 | 1   | LLM01        | Linux case with no verdict; one model per platform                  | Evidence        | Open        |                  |
 | 2   | LLM02        | Live campaigns predate the task-input fix; Linux sinks `NOT_RUN`    | Evidence        | Open        |                  |
-| 3   | LLM02        | C1 redaction not on the OpenAI-compatible provider path             | Code            | In progress | (this PR)        |
-| 4   | LLM02, LLM07 | Model context outside the user prompt and tool results              | Code            | In progress | (this PR) |
+| 3   | LLM02        | C1 redaction not on the OpenAI-compatible provider path             | Code            | Done        | PR #400 (merged) |
+| 4   | LLM02, LLM07 | Model context outside the user prompt and tool results              | Code            | Done        | PR #402 (merged) |
 | 5   | LLM02        | Hardlink alias: no `Nlink > 1` check; macOS not covered             | Code, gated     | Open        |                  |
 | 6   | LLM02        | macOS sandbox: parent environment readable via `kern.procargs2`     | Investigation   | Open        |                  |
 | 7   | LLM02        | Model-output artifacts persisted verbatim                           | Investigation   | Open        |                  |
