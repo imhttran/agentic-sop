@@ -57,9 +57,15 @@ Commands below were checked against the source in `internal/cli/historical_accep
 - **Current state:** status `NOT_APPROVED`. The residual is open.
 - **Recommendation:** `ACCEPT_PROPOSED` for context-free values, with the stated
   consequence that a secret with no key or known shape can reach the model.
-- **Record:** the proposal's own disposition. This packet does not record it. The
-  decision-memory command is not confirmed here: `sop memory add --help` requires a
-  value, and its flags were not checked. Confirm the syntax before using it.
+- **Record:** the proposal's own disposition, which this packet does not record. The
+  decision-memory command is `sop memory add`. Its usage, from `memoryUsage` in
+  `internal/cli/memory.go`, is:
+  ```bash
+  sop memory add --decision "<text>" --reason "<text>" [--scope repository|project|architecture] [--source <id>] [--evidence "<text>"]
+  ```
+  `--help` is not a flag this command accepts; it fails with `needs a value`. The command
+  records an advisory decision only. It does not change formal acceptance or lifecycle,
+  so the Plan 03 acceptance in section 1 is still needed for that.
 
 ## 4. Remaining residual dispositions (from the six-item matrix)
 
