@@ -1,9 +1,7 @@
 # LLM10 — Slack rendering observation sheet (OWASP gap 12)
 
-**Status:** prepared, **not run**. Nothing is sent by this document. The operator
-performs the observation in Slack and fills in the table; the result is then recorded as
-`OBSERVED` with the date and workspace-independent details only, and with no screenshots
-that show private data.
+**Status:** OBSERVED on 2026-11-11 by the operator (transport and channel behavior only).
+The escaped-markup and mention-shaped string checks remain not observed; see below.
 
 Background: one synthetic notification was delivered once on 2026-11-10 (see
 [llm10-live-delivery.md](llm10-live-delivery.md)). The transport was confirmed; how Slack
@@ -27,15 +25,21 @@ binding and the plain rendering, but it cannot show escaping of markup.
 2. Run once: `sop notify test`. This sends one event.
 3. In Slack, check the row below and fill it in.
 
+Run: `sop notify test` with `notifications.webhook.payload: slack`, on 2026-11-11.
+The `slack` payload adds a `SOP completed in agentic-sop:` line before the outcome, so
+the rendered message differs from the native JSON that the default payload sends.
+
 | Check | Expected | Observed (yes / no / n.a.) |
 | --- | --- | --- |
-| Message reached the intended channel | Yes | |
-| Text is literal: `notification test event` and the next-action sentence appear as written | Yes | |
-| No link preview or unfurl was added | Yes | |
-| No mention pinged anyone | Yes | |
-| Date and time shown are plausible for the run | Yes | |
+| Message reached the intended channel | Yes | yes |
+| Text is literal: `notification test event` and the next-action sentence appear as written | Yes | yes |
+| No link preview or unfurl was added | Yes | yes (the message contains no URL) |
+| No mention pinged anyone | Yes | yes |
+| Date and time shown are plausible for the run | Yes | yes |
 
 ## Not covered by this sheet
+
+- Escaped markup and mention-shaped strings: still `NOT_OBSERVED`. The test event carries none.
 
 - **Escaped markup and mention-shaped strings.** The escaping in `internal/notify/slack.go`
   is tested in code, but a live observation of it needs an event that carries markup. No
