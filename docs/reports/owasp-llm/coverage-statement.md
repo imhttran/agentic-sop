@@ -55,8 +55,12 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 - **Not covered, and why:**
   - The live campaigns predate the task-input fix; that fix is verified
     deterministically only and was not re-run live.
-  - Context that reaches the model by another route than the user prompt or a
-    tool result (for example a system prompt) is not redacted.
+  - Other model-input routes are inventoried in
+    [llm08-hidden-context.md](llm08-hidden-context.md#model-input-route-inventory-owasp-gap-4).
+    The Ollama system prompt carries no caller text. The decision transports
+    (CLEF and Nimble) are redacted with the baseline pass only, and their choices
+    and criteria are not scrubbed. The decision command provider and the Julia
+    runner are not redacted by design.
   - Redaction is pattern-based, not general DLP, so secrets in an unknown
     format can pass. The Linux live campaign observed unknown-format values in an
     ordinary file, SAFE command output, and a diff reaching the model.
@@ -81,7 +85,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     `kern.procargs2` (measured; `process-info*` does not cover it), and a
     pre-existing hardlink alias remains readable through `read_file` (Option C
     Phase 1, PR #381, denies aliases to protected workspace credentials on Linux
-    only). This is a separate, unaccepted residual; the `Nlink > 1` check is not
+    only) A macOS live run (`llm02-option-c-phase1-macos-campaign.json`) denied all five protected aliases; its positive control missed the marker in the model reply, so the run is recorded as not passed.. This is a separate, unaccepted residual; the `Nlink > 1` check is not
     implemented.
   - Linux live retrieval and notification sinks are `NOT_RUN`.
   - Model-output artifacts remain verbatim; retrieval/handoff/caller prose and
