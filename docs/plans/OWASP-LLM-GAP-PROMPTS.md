@@ -29,7 +29,7 @@ To use one: start a fresh agent session in this repository and paste the
 | 10  | LLM04        | No production reader verifies repository index rows                 | Code            | In progress | PR #411 (guard; digests latent) |
 | 11  | LLM04        | RAG producer does not emit `chunk_hash`                             | Cross-repo code | Open        |                  |
 | 12  | LLM05        | Slack rendering and channel binding unobserved                      | Evidence        | Waiting on operator | PR #412 (merged); escaped-markup probe undecided |
-| 13  | LLM06        | Sandbox off by default; Linux host sockets outside `/tmp`, `/run`   | Code, gated     | In progress | PR #414 (macOS measured; Linux socket fix needs a Linux host) |
+| 13  | LLM06        | Sandbox off by default; Linux host sockets outside `/tmp`, `/run`   | Code, gated     | In progress | PR #421 (Linux socket masked and verified in a container); default-on pending |
 | 14  | LLM08        | Live RAG with PostgreSQL and embeddings `NOT_RUN`                   | Evidence        | Waiting on operator | producer lacks a retrieval-only entrypoint (blocker record) |
 | 15  | LLM09        | Subprocess can write SOP state with the sandbox off; live `NOT_RUN` | Code + evidence | Waiting on operator | fingerprint check was NO-GO (2026-11-09); the sandbox that denies .agent-sdlc writes is opt-in; default-on waits on gap 13 |
 | 16  | LLM10        | Five subprocess paths without process-group termination             | Code            | Done        | PR #398 (merged) |
