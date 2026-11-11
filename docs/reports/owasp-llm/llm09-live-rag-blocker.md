@@ -7,7 +7,7 @@
 A live run against a disposable PostgreSQL with pgvector and an embedding model, with
 two isolated corpora, cross-corpus and unauthorized-scope cases, a deadline case, a
 poisoned chunk, and a positive control (gap 14 in
-[OWASP-LLM-GAP-PROMPTS.md](OWASP-LLM-GAP-PROMPTS.md)).
+[OWASP-LLM-GAP-PROMPTS.md](../../plans/OWASP-LLM-GAP-PROMPTS.md)).
 
 ## What exists on this machine
 
