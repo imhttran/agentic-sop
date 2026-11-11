@@ -65,7 +65,7 @@ Commands below were checked against the source in `internal/cli/historical_accep
 
 | Item | Recommended disposition | Evidence | Note |
 | --- | --- | --- | --- |
-| Model-output artifacts | `INVESTIGATE` (gap 7) | [PROPOSAL-LLM02-MODEL-OUTPUT-ARTIFACTS.md](../../plans/PROPOSAL-LLM02-MODEL-OUTPUT-ARTIFACTS.md) (PR #407); option C implemented in PR #408 | Option A (redact the reply files) still needs a decision |
+| Model-output artifacts | `INVESTIGATE` (gap 7) | `PROPOSAL-LLM02-MODEL-OUTPUT-ARTIFACTS.md` (PR #407, not yet merged); option C implemented in PR #408 | Option A (redact the reply files) still needs a decision |
 | Notification prose | `MITIGATE` | Gap register, notification row | Not yet tracked as a separate item |
 | Retrieval and handoff inputs | `INVESTIGATE` / `ACCEPT_PROPOSED` | Gap register | Retrieval sinks are `NOT_RUN` on Linux |
 | Provider retention | `TRANSFER_PROPOSED` | Gap register | Outside SOP's control |
