@@ -229,13 +229,15 @@ func runLiveCampaignChild(t *testing.T) {
 	}
 	art.Probes = runBoundaryProbes(t, os.Getenv("SOP_LIVE_OUTSIDE"))
 	accounting := campaignAccounting{Cases: len(LiveCases())}
+	// Thinking off: with JSON output forced, a thinking model can return no content.
+	think := false
 	for _, lc := range LiveCases() {
 		controls, closeStore := campaignControls(t, lc)
 		res := RunLiveCase(context.Background(), LiveRunOptions{
 			Endpoint: LiveEndpointURL,
 			Model:    model,
 			Controls: controls,
-			Decider:  LocalDecider{Endpoint: LiveEndpointURL, Model: model, Prompt: campaignPrompt(lc), Socket: os.Getenv(LiveSocketEnv)},
+			Decider:  LocalDecider{Endpoint: LiveEndpointURL, Model: model, Prompt: campaignPrompt(lc), Socket: os.Getenv(LiveSocketEnv), Think: &think},
 			Observer: StrictDecisionObserver{},
 		}, lc)
 		outcome := campaignOutcome(res, lc)
