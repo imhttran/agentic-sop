@@ -180,9 +180,14 @@ waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-ga
 - All ten OWASP LLM workstreams have merged implementation or evidence, but the
   [evidence matrix](docs/reports/owasp-llm/README.md) is not a compliance
   certification and preserves each bounded or unverified claim.
+- The Linux LLM01 campaign now has verdicts for all four injection cases plus its
+  positive control (PR #422). The macOS second-model campaign is committed but
+  unmerged in PR #424, so the broader gap remains open on `main`.
 - `run_command` has a default-off, fail-closed OS sandbox: Seatbelt on macOS
   (PR #343) and bubblewrap on Linux (PR #354). PR #356 gives every isolated run a
-  throwaway Go build cache and keeps the shared module cache read-only.
+  throwaway Go build cache and keeps the shared module cache read-only. PR #421
+  also masks Unix sockets found under the Linux home directory; isolation remains
+  default-off and sockets outside the masked roots remain a bounded limit.
 - Plan 03 has bounded macOS and Linux observations, model-input redaction, and
   separately recorded bounded-evidence acceptance. PR #400 applies baseline
   model-input redaction to every CLI-built chat transport and carries C1 policy when
@@ -195,8 +200,9 @@ waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-ga
   Plan 09 retrieval-boundary reconciliation are merged. Live producer-side RAG
   isolation remains `NOT_RUN`, and retrieval remains disabled by default.
 - Every `exec.CommandContext` subprocess path now binds process-group termination,
-  enforced by an architecture guard (PR #398). Token budgeting remains opt-in and
-  does not provide a monetary cap.
+  enforced by an architecture guard (PR #398). Token budgeting remains opt-in; the
+  operator selected token-budget-only option A in PR #417, so SOP does not provide
+  a monetary cap.
 - Plan 10's scoped protections are implemented, verified, accepted, and
   historicalized `COMPLETE`; Slack transport was delivered once, while client
   rendering and channel binding remain unobserved.
