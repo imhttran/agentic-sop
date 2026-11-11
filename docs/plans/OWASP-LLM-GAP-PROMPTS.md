@@ -33,7 +33,7 @@ To use one: start a fresh agent session in this repository and paste the
 | 14  | LLM08        | Live RAG with PostgreSQL and embeddings `NOT_RUN`                   | Evidence        | Waiting on operator | producer lacks a retrieval-only entrypoint (blocker record) |
 | 15  | LLM09        | Subprocess can write SOP state with the sandbox off; live `NOT_RUN` | Code + evidence | Open        |                  |
 | 16  | LLM10        | Five subprocess paths without process-group termination             | Code            | Done        | PR #398 (merged) |
-| 17  | LLM10        | Token budget is off by default and is not a dollar cap              | Code, optional  | Waiting on operator | PR #417 (proposal; dollar cap needs confirmation) |
+| 17  | LLM10        | Token budget is off by default and is not a dollar cap              | Code, optional  | In progress | PR #417: option A decided (token budget only) |
 | 18  | All          | Coverage statement and evidence matrix lag PRs #393 and #394        | Docs            | Open        |                  |
 
 **Tracking.** The Status and PR / evidence columns track progress on this list

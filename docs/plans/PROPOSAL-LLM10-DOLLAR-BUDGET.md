@@ -1,6 +1,6 @@
 # Proposal — dollar budget for model usage (OWASP gap 17)
 
-**Status:** PROPOSAL, not approved. **Gap:** OWASP gap 17 in
+**Status:** DECIDED: option A (token budget only). No dollar cap is built. **Gap:** OWASP gap 17 in
 [OWASP-LLM-GAP-PROMPTS.md](OWASP-LLM-GAP-PROMPTS.md). This gap is optional: no code is
 written until you confirm a dollar cap is wanted.
 
@@ -46,3 +46,11 @@ with a price table you maintain. Defer **C** until a typical run has been measur
 1. Is a dollar cap wanted, or is the token budget enough?
 2. If wanted: who maintains the price table, and which models must it cover?
 3. Should a default token budget be set, and if so, what typical run size should it use?
+
+## Decision record
+
+- **Operator decision:** option A. The per-run token budget (`SOP_AGENT_MAX_TOTAL_TOKENS`)
+  is the only budget. No pricing table and no dollar budget are added.
+- **Consequence:** SOP still reports no monetary cost. Cost limits remain a provider or
+  billing-side control. A default token budget (option C) is not set, since no typical run
+  has been measured.
