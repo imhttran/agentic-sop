@@ -170,7 +170,11 @@ func (h *Harness) isolationRequested() bool {
 either input is read. `true` sends `run_command` into `sandboxArgv`, which uses
 the same `backendFor` table and returns `errIsolationUnavailable` for an empty
 name, so nothing executes. The platform table therefore exists once, and a
-backend-less host cannot be talked out of the refusal.
+backend-less platform cannot be talked out of the refusal.
+
+PR #442 recorded the defect this replaced: the first implementation checked the
+override first, so `off` bypassed the refusal on Windows. It is fixed here; see
+[Correction](#correction-the-override-could-bypass-b1-fixed).
 
 Do **not** probe for the backend here with `exec.LookPath`: a missing `bwrap` on
 macOS/Linux must produce `errIsolationUnavailable` (fail closed), not "off". An
@@ -276,7 +280,7 @@ What that settles, and what it does not:
 | --- | --- |
 | 1. Default `run_command` isolation on | **Approved; implemented** as required-by-default on every platform. |
 | 2. `SOP_AGENT_RUN_COMMAND_ISOLATION=off` override with a startup notice | **Approved; implemented** (`off`, `0`, `false`, `no`; `sop run` and `sop prompt` print one notice). |
-| 3. Unsupported-platform behavior | **B1 selected and enforced by platform**: on a platform with no backend (Windows) `run_command` is refused, and no override or `Config` value can change that. On macOS/Linux a missing backend binary under the override still runs policy-only, and the startup notice makes that visible. Compatibility impact acknowledged below. |
+| 3. Unsupported-platform behavior | **B1 selected and enforced by platform**: on a platform with no backend (Windows) `run_command` is refused, and no override or `Config` value can change that — the PR #441 P2 recorded in #442 is fixed here. On macOS/Linux a missing backend binary under the override still runs policy-only, and the startup notice makes that visible. Compatibility impact acknowledged below. |
 | 4. Migrating the repository's own tests | **Approved; completed** without changing any other execution path. |
 | 5. Accepting the §6 residuals | **Not decided.** The decision covers the policy, not the residual risks. R4 and the Option-D hardlink alias stay open, and the host-to-sandbox socket direction stays recorded. |
 | 6. The Seatbelt `network-bind` profile rule | **Submitted for approval with the change**; the operator merged it. It remains the scoped rule described in §6's final bullet. |
@@ -312,8 +316,11 @@ CI job.
 
 ### Windows B1 compatibility impact (acknowledged)
 
-On Windows every `run_command` is refused with `run_command isolation
-unavailable: no sandbox backend on windows`. Consequences:
+On Windows, `run_command` is refused with `run_command isolation unavailable:
+no sandbox backend on windows` only when the `off` override is absent. With
+`SOP_AGENT_RUN_COMMAND_ISOLATION=off` (or `0`/`false`/`no`), the current code
+executes through the policy-only path. This is an unresolved defect against the
+selected B1 policy. Intended consequences after the fix:
 
 - The agent's build/test loop is unavailable: `go test`, `go build` and `go vet`
   cannot run through `run_command`.

@@ -1,6 +1,6 @@
 # OWASP LLM Top 10 — end-to-end prompts for the remaining gaps
 
-**As of:** `main` at `e4ca505d` (2026-11-12, UTC). **Status:** working aid, not a plan
+**As of:** `main` at `8fd729bc` (2026-11-12, UTC). **Status:** working aid, not a plan
 of record and not normative.
 
 One prompt per open gap, taken from
@@ -29,7 +29,7 @@ To use one: start a fresh agent session in this repository and paste the
 | 10  | LLM04        | No production reader verifies repository index rows                       | Code            | Done                | PR #411 (merged): guard test; digests recorded as latent                                                                                                                                              |
 | 11  | LLM04        | RAG producer does not emit `chunk_hash`                                   | Cross-repo code | Done                | rag-template-rust PR #7 (emits chunk_hash, merged); agentic-sop PR #431 (shared vector, merged); policy: flag, not reject; no live deployment run |
 | 12  | LLM05        | Slack rendering and channel binding unobserved                            | Evidence        | Waiting on operator | PR #412 (merged); escaped-markup probe undecided                                                                                                                                                      |
-| 13  | LLM06        | Sandbox off by default; Linux host sockets outside `/tmp`, `/run`         | Code, gated     | Done                | PR #421 (Linux socket masked and verified in a container); default-on approved and implemented with the operator override and Windows B1 (`docs/plans/PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md`); compatibility measured in `docs/reports/owasp-llm/llm06-sandbox-default-measurements.md` |
+| 13  | LLM06        | Default-on sandbox and unsupported-platform fail-closed policy             | Code, gated     | Done                | PR #421 masks Linux sockets; PRs #437/#439/#440 prepare compatibility; PR #441 enables default-on; the P2 it merged with (the `off` override bypassed Windows B1, recorded in #442) is fixed and pinned by `TestIsolationDecisionUnsupportedPlatforms` and a Windows runtime test in CI |
 | 14  | LLM08        | Live RAG with PostgreSQL and embeddings `NOT_RUN`                         | Evidence        | Done        | One live run with `rag-template-rust` (retrieval-only entrypoint): isolation, scope, controls, poisoned chunk observed; TIMEOUT and cancellation not observed live |
 | 15  | LLM09        | Subprocess can write SOP state with the sandbox off; live `NOT_RUN`       | Code + evidence | Done                | fingerprint check was NO-GO (2026-11-09); the `.agent-sdlc` write deny now applies by default with gap 13, pinned by `TestSubprocessStateWriteIsDeniedByDefault`; the exposure returns only through the operator override |
 | 16  | LLM10        | Five subprocess paths without process-group termination                   | Code            | Done                | PR #398 (merged)                                                                                                                                                                                      |
@@ -432,7 +432,7 @@ runs it, the coverage statement says what was observed instead of "not observed"
 
 ## 13. LLM06 — sandbox off by default; Linux host sockets outside `/tmp`, `/run`
 
-**Current state (2026-11-12, `main` `e4ca505d`).** The Linux socket gap is
+**Current state (2026-11-12).** The Linux socket gap is
 closed: PR #421 masks sockets found under the Linux home directory with a
 bounded, fail-closed scan, verified in a container. Default-on feasibility is
 now measured and remediated: the full suite runs inside the sandbox on macOS
