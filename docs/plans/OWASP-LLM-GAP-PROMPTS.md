@@ -15,26 +15,26 @@ To use one: start a fresh agent session in this repository and paste the
 
 ## Gap index
 
-| #   | OWASP        | Gap                                                                 | Kind            | Status      | PR / evidence    |
-| --- | ------------ | ------------------------------------------------------------------- | --------------- | ----------- | ---------------- |
-| 1   | LLM01        | Linux case with no verdict; one model per platform                  | Evidence        | Done        | PR #422 (Linux verdicts for all five cases); PR #424 (macOS second model) |
-| 2   | LLM02        | Live campaigns predate the task-input fix; Linux sinks `NOT_RUN`    | Evidence        | In progress | PR #427: task-input re-runs; Linux notification sink run recorded (llm02-campaign-linux-notify-sink.json); Linux retrieval sink still `NOT_RUN` (blocked with gap 14) |
-| 3   | LLM02        | C1 redaction not on the OpenAI-compatible provider path             | Code            | Done        | PR #400 (merged) |
-| 4   | LLM02, LLM07 | Model context outside the user prompt and tool results              | Code            | Done        | PR #402 (merged) |
-| 5   | LLM02        | Hardlink alias: no `Nlink > 1` check; macOS not covered             | Code, gated     | Waiting on operator | macOS: two runs, protected aliases denied, positive control misses (#405, attempt 2) |
-| 6   | LLM02        | macOS sandbox: parent environment readable via `kern.procargs2`     | Investigation   | Waiting on operator | PR #406 |
-| 7   | LLM02        | Model-output artifacts persisted verbatim                           | Investigation   | In progress | PR #408 (option C); option A pending, proposal PR #407 |
-| 8   | LLM02        | Operator decisions: Plan 03 acceptance, C1 default, residuals       | Decision packet | Waiting on operator | PR #409; packet refreshed in PR #430 |
-| 9   | LLM03        | Scanner integrity: hash-then-exec race, pins, signatures            | Code, gated     | In progress | PR #410 (race closed); policy proposal in docs/plans |
-| 10  | LLM04        | No production reader verifies repository index rows                 | Code            | Done        | PR #411 (merged): guard test; digests recorded as latent |
-| 11  | LLM04        | RAG producer does not emit `chunk_hash`                             | Cross-repo code | Open        |                  |
-| 12  | LLM05        | Slack rendering and channel binding unobserved                      | Evidence        | Waiting on operator | PR #412 (merged); escaped-markup probe undecided |
-| 13  | LLM06        | Sandbox off by default; Linux host sockets outside `/tmp`, `/run`   | Code, gated     | In progress | PR #421 (Linux socket masked and verified in a container); default-on pending |
-| 14  | LLM08        | Live RAG with PostgreSQL and embeddings `NOT_RUN`                   | Evidence        | Waiting on operator | producer lacks a retrieval-only entrypoint (blocker record) |
-| 15  | LLM09        | Subprocess can write SOP state with the sandbox off; live `NOT_RUN` | Code + evidence | Waiting on operator | fingerprint check was NO-GO (2026-11-09); the sandbox that denies .agent-sdlc writes is opt-in; default-on waits on gap 13 |
-| 16  | LLM10        | Five subprocess paths without process-group termination             | Code            | Done        | PR #398 (merged) |
-| 17  | LLM10        | Token budget is off by default and is not a dollar cap              | Code, optional  | Done | PR #417 (merged): option A, token budget only |
-| 18  | All          | Coverage statement and evidence matrix lag current merged evidence  | Docs            | Done        | PR #425 (merged); refreshed through PR #427 |
+| #   | OWASP        | Gap                                                                       | Kind            | Status              | PR / evidence                                                                                                                                                                                         |
+| --- | ------------ | ------------------------------------------------------------------------- | --------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | LLM01        | Linux case with no verdict; one model per platform                        | Evidence        | Done                | PR #422 (Linux verdicts for all five cases); PR #424 (macOS second model)                                                                                                                             |
+| 2   | LLM02        | Live campaigns predate the task-input fix; Linux sinks `NOT_RUN`          | Evidence        | In progress         | PR #427: task-input re-runs; Linux notification sink run recorded (llm02-campaign-linux-notify-sink.json); Linux retrieval sink still `NOT_RUN` (blocked with gap 14)                                 |
+| 3   | LLM02        | C1 redaction not on the OpenAI-compatible provider path                   | Code            | Done                | PR #400 (merged)                                                                                                                                                                                      |
+| 4   | LLM02, LLM07 | Model context outside the user prompt and tool results                    | Code            | Done                | PR #402 (merged)                                                                                                                                                                                      |
+| 5   | LLM02        | Hardlink alias: no `Nlink > 1` check; macOS verified, Windows not covered | Code, gated     | Waiting on operator | macOS `VERIFIED` (attempt 3: 5/5 protected outcomes, 3 path-denied and 2 C1-redacted; positive control passed); Windows `UNVERIFIED`; Option A not approved; outside-workspace residual decision open |
+| 6   | LLM02        | macOS sandbox: parent environment readable via `kern.procargs2`           | Investigation   | Waiting on operator | PR #406                                                                                                                                                                                               |
+| 7   | LLM02        | Model-output artifacts persisted verbatim                                 | Investigation   | In progress         | PR #408 (option C); option A pending, proposal PR #407                                                                                                                                                |
+| 8   | LLM02        | Operator decisions: Plan 03 acceptance, C1 default, residuals             | Decision packet | Waiting on operator | PR #409; packet refreshed in PR #430                                                                                                                                                                  |
+| 9   | LLM03        | Scanner integrity: hash-then-exec race, pins, signatures                  | Code, gated     | In progress         | PR #410 (race closed); policy proposal in docs/plans                                                                                                                                                  |
+| 10  | LLM04        | No production reader verifies repository index rows                       | Code            | Done                | PR #411 (merged): guard test; digests recorded as latent                                                                                                                                              |
+| 11  | LLM04        | RAG producer does not emit `chunk_hash`                                   | Cross-repo code | Open                |                                                                                                                                                                                                       |
+| 12  | LLM05        | Slack rendering and channel binding unobserved                            | Evidence        | Waiting on operator | PR #412 (merged); escaped-markup probe undecided                                                                                                                                                      |
+| 13  | LLM06        | Sandbox off by default; Linux host sockets outside `/tmp`, `/run`         | Code, gated     | In progress         | PR #421 (Linux socket masked and verified in a container); default-on pending                                                                                                                         |
+| 14  | LLM08        | Live RAG with PostgreSQL and embeddings `NOT_RUN`                         | Evidence        | Waiting on operator | producer lacks a retrieval-only entrypoint (blocker record)                                                                                                                                           |
+| 15  | LLM09        | Subprocess can write SOP state with the sandbox off; live `NOT_RUN`       | Code + evidence | Waiting on operator | fingerprint check was NO-GO (2026-11-09); the sandbox that denies .agent-sdlc writes is opt-in; default-on waits on gap 13                                                                            |
+| 16  | LLM10        | Five subprocess paths without process-group termination                   | Code            | Done                | PR #398 (merged)                                                                                                                                                                                      |
+| 17  | LLM10        | Token budget is off by default and is not a dollar cap                    | Code, optional  | Done                | PR #417 (merged): option A, token budget only                                                                                                                                                         |
+| 18  | All          | Coverage statement and evidence matrix lag current merged evidence        | Docs            | Done                | PR #425 (merged); refreshed through PR #427                                                                                                                                                           |
 
 **Tracking.** The Status and PR / evidence columns track progress on this list
 only. Statuses: `Open`, `In progress`, `Waiting on operator` (a proposal or
@@ -197,6 +197,18 @@ with a covered / not-applicable / open status per route, and the coverage statem
 ```
 
 ## 5. LLM02 — hardlink alias: no `Nlink > 1` check; macOS not covered
+
+**Current state (2026-11-12).** macOS is `VERIFIED` for protected workspace
+credentials by Option C Phase 1 attempt 3 (`llm02-option-c-phase1-macos-campaign-attempt3.json`,
+SHA-256 `50cc9e09…`, 6 requests: 5 protected, 1 positive control, 0 residual).
+Linux was already `VERIFIED`. `Nlink > 1` is still not implemented and is not
+approved; the measured false-positive cost on this host is 0, but a broad rule
+would refuse legitimate multi-linked files in user repositories. The remaining
+decision is whether to record the outside-workspace origin, late external
+credential, external removal, and Windows cases as bounded residual limits, or
+to authorize a separate control. See
+[PROPOSAL-LLM02-NLINK-AND-MACOS-IDENTITY.md](PROPOSAL-LLM02-NLINK-AND-MACOS-IDENTITY.md).
+The original prompt follows and is preserved as historical guidance.
 
 ```text
 Gap: a pre-existing hardlink with an ordinary name bypasses the lexical credential-path

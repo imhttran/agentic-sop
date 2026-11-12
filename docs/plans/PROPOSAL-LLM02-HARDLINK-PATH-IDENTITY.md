@@ -1,6 +1,6 @@
 # Proposal — LLM02 hardlink/path-identity protection
 
-Status: **APPROVED — Option C Phase 1 IMPLEMENTED and VERIFIED on Linux. macOS and Windows remain follow-ups.**
+Status: **APPROVED — Option C Phase 1 IMPLEMENTED and VERIFIED on Linux and macOS; Windows remains a follow-up.**
 Date: 2026-11-10.
 Baseline: `origin/main` at `823f753` (after PR #376); implementation tested at `4911f916`.
 Evidence: Linux `amd64`, Go 1.27.1.
@@ -38,6 +38,14 @@ and PR #373.
 - **Residual risks:** not accepted. Ordinary-file unlisted values, outside-
   workspace origins, tracked aliases through Git output, artifacts, retrieval,
   notifications, provider retention, and general DLP remain outside this scope.
+- **macOS evidence (2026-11-12):** the same registry code is `VERIFIED` on macOS by
+  the Option C Phase 1 attempt 3 campaign
+  ([`llm02-option-c-phase1-macos-campaign-attempt3.json`](../reports/owasp-llm/llm02-option-c-phase1-macos-campaign-attempt3.json),
+  SHA-256 `50cc9e0960a260f911f7e5b9ea5fe6ead45dc30f3d3726c8a7d173775aa8062a`;
+  6 requests, 5 protected, 1 positive control, 0 residual; 5/5 probes). The
+  recorded authorization remains Linux Phase 1; this is evidence for the existing
+  implementation, not a new product policy, default, or residual acceptance.
+  Windows remains `UNVERIFIED`.
 
 ## Problem
 
