@@ -1,30 +1,31 @@
 # Proposal: post-default-on residual risks (OWASP Gap 13 / LLM02)
 
-**Status: all three exposures have recorded dispositions; none is accepted.**
-Nothing here accepts, waives, transfers, or closes a risk. Default-on isolation is
-implemented and enforced; the exposures it does not close are listed with the
-evidence for each.
+**Status: R2 and R4 are accepted within bounded scopes; H2S is recorded as a
+bounded architectural property and is *not* a risk acceptance.** Default-on
+isolation is implemented and enforced; the exposures it does not close are listed
+with the evidence for each.
 
-- **R2** has a recorded disposition: bounded residual exposure, gap 5 option 1,
-  2026-11-12. It is *not* accepted, and no separate control is authorized.
-- **R4** has a recorded disposition: known limit for the opt-in sandbox (gap 6,
-  PR #447). It is *not* accepted, and none of the measured options is implemented.
-- **H2S** has a recorded disposition: Option A, bounded architectural property,
-  2026-11-12 (decision memory `a73749c2c7fc634dc0e37b10f6b0d5f8e7e7ae8046500e9b71792ed1cc54d719`,
-  source `operator:h2s-option-a-2026-11-12`). It is *not* a residual-risk
-  acceptance.
+- **R2** is **accepted as bounded limits** (LLM02 decision packet C.4, operator
+  disposition in chat, 2026-11-12), on top of the gap 5 option 1 record.
+- **R4** is **accepted as a known limit** (same C.4 disposition), on top of the
+  gap 6 record. None of the measured mitigation designs is implemented.
+- **H2S** is recorded under Option A as a bounded architectural property, not as a
+  formal residual-risk acceptance (decision memory
+  `a73749c2c7fc634dc0e37b10f6b0d5f8e7e7ae8046500e9b71792ed1cc54d719`, source
+  `operator:h2s-option-a-2026-11-12`).
 
 ## Tracking matrix
 
 Owner is the accountable party: the operator holds risk decisions; the repository
-owns the controls. "Recorded, not accepted" means the exposure is written down as
-a bounded limit; it is **not** a risk acceptance.
+owns the controls. `ACCEPTED` means the operator accepted the exposure within the
+stated scope. `RECORDED` means the exposure is written down and is **not** a risk
+acceptance.
 
 | ID | Exposure | Owner | Status | Decision record | Evidence |
 | --- | --- | --- | --- | --- | --- |
-| **R2** | Pre-existing hardlink alias to a credential | Operator (risk); `internal/toolharness/identity.go` (control) | `RECORDED` — bounded residual, not accepted | Gap 5 option 1, 2026-11-12; Option D `RISK_ACCEPTED — SUBPROCESS HARDLINK ALIAS (BOUNDED)` for the Linux subprocess case | `TestLinuxIsolationPreExistingCredentialHardlink`, `TestDarwinIsolationSAFECommandCredentialRead`, `TestRunCommandIsolationDeniesCredentialHardlink` |
-| **R4** | macOS parent launch-time environment (`kern.procargs2`) | Operator (risk); `internal/toolharness/isolation.go` (control) | `RECORDED` — known limit, not accepted | Gap 6, PR #447 | `seatbelt-evidence.md` launch-chain options; measurement report |
-| **H2S** | Host-to-sandbox Unix socket connectivity | Operator (risk); `internal/toolharness/isolation.go` profile rule | `RECORDED` — bounded architectural property, not accepted | H2S Option A, 2026-11-12, decision memory `a73749c2…`, source `operator:h2s-option-a-2026-11-12` | Measured on both backends; reverse direction pinned by `TestRunCommandIsolationAllowsOwnUnixSocketOnly` |
+| **R2** | Pre-existing hardlink alias to a credential | Operator (risk); `internal/toolharness/identity.go` (control) | `ACCEPTED (BOUNDED)` | Gap 5 option 1 record, 2026-11-12; accepted as bounded limits in LLM02 packet C.4 (chat, 2026-11-12); Option D `RISK_ACCEPTED — SUBPROCESS HARDLINK ALIAS (BOUNDED)` for the Linux subprocess case | `TestLinuxIsolationPreExistingCredentialHardlink`, `TestDarwinIsolationSAFECommandCredentialRead`, `TestRunCommandIsolationDeniesCredentialHardlink` |
+| **R4** | macOS parent launch-time environment (`kern.procargs2`) | Operator (risk); `internal/toolharness/isolation.go` (control) | `ACCEPTED (KNOWN LIMIT)` | Gap 6 record, PR #447; accepted as a known limit in LLM02 packet C.4 (chat, 2026-11-12) | `seatbelt-evidence.md` launch-chain options; measurement report |
+| **H2S** | Host-to-sandbox Unix socket connectivity | Operator (risk); `internal/toolharness/isolation.go` profile rule | `RECORDED` — bounded architectural property, **not** a risk acceptance | H2S Option A, 2026-11-12, decision memory `a73749c2…`, source `operator:h2s-option-a-2026-11-12` | Measured on both backends; reverse direction pinned by `TestRunCommandIsolationAllowsOwnUnixSocketOnly` |
 | **OVR** | Authorized operator `off` override restores policy-only execution on macOS/Linux | Operator (explicit action) | `AUTHORIZED BY POLICY` — exposure tracked here so it is never read as enforced isolation | Default-on approval, PR #441 §8 | `TestIsolationPolicyNotice`, `TestRunCommandIsolationOffKeepsExecCapturedPath`; `sop run` / `sop prompt` notice |
 | **VC** | Verification coverage gaps | SOP maintainers | `PARTIAL` — Linux host and Linux `amd64` are `NOT_RUN` | none needed (evidence gap, not a risk decision) | Platform table below |
 | **OPS** | Operational limits: 120 s default `CommandTimeout` against a ~90 s in-sandbox suite; 20 000-entry `$HOME` scan bound that refuses the command | SOP maintainers | `DOCUMENTED` — not a risk decision | none | Measurement report |
@@ -96,10 +97,11 @@ authorized. They are bounded limits, **not** an acceptance. The subprocess
 hardlink alias is separately `RISK_ACCEPTED — SUBPROCESS HARDLINK ALIAS (BOUNDED)`
 under Option D (Linux; [PROPOSAL-LLM02-SUBPROCESS-HARDLINK.md](PROPOSAL-LLM02-SUBPROCESS-HARDLINK.md)).
 
-**Operator decision.** None open for R2. The macOS in-sandbox alias measured in
-this verification is the same inode-alias limit, not a new residual. Naming it
-explicitly next to the Linux Option D entry would be a wording change to the
-Option D document, not a new decision.
+**Acceptance (2026-11-12).** The operator accepted these as **bounded limits**
+(LLM02 decision packet C.4, operator disposition in chat). Option C Phase 1 is
+kept and `Nlink > 1` stays rejected. No operator decision is open for R2. The macOS
+in-sandbox alias measured in this verification is the same inode-alias limit, not a
+new residual.
 
 ### R4 - macOS parent launch-time environment (`kern.procargs2`)
 
@@ -150,9 +152,10 @@ acceptance, and no option is implemented.
 secrets in SOP's environment; supply them through a file, config, or keychain that
 the relevant component reads.
 
-**Operator decision.** Formally accept the known limit, or authorize one of the
-unimplemented designs (SOP environment scrub, or launchd reparenting) as its own
-change.
+**Acceptance (2026-11-12).** The operator accepted this as a **known limit** (LLM02
+decision packet C.4, operator disposition in chat). The sandbox is not weakened and
+no mitigation design is implemented. Authorizing one of the designs (SOP
+environment scrub, or launchd reparenting) would remain a separate change.
 
 ### H2S - Host-to-sandbox Unix socket direction
 

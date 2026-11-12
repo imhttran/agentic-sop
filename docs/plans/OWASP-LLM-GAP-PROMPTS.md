@@ -463,10 +463,11 @@ distribution host and Linux `amd64` are `NOT_RUN`.
 The gap is `Done` as implementation. All three surviving exposures now have
 recorded dispositions, tracked in
 [PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md](PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md):
-R2 (bounded residual, gap 5 option 1) and R4 (known limit, gap 6) are recorded and
-not accepted, and H2S is recorded as a bounded architectural property under H2S
+R2 is accepted as bounded limits and R4 as a known limit (LLM02 decision packet
+C.4, operator disposition in chat, 2026-11-12, on top of the gap 5 and gap 6
+records), and H2S is recorded as a bounded architectural property under H2S
 Option A (decision memory `a73749c2…`, source `operator:h2s-option-a-2026-11-12`,
-2026-11-12) - also not a risk acceptance. The authorized operator override is
+2026-11-12), which is not a risk acceptance. The authorized operator override is
 tracked there so it is never read as enforced isolation. No residual decision
 remains open. Verification is complete only within the tested environments - a
 Linux distribution host and Linux `amd64` remain `NOT_RUN`.
