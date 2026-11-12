@@ -148,10 +148,13 @@ func stageRules(src, want string) (string, string, func(), error) {
 	}
 	cleanup := func() { _ = os.RemoveAll(dir) }
 	h := sha256.New()
+	staged := dir
 	if !info.IsDir() {
 		// Keep the base name so the scanner sees the same file name it was given.
-		dst := filepath.Join(dir, filepath.Base(src))
-		if err := copyHashedRule(src, dst, h); err != nil {
+		// A scanner's --config accepts a file for a file rules path, so return the
+		// staged file, not its containing directory.
+		staged = filepath.Join(dir, filepath.Base(src))
+		if err := copyHashedRule(src, staged, h); err != nil {
 			cleanup()
 			return "", "", nil, fmt.Errorf("rules pin: %s", SanitizeText(err.Error(), MaxDiagnosticBytes))
 		}
@@ -185,7 +188,7 @@ func stageRules(src, want string) (string, string, func(), error) {
 		cleanup()
 		return "", "", nil, fmt.Errorf("rules pin mismatch: rules digest %s is not the pinned digest", got)
 	}
-	return dir, got, cleanup, nil
+	return staged, got, cleanup, nil
 }
 
 // regularRuleFiles returns the slash-separated relative paths of every regular
