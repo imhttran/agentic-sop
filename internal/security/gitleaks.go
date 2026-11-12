@@ -22,7 +22,7 @@ type gitleaksAdapter struct {
 	category     Category
 	command      []string
 	rules        string
-	rulesPin     string // optional rules_sha256; see checkRulesPin
+	rulesPin     string // optional rules_sha256; see stageRules
 	version      string
 	configDigest string
 	exec         Executor
@@ -186,19 +186,27 @@ func (a *gitleaksAdapter) Scan(ctx context.Context, req Request) (Execution, err
 		if !filepath.IsAbs(rules) {
 			rules = joinPath(req.WorkspaceRoot, rules)
 		}
-		argv = append(argv, "--config", rules)
 		identity, err := rulesIdentity(rules)
 		if err != nil {
 			exec.Status = StatusFailed
 			exec.Diagnostics = []string{"gitleaks configuration is unavailable: " + SanitizeText(err.Error(), MaxDiagnosticBytes)}
 			return finish(exec, nil)
 		}
-		exec.Provenance.RulesIdentity = identity
-		if err := checkRulesPin(rules, identity, a.rulesPin); err != nil {
-			exec.Status = StatusFailed
-			exec.Diagnostics = []string{err.Error()}
-			return finish(exec, nil)
+		if a.rulesPin != "" {
+			// Read the verified private copy, not the writable original. The pin is
+			// the digest of the bytes this scan actually loads.
+			staged, stagedIdentity, cleanup, err := stageRules(rules, a.rulesPin)
+			if err != nil {
+				exec.Status = StatusFailed
+				exec.Diagnostics = []string{err.Error()}
+				return finish(exec, nil)
+			}
+			defer cleanup()
+			rules = staged
+			identity = stagedIdentity
 		}
+		exec.Provenance.RulesIdentity = identity
+		argv = append(argv, "--config", rules)
 	}
 
 	runCtx, cancel := scanContext(ctx, a.timeout)

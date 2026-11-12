@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -21,9 +22,11 @@ import (
 // adapter config digest that provenance records.
 // The check copies the resolved binary into a private directory while hashing
 // the same bytes, then executes that copy. A writer racing the original cannot
-// change what runs.
-// shortcut: each scan copies the scanner binary once, which costs time on large
-// binaries; a binary on a noexec temp mount fails to start (ErrUnavailable).
+// change what runs. A configured rules pin is staged the same way: the scanner
+// reads a verified private copy, not the writable original.
+// shortcut: each scan copies the scanner binary and, when pinned, the rules tree;
+// this costs time on large inputs; a binary on a noexec temp mount fails to start
+// (ErrUnavailable).
 // Upgrade: execute an opened descriptor where the platform allows it.
 type pinnedExecutor struct {
 	inner        Executor
@@ -118,35 +121,119 @@ func stageVerified(src, want string) (string, func(), error) {
 	return dst, cleanup, nil
 }
 
-// checkRulesPin verifies an optional rules pin against the exact resolved
-// rules path an adapter passes to its scanner and that path's identity. It
-// refuses a tree the digest cannot see: rulesIdentity skips non-regular
-// entries, but a scanner would follow a symlink to unhashed content.
-func checkRulesPin(rules, identity, pin string) error {
-	if pin == "" {
-		return nil
+// stageRules copies a rules file or directory into a private directory while
+// computing the same digest rulesIdentity produces, and fails unless the copy's
+// digest is want. The copy is what the scanner reads, so a writer racing the
+// original cannot change the rules that are loaded. It returns the digest of the
+// staged bytes, which provenance records as the observed rules identity.
+//
+// A symlinked rules root or any symlink or non-regular entry inside the tree is
+// refused. rulesIdentity skips entries it cannot hash, but a scanner would follow
+// a symlink to unhashed content, so the pin must not be satisfiable that way.
+//
+// The staged tree lives in a 0700 directory owned by this process. A writer with
+// the same user identity that can reach that directory is outside the pin's trust
+// boundary: the pin protects the writable acquisition/workspace path.
+func stageRules(src, want string) (string, string, func(), error) {
+	info, err := os.Lstat(src)
+	if err != nil {
+		return "", "", nil, fmt.Errorf("rules pin: %s", SanitizeText(err.Error(), MaxDiagnosticBytes))
 	}
-	if _, err := regularTree(rules); err != nil {
-		return fmt.Errorf("rules pin: %s", SanitizeText(err.Error(), MaxDiagnosticBytes))
+	if info.Mode()&os.ModeSymlink != 0 || (!info.IsDir() && !info.Mode().IsRegular()) {
+		return "", "", nil, fmt.Errorf("rules pin: %s is not a regular file", filepath.Base(src))
 	}
-	if identity != pin {
-		return fmt.Errorf("rules pin mismatch: rules digest %s is not the pinned digest", identity)
+	dir, err := os.MkdirTemp("", "sop-rules-")
+	if err != nil {
+		return "", "", nil, fmt.Errorf("rules pin: %w", ErrUnavailable)
 	}
-	return nil
+	cleanup := func() { _ = os.RemoveAll(dir) }
+	h := sha256.New()
+	if !info.IsDir() {
+		// Keep the base name so the scanner sees the same file name it was given.
+		dst := filepath.Join(dir, filepath.Base(src))
+		if err := copyHashedRule(src, dst, h); err != nil {
+			cleanup()
+			return "", "", nil, fmt.Errorf("rules pin: %s", SanitizeText(err.Error(), MaxDiagnosticBytes))
+		}
+	} else {
+		files, err := regularRuleFiles(src)
+		if err != nil {
+			cleanup()
+			return "", "", nil, fmt.Errorf("rules pin: %s", SanitizeText(err.Error(), MaxDiagnosticBytes))
+		}
+		// rulesIdentity hashes sorted slash-separated relative names with NUL
+		// framing. WalkDir order is lexical per directory but not globally, so sort
+		// the collected set. TestRulesPinStagesVerifiedTree pins this coupling with a
+		// tree whose sorted order differs from WalkDir order.
+		sort.Strings(files)
+		for _, rel := range files {
+			_, _ = io.WriteString(h, rel+"\x00")
+			dst := filepath.Join(dir, filepath.FromSlash(rel))
+			if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+				cleanup()
+				return "", "", nil, fmt.Errorf("rules pin: %s", SanitizeText(err.Error(), MaxDiagnosticBytes))
+			}
+			if err := copyHashedRule(filepath.Join(src, filepath.FromSlash(rel)), dst, h); err != nil {
+				cleanup()
+				return "", "", nil, fmt.Errorf("rules pin: %s", SanitizeText(err.Error(), MaxDiagnosticBytes))
+			}
+			_, _ = io.WriteString(h, "\x00")
+		}
+	}
+	got := hex.EncodeToString(h.Sum(nil))
+	if got != want {
+		cleanup()
+		return "", "", nil, fmt.Errorf("rules pin mismatch: rules digest %s is not the pinned digest", got)
+	}
+	return dir, got, cleanup, nil
 }
 
-// regularTree returns an error if path is a symlink or contains any entry that
-// is neither a directory nor a regular file.
-func regularTree(path string) (string, error) {
-	return "", filepath.WalkDir(path, func(p string, entry fs.DirEntry, err error) error {
+// regularRuleFiles returns the slash-separated relative paths of every regular
+// file under root. A symlink or other non-regular entry is an error: the scanner
+// would follow it to content the digest does not cover.
+func regularRuleFiles(root string) ([]string, error) {
+	var files []string
+	err := filepath.WalkDir(root, func(p string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if !entry.IsDir() && !entry.Type().IsRegular() {
+		if entry.IsDir() {
+			return nil
+		}
+		if !entry.Type().IsRegular() {
 			return fmt.Errorf("%s is not a regular file", filepath.Base(p))
 		}
+		rel, err := filepath.Rel(root, p)
+		if err != nil {
+			return err
+		}
+		files = append(files, filepath.ToSlash(rel))
 		return nil
 	})
+	return files, err
+}
+
+// copyHashedRule copies one rule file and feeds exactly the copied bytes to h.
+func copyHashedRule(src, dst string, h io.Writer) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(io.MultiWriter(out, h), in); err != nil {
+		_ = out.Close()
+		_ = os.Remove(dst)
+		return err
+	}
+	if err := out.Close(); err != nil {
+		_ = os.Remove(dst)
+		return err
+	}
+	return nil
 }
 
 func fileSHA256(path string) (string, error) {

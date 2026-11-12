@@ -20,7 +20,7 @@ type semgrepAdapter struct {
 	category     Category
 	command      []string
 	rules        string
-	rulesPin     string // optional rules_sha256; see checkRulesPin
+	rulesPin     string // optional rules_sha256; see stageRules
 	languages    []Language
 	version      string
 	configDigest string
@@ -119,13 +119,21 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 		exec.Diagnostics = []string{"semgrep rules are unavailable: " + SanitizeText(err.Error(), MaxDiagnosticBytes)}
 		return finish(exec, nil)
 	}
-	exec.Provenance.RulesIdentity = identity
-	if err := checkRulesPin(rules, identity, a.rulesPin); err != nil {
-		exec.Status = StatusFailed
-		exec.Coverage = CoverageUnknown
-		exec.Diagnostics = []string{err.Error()}
-		return finish(exec, nil)
+	if a.rulesPin != "" {
+		// Read the verified private copy, not the writable original. The pin is
+		// the digest of the bytes this scan actually loads.
+		staged, stagedIdentity, cleanup, err := stageRules(rules, a.rulesPin)
+		if err != nil {
+			exec.Status = StatusFailed
+			exec.Coverage = CoverageUnknown
+			exec.Diagnostics = []string{err.Error()}
+			return finish(exec, nil)
+		}
+		defer cleanup()
+		rules = staged
+		identity = stagedIdentity
 	}
+	exec.Provenance.RulesIdentity = identity
 
 	// Semgrep may scan a file named on the command line even when it matches
 	// --exclude, so declared exclusions are applied to changed-file targets here.

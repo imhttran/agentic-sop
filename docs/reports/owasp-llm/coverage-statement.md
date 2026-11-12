@@ -1,6 +1,6 @@
 # OWASP LLM Top 10 — coverage statement
 
-**As of:** `main` at `8fd729bc` plus the Windows B1 correction (2026-11-12).
+**As of:** `main` at `8fd729bc` plus the Windows B1 correction and the LLM03 scanner-integrity staging change and per-platform binary pins (PRs #461/#462, 2026-11-12).
 PR #441 enabled default-on `run_command` isolation; the defect it merged with —
 `SOP_AGENT_RUN_COMMAND_ISOLATION=off` bypassing backend refusal on Windows,
 recorded in PR #442 — is fixed and regression-tested.
@@ -21,7 +21,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 | ---------- | ----------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | LLM01      | Plan 02 / LLM01   | Prompt Injection                                      | Covered (controls + bounded live campaigns)                                                                                                                                                                                                                                                                                                                       | Two models on macOS, one on Linux, one run per case; no universal claim                                                                                                                                                                                                          |
 | LLM02      | Plan 03 / LLM02   | Sensitive Information Disclosure                      | Covered for the user prompt and tool results (trace + macOS/Linux live campaigns); bounded evidence acceptance `RECORDED`; C1 unknown-format redaction `IMPLEMENTED` opt-in (PRs #361/#362/#364) with bounded Linux live `PASS`; focused C1 hardlink verification `PASS` for 4 scoped cases; Option C Phase 1 hardlink-alias denial `VERIFIED` on Linux and macOS | Not general DLP; four pre-C1 Linux residual exposures; hardlink aliases outside the identity registry (outside-workspace origins, Windows) with one pre-Option-C unlisted-value residual; Plan 03 acceptance `RECORDED` 16/16 (2026-11-12); C1 disabled by default; broader coverage `OPEN` |
-| LLM03      | Plan 04 / LLM04   | Supply Chain                                          | Partial                                                                                                                                                                                                                                                                                                                                                           | Model provenance and publisher signatures out of SOP's control                                                                                                                                                                                                                   |
+| LLM03      | Plan 04 / LLM04   | Supply Chain                                          | Partial                                                                                                                                                                                                                                                                                                                                                           | Model provenance and publisher signatures out of SOP's control; cargo-audit/Semgrep/Windows pins absent; report-only                                                                                                                                                                                                                   |
 | LLM04      | Plan 05 / LLM05   | Data and Model Poisoning                              | Partial                                                                                                                                                                                                                                                                                                                                                           | Integrity proves bytes, not benign content; provider training external                                                                                                                                                                                                           |
 | LLM05      | Plan 10 / LLM10   | Improper Output Handling                              | Covered for SOP's sinks                                                                                                                                                                                                                                                                                                                                           | Third-party rendering (terminal, IDE, Slack) external                                                                                                                                                                                                                            |
 | LLM06      | Plan 01 / LLM03   | Excessive Agency                                      | Covered (policy) + default-on sandbox on macOS and Linux                                                                                                                                                                                                                                                                                                          | Windows B1 refuses every override value and is fixed since PR #441's P2; cold build cache per run; residual hardlink, parent-environment and host-to-sandbox socket exposure                                                                                                                                                                                                                                 |
@@ -177,14 +177,28 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 
 - **Covered:** scanner archives are SHA-256-pinned in CI. Optional
   `binary_sha256` and `rules_sha256` pins are checked before every scanner run,
-  and this repository enables the Semgrep rules pin (PR #338). Evidence:
+  and this repository enables the Semgrep rules pin (PR #338). Per-platform binary
+  pins are committed for Gitleaks 8.30.1 and OSV-Scanner 2.7.0 on linux and darwin
+  (amd64+arm64) (PR #461). PR #410 closes the
+  binary hash-then-exec race by executing a verified private copy
+  (`TestPinnedExecutor`); `stageRules` does the same for the rules file or tree,
+  so Semgrep and Gitleaks read verified private bytes
+  (`TestRulesPinStagesVerifiedTree`, `TestSemgrepRulesPinStagesTheTreeItRuns`,
+  `TestGitleaksRulesPinStagesTheConfigItRuns`). On macOS arm64, a real Semgrep
+  1.183.0 scan under the rules pin reported `COMPLETED` with `COMPLETE` coverage,
+  and one changed rule file failed closed with `rules pin mismatch`. Evidence:
+  [llm03-scanner-integrity-evidence.md](llm03-scanner-integrity-evidence.md),
   [llm04-supply-chain.md](llm04-supply-chain.md).
 - **Not covered, and why:**
   - SOP cannot verify the provenance of a provider's hosted model.
-  - Publisher signatures are not checked.
-  - Binary pins are opt-in and platform-specific, so none are committed.
-  - PR #410 closes the hash-then-exec race by running a verified private copy.
-    Binary pins remain opt-in and publisher signatures are not checked.
+  - Publisher signatures are not checked; a digest proves the bytes, not who
+    produced them.
+  - Cargo-audit and Semgrep have no committed execution-time binary pin (Semgrep
+    is a venv; cargo-audit's manifest covers only linux x64 and darwin arm64);
+    Windows is not pinned.
+  - The repository runs report-only with empty `required_categories`; enabling a
+    blocking gate is an operator decision
+    ([PROPOSAL-SCANNER-PIN-POLICY.md](../../plans/PROPOSAL-SCANNER-PIN-POLICY.md)).
 
 ### LLM04 Data and Model Poisoning — partial
 
