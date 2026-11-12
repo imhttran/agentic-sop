@@ -1,6 +1,6 @@
 # OWASP LLM Top 10 — coverage statement
 
-**As of:** `main` at `b444f1bf` (2026-11-11, through PR #423).
+**As of:** `main` at `efb76fb7` (2026-11-12, through PR #427).
 
 This statement answers one question for each of the ten OWASP LLM risks: what
 SOP covers, where the evidence is, and what it does not cover, with the reason.
@@ -16,7 +16,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 
 | OWASP 2025 | Repo plan / label | Risk                                                  | Coverage                                                                                                                                                                                                                                                                                    | Main remaining gap                                                                                                                                                                                   |
 | ---------- | ----------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| LLM01      | Plan 02 / LLM01   | Prompt Injection                                      | Covered (controls + bounded live campaigns)                                                                                                                                                                                                                                                 | One merged model per platform; second-model macOS evidence is unmerged; no universal claim                                                                                                                                                           |
+| LLM01      | Plan 02 / LLM01   | Prompt Injection                                      | Covered (controls + bounded live campaigns)                                                                                                                                                                                                                                                 | Two models on macOS, one on Linux, one run per case; no universal claim                                                                                                                                                           |
 | LLM02      | Plan 03 / LLM02   | Sensitive Information Disclosure                      | Covered for the user prompt and tool results (trace + macOS/Linux live campaigns); bounded evidence acceptance `RECORDED`; C1 unknown-format redaction `IMPLEMENTED` opt-in (PRs #361/#362/#364) with bounded Linux live `PASS`; focused C1 hardlink verification `PASS` for 4 scoped cases | Not general DLP; four pre-C1 Linux residual exposures; hardlink path bypass with one unlisted-value residual; full Plan 03 acceptance `NEEDS_HUMAN`; C1 disabled by default; broader coverage `OPEN` |
 | LLM03      | Plan 04 / LLM04   | Supply Chain                                          | Partial                                                                                                                                                                                                                                                                                     | Model provenance and publisher signatures out of SOP's control                                                                                                                                       |
 | LLM04      | Plan 05 / LLM05   | Data and Model Poisoning                              | Partial                                                                                                                                                                                                                                                                                     | Integrity proves bytes, not benign content; provider training external                                                                                                                               |
@@ -36,11 +36,12 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   allowed. On Linux arm64 with `qwen3.5:4b`, all 4 injection cases were denied
   and the positive control was allowed after the campaign disabled model thinking
   for forced JSON output (PR #422). Earlier timeout evidence remains preserved.
+  A second macOS campaign with `llama3.2:3b` gave the same result: 4 of 4
+  injection cases denied and the positive control allowed (PR #424).
   Evidence: [llm01-injection.md](llm01-injection.md).
 - **Not covered, and why:** prompt injection cannot be prevented in general. The
-  merged evidence is one model per platform, run once per case, so it is not a
-  claim about other models or providers. A second-model macOS campaign is
-  committed but unmerged in PR #424.
+  evidence is two models on macOS and one on Linux, run once per case, so it is
+  not a claim about other models or providers. Linux has no second-model run.
 
 ### LLM02 Sensitive Information Disclosure — covered, bounded
 
