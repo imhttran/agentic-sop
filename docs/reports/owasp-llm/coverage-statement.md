@@ -114,8 +114,9 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     `TestLinuxIsolationSAFECommandCredentialRead` deny the read at the process
     level, and the macOS test also pins that the isolation-off default exposes the
     canary and that a pre-existing hardlink alias stays readable inside the sandbox.
-  - The Linux live retrieval sink is `NOT_RUN`. The Linux live notification
-    sink has one run with a local receiver
+  - The Linux live retrieval sink has one run
+    ([llm02-disclosure.md](llm02-disclosure.md#linux-retrieval-sink-run-2026-11-12)).
+    The Linux live notification sink has one run with a local receiver
     ([llm02-disclosure.md](llm02-disclosure.md#linux-notification-sink-run-2026-11-12));
     it does not cover Slack rendering or channel binding.
   - Model-output artifacts remain verbatim; retrieval/handoff/caller prose and
@@ -161,8 +162,8 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     known-format pass now also runs on those transports, which previously had none.
     No live campaign covers them yet. The repository
     configuration remains disabled, so the pre-C1 residual remains until an
-    operator enables it. The Linux live retrieval sink remains `NOT_RUN`; the
-    notification sink has one Linux run
+    operator enables it. The Linux live retrieval and notification sinks have one
+    run each; the macOS sinks are `NOT_RUN`
     ([llm02-disclosure.md](llm02-disclosure.md#linux-notification-sink-run-2026-11-12))
     that does not cover Slack rendering or channel binding.
 
@@ -338,9 +339,9 @@ These cannot be closed by code in this repository:
    [llm02-decision-packet.md](llm02-decision-packet.md).
 2. Whether to add a one-shot Slack probe for escaped markup and mention-shaped
    strings; plain rendering and channel binding are already observed in PR #412.
-3. The Linux live retrieval sink, the macOS notification-sink case, and a live
-   RAG deployment with PostgreSQL and embeddings. The Linux notification sink
-   has one run; it covers a local receiver only.
+3. The macOS live notification and retrieval sinks (`NOT_RUN`), and a second
+   live RAG deployment. The Linux sinks have one run each; the notification run
+   covers a local receiver only.
 4. Whether to enable the `run_command` sandbox by default on macOS and Linux
    (OWASP gap 13), the unsupported-platform behavior, and whether to accept the
    macOS hardlink-alias and parent-environment residuals. Proposal:
