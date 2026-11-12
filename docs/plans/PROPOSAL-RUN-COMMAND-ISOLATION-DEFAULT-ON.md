@@ -317,10 +317,9 @@ CI job.
 ### Windows B1 compatibility impact (acknowledged)
 
 On Windows, `run_command` is refused with `run_command isolation unavailable:
-no sandbox backend on windows` only when the `off` override is absent. With
-`SOP_AGENT_RUN_COMMAND_ISOLATION=off` (or `0`/`false`/`no`), the current code
-executes through the policy-only path. This is an unresolved defect against the
-selected B1 policy. Intended consequences after the fix:
+no sandbox backend on windows` for every override value and both
+`Config.IsolateCommands` values. The PR #441 P2 that let `off` bypass this
+(recorded in #442) is fixed in #444. Consequences:
 
 - The agent's build/test loop is unavailable: `go test`, `go build` and `go vet`
   cannot run through `run_command`.
@@ -330,13 +329,31 @@ selected B1 policy. Intended consequences after the fix:
 - Read-only and mutating file tools, and the fixed `git status`/`git diff` helper, are
   unaffected; only `run_command` subprocess execution is.
 
-This is the fail-closed trade the decision selects. It is reversible in one line
-(`isolationRequested`) if a Windows backend is added or B2 is preferred later.
+This is the fail-closed trade the decision selects. It is reversible in one
+place (`isolationDecision`) if a Windows backend is added or B2 is preferred later.
+
+### Post-merge verification (2026-11-12)
+
+`main` at `029ee1a2` (merge of PR #444) passed CI run `43246357934`, including
+`windows (install.ps1)`, which executed `TestRunCommandIsolationOnWindowsRefuses`
+(nine override and `Config` cases) plus the decision and notice tests. B1 is
+therefore verified at runtime on the merged implementation, not only at PR head.
+
+| Platform | Default | Operator `off` | Backend missing |
+| --- | --- | --- | --- |
+| macOS arm64 (real host) | sandbox | policy-only, notice | refuse |
+| Linux arm64 (privileged container) | sandbox | policy-only, notice | refuse |
+| Windows (CI runtime) | refuse | refuse | refuse |
+
+Linux on a distribution host and Linux `amd64` are `NOT_RUN`; the container
+results are not evidence of real-host compatibility. See
+[llm06-sandbox-default-measurements.md](../reports/owasp-llm/llm06-sandbox-default-measurements.md).
 
 ### Remaining operator actions
 
-- Dispose of R4 (macOS `kern.procargs2` parent-environment read) and the Option-D
-  hardlink alias, plus the host-to-sandbox socket direction.
+- Disposition the three residual exposures - R2 hardlink alias, R4 macOS
+  `kern.procargs2`, H2S host-to-sandbox socket - in
+  [PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md](PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md).
 - Record this decision in decision memory if a durable ledger entry is wanted;
   this document is the in-repository record, and no decision-memory entry is
   created by the implementing change.

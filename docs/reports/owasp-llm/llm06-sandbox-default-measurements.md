@@ -225,6 +225,36 @@ test pins the off leg through `run_command`.
 The 20 000-entry bound is an operational risk for default-on: a large home
 directory would turn every `run_command` into a denial.
 
+## Post-merge verification (2026-11-12)
+
+`main` at `029ee1a2` (merge of PR #444) passed the full CI run `43246357934`:
+`fmt/vet/build/test`, the race detector, security integration, installer and
+plugin packaging, both tagged acceptance suites, and `windows (install.ps1)`.
+The Windows job executed `TestRunCommandIsolationOnWindowsRefuses` (nine override
+and `Config` cases) plus the decision and notice tests, so B1 was verified at
+runtime on the merged implementation rather than only at PR head.
+
+Re-run on the merged tree for this reconciliation:
+
+| Suite | macOS arm64 (real host) | Linux arm64 (privileged container) |
+| --- | --- | --- |
+| Decision matrix, override, notice | PASS | PASS |
+| Credential, symlink, env-override and keychain denies | PASS | PASS (keychain is macOS-only) |
+| `.agent-sdlc` write deny, outbound network deny | PASS | PASS |
+| Missing and failing backends fail closed | PASS | PASS |
+| Default-on isolation actually applies | PASS | PASS (`TestRunCommandIsolationIsOnByDefault`) |
+| Windows runtime (CI) | - | PASS |
+
+### Platform coverage
+
+| Platform | Status |
+| --- | --- |
+| macOS arm64, real host | `VERIFIED` |
+| Linux arm64, privileged container | `VERIFIED` (container, not a distribution host) |
+| Linux, real distribution host | `NOT_RUN` — no host available through the established tools |
+| Linux `amd64` | `NOT_RUN` — no amd64 host or emulation here |
+| Windows | `VERIFIED` in CI (B1 refusal only; no backend to measure) |
+
 ## What this does not cover
 
 - Windows: no backend, so no runtime measurement is possible.

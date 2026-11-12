@@ -246,13 +246,19 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   [seatbelt-evidence.md](../security-shift-left/seatbelt-evidence.md#run_command-opt-in-sandbox-llm03).
 
 - **Not covered, and why:**
-  - Windows has no backend. Default execution is refused, but the documented B1
-    guarantee is incomplete because the explicit `off` override currently permits
-    policy-only execution. Until that P2 is fixed and regression-tested, Windows
-    must not be claimed fail-closed for all supported configuration states.
-    Decision and intended impact:
+  - Windows has no backend, so `run_command` is unavailable there under B1. Every
+    override value and both `Config.IsolateCommands` values are refused; the
+    compatibility cost, acknowledged with the decision, is that the agent's
+    build/test loop and any validation that shells out cannot run on Windows.
+    `VERIFIED` at runtime in CI on the merged implementation. Decision and impact:
     [PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md](../../plans/PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md),
     [llm06-sandbox-default-measurements.md](llm06-sandbox-default-measurements.md).
+  - Platform coverage is uneven: macOS arm64 and Linux arm64 (privileged
+    container) are `VERIFIED`; a Linux distribution host and Linux `amd64` are
+    `NOT_RUN`. The container results are not evidence of real-host compatibility.
+  - The operator override restores policy-only execution on request. Under it the
+    direct-read vector is open again, visibly, and the residual exposures listed
+    below stay open either way.
   - The sandbox wraps `run_command` only. Validation commands
     (`internal/testrunner`, `sh -c`), security scanners, and the `git`/`gh` sinks
     are not sandboxed and this row makes no claim about them.

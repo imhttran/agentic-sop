@@ -446,11 +446,24 @@ a pre-existing hardlink alias and the macOS parent-environment read
 The decision-ready proposal is
 [PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md](PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md).
 The operator approved default-on isolation with the operator override and
-selected Windows B1 (fail closed); it is implemented and verified. B1 is
-unconditional on that platform: the override is ignored on Windows, and a
-Windows runtime test in CI pins that the command is refused before execution. The gap is
-`Done` on the compatibility and default questions; the residual exposures listed
-in the proposal's section 6 are still open decisions.
+selected Windows B1 (fail closed). PR #444 then corrected a Windows B1 bypass, and
+it is merged (`029ee1a2`). B1 is unconditional on that platform: the override is
+ignored on Windows, and a Windows runtime test in CI pins that the command is
+refused before execution.
+
+**Post-merge verification (2026-11-12).** `main` at `029ee1a2` passed the full CI
+run (`43246357934`): `fmt/vet/build/test`, race detector, security integration,
+installer/plugin packaging, both tagged acceptance suites, and `windows
+(install.ps1)`, which ran `TestRunCommandIsolationOnWindowsRefuses` (nine override
+and `Config` cases) and the decision and notice tests. Implementation criteria are
+satisfied. Platform coverage is uneven and separate from them: macOS arm64 on a
+real host and Linux arm64 in a privileged container are `VERIFIED`; a Linux
+distribution host and Linux `amd64` are `NOT_RUN`.
+
+The gap is `Done` on the compatibility and default questions. The residual
+exposures are assessed separately in
+[PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md](PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md)
+and remain open decisions.
 
 ```text
 Gap: the run_command sandbox (SOP_AGENT_RUN_COMMAND_ISOLATION=1) is off by default, so
