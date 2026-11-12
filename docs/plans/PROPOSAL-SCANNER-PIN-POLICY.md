@@ -21,6 +21,13 @@ need an operator decision.
    then choose which categories become required. Requiring them is a policy change for
    the operator.
 
+## Outside SOP
+
+Provider model provenance is outside SOP. A binary pin proves the bytes of a local
+scanner executable; it does not prove where a model came from, and SOP does not pin a
+model digest. See [llm04-supply-chain.md](../reports/owasp-llm/llm04-supply-chain.md)
+and the platform record in [llm03-scanner-integrity-evidence.md](../reports/owasp-llm/llm03-scanner-integrity-evidence.md).
+
 ## Recommendation
 
 Do 1 next, after the scanner versions are settled. Defer 2. Make 3 a separate decision
