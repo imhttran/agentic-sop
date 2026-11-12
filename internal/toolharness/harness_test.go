@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -469,5 +470,52 @@ func TestFileAuditorWritesJSONLines(t *testing.T) {
 	}
 	if !strings.Contains(string(data), `"tool":"read_file"`) || !strings.Contains(string(data), `"outcome":"ok"`) {
 		t.Errorf("audit line = %q", data)
+	}
+}
+
+// Inline git configuration can name a program git later runs, so it is not SAFE
+// and the harness refuses it even with the sandbox off. The marker proves no
+// external program executed.
+func TestRunCommandRejectsGitConfigInjection(t *testing.T) {
+	t.Setenv(IsolationEnv, "off")
+	root := t.TempDir()
+	gitIn := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Skipf("git is unavailable for %v: %v (%s)", args, err, out)
+		}
+	}
+	gitIn("init", "-q")
+	// A tracked, modified file so `git diff` would invoke diff.external if the
+	// injected configuration were allowed to run.
+	writeRepoFile(t, root, "tracked.txt", "original\n")
+	gitIn("add", "tracked.txt")
+	writeRepoFile(t, root, "tracked.txt", "changed\n")
+	marker := filepath.Join(root, "git-c-executed")
+	writeRepoFile(t, root, "evil.sh", "#!/bin/sh\ntouch "+strconv.Quote(marker)+"\n")
+	if err := os.Chmod(filepath.Join(root, "evil.sh"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	h := newTestHarness(t, root, NewAuditLog(0))
+
+	// Positive control: an ordinary read-only git command still runs.
+	if out, err := h.Run(context.Background(), ToolRunCommand, map[string]any{"command": "git status --short"}); err != nil {
+		t.Fatalf("legitimate git status was refused: %v (%s)", err, out)
+	}
+
+	for _, command := range []string{
+		"git -c diff.external=./evil.sh diff",
+		"git -c core.fsmonitor=./evil.sh status",
+		"git -c core.pager=id log",
+		"git --config-env=diff.external=EVIL diff",
+	} {
+		if out, err := h.Run(context.Background(), ToolRunCommand, map[string]any{"command": command}); err == nil {
+			t.Fatalf("%q was allowed through SAFE classification: %s", command, out)
+		}
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("git -c executed an external program (marker present: %v)", err)
 	}
 }

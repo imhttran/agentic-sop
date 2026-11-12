@@ -19,7 +19,7 @@
 
 set -euo pipefail
 
-SEMGREP_VERSION="1.136.0"
+SEMGREP_VERSION="1.183.0"
 GITLEAKS_VERSION="8.30.1"
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -46,8 +46,8 @@ if [ -z "$semgrep_bin" ]; then
     require_cmd curl
     py_version="$("$python_bin" -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
     case "$py_version" in
-      3.9|3.10|3.11) ;;
-      *) die "Semgrep $SEMGREP_VERSION wheels support Python 3.9-3.11; found $py_version (set SOP_SECURITY_PYTHON or SOP_SECURITY_SEMGREP_BIN)" ;;
+      3.10|3.11) ;;
+      *) die "Semgrep $SEMGREP_VERSION requires Python >=3.10; supported interpreters are 3.10 and 3.11, found $py_version (set SOP_SECURITY_PYTHON or SOP_SECURITY_SEMGREP_BIN)" ;;
     esac
     mkdir -p "$tools_dir"
     venv="$tools_dir/semgrep-$SEMGREP_VERSION-venv"
@@ -55,6 +55,8 @@ if [ -z "$semgrep_bin" ]; then
     "$python_bin" -m venv "$venv"
     # The lockfile pins Semgrep and every transitive dependency with SHA-256
     # hashes; pip refuses to install a file that does not match its manifest.
+    # Regenerate it with pip-compile at SEMGREP_VERSION (see the guide) so the
+    # pinned version and the lock cannot drift apart.
     lockfile="$root/scripts/security/semgrep-requirements.lock"
     [ -f "$lockfile" ] || die "missing Semgrep lockfile: $lockfile"
     "$venv/bin/pip" install --disable-pip-version-check --quiet --require-hashes -r "$lockfile"

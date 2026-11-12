@@ -754,6 +754,26 @@ bash scripts/checks/security-integration.sh
 through `scripts/security/fetch-semgrep-rules.sh`, verifies their manifest and
 directory digest, and then runs the real-CLI tests.
 
+The lockfile and `SEMGREP_VERSION` in `scripts/checks/security-integration.sh`
+must name the same release. Regenerate the lockfile with pip-compile whenever the
+pinned version changes, then run the integration check to confirm the provisioned
+interpreter reports the pinned version:
+
+```bash
+python3 -m venv /tmp/lockgen && /tmp/lockgen/bin/pip install pip-tools
+printf 'semgrep==1.183.0\n' > /tmp/lockgen/requirements.in
+/tmp/lockgen/bin/pip-compile --generate-hashes --no-emit-index-url \
+  --no-emit-trusted-host --no-header --no-annotate \
+  --output-file scripts/security/semgrep-requirements.lock \
+  /tmp/lockgen/requirements.in
+bash scripts/checks/security-integration.sh
+```
+
+pip-compile records hashes for every distribution of each pinned release, so a
+lockfile generated on one platform still installs on another. Semgrep 1.183.0
+requires Python 3.10 or newer; the script accepts 3.10 and 3.11 only and rejects
+every other interpreter, including 3.9 and 3.12+.
+
 `scripts/checks/security-integration.sh` provisions pinned Semgrep CE, Gitleaks,
 cargo-audit, and OSV-Scanner versions in an isolated tools directory, uses
 explicit local rules, and runs the tagged real-CLI checks. It sets

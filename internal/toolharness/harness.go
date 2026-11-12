@@ -652,6 +652,12 @@ func (h *Harness) runCommandWithStatus(ctx context.Context, args map[string]any)
 			return "", false, err
 		}
 		defer cleanup()
+	} else {
+		// The operator disabled the sandbox, but the child must still not inherit
+		// SOP's own credentials: a model-authored command would otherwise read them
+		// straight from the environment. Isolation-off keeps the inherited
+		// environment minus credential-named and credential-shaped entries.
+		env, _ = scrubbedEnvironment()
 	}
 	result, succeeded, raw, exit, err := h.execCaptured(ctx, root.path, run, env)
 	if err == nil && noTestsMatched(argv, result) {
