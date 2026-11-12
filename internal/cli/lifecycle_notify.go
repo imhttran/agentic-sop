@@ -6,6 +6,7 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/notify"
+	"github.com/imhttran/agentic-sop/internal/redact"
 )
 
 // Transition labels the emitter understands. A recorded SOP lifecycle transition
@@ -71,6 +72,9 @@ type LifecycleEmitter struct {
 	// them to NewEvent for redaction. They are never stored on an event and never
 	// written to the outbox.
 	Secrets []string
+	// Policy is the LLM02 C1 redaction policy applied to notification text, loaded
+	// from the project configuration. The zero value adds no rules.
+	Policy redact.Policy
 }
 
 // NewLifecycleEmitter builds an emitter over sink. A nil sink is reported when an
@@ -152,6 +156,7 @@ func (e *LifecycleEmitter) Emit(r EmitRequest) (notify.Event, bool, error) {
 		Approval:          r.Approval,
 		ResolutionCommand: r.ResolutionCommand,
 		Secrets:           e.Secrets,
+		Policy:            e.Policy,
 	}
 	event, err := notify.NewEvent(params)
 	if err != nil {

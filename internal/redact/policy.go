@@ -41,14 +41,29 @@ func ModelInputWithPolicy(content string, env []string, policy Policy) string {
 		content = ShapesValues(content, Fixed("[redacted]"))
 		return content
 	}
-	// The C1 path uses a precise assignment rule: the default detector's broad
-	// suffix also redacts ordinary words such as "secretary", which the approved
-	// false-positive corpus requires to survive. The default ModelInput path is
-	// untouched.
-	content = renderWithRules(content, Fixed("[redacted]"), true, modelInputRules())
-	content = contextualValues(content, Fixed("[redacted]"))
-	content = knownFormats(content, Fixed("[redacted]"))
-	return content
+	return c1Redact(content, Fixed("[redacted]"))
+}
+
+// ApplyPolicy adds the enabled C1 rules to content that the caller has already
+// reduced with the baseline (shape and known-value) redaction, using the caller's
+// marker. Exact inventory values are removed first, then the contextual and
+// known-format rules run. A disabled policy returns content unchanged.
+func ApplyPolicy(content string, policy Policy, m Marker) string {
+	if !policy.Enabled {
+		return content
+	}
+	content = Values(content, policy.Values, m)
+	return c1Redact(content, m)
+}
+
+// c1Redact is the C1 tail shared by ModelInputWithPolicy and ApplyPolicy. The C1
+// path uses a precise assignment rule: the default detector's broad suffix also
+// redacts ordinary words such as "secretary", which the approved false-positive
+// corpus requires to survive. The default ModelInput path is untouched.
+func c1Redact(content string, m Marker) string {
+	content = renderWithRules(content, m, true, modelInputRules())
+	content = contextualValues(content, m)
+	return knownFormats(content, m)
 }
 
 // preciseAssignmentRule is the assignment rule used only when the C1 policy is

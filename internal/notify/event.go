@@ -43,10 +43,14 @@ const redactedCommandNote = " (credential redacted; not directly executable)"
 // The notify package never reads the process environment. A producer extracts the
 // exact values with redact.EnvSecrets and supplies them through Params, which keeps
 // NewEvent deterministic and keeps the raw collection off the Event.
-func redactDescriptive(e *Event, secrets []string) {
+//
+// When the C1 policy is enabled, the same text also passes through its inventory,
+// contextual-key, and known-format rules (redact.ApplyPolicy), so a notification
+// carries the same model-input vocabulary a configured model input does.
+func redactDescriptive(e *Event, secrets []string, policy redact.Policy) {
 	m := redact.Fixed(redactionMarker)
 	redactText := func(s string) string {
-		return redact.Values(redact.Shapes(s, m), secrets, m)
+		return redact.ApplyPolicy(redact.Values(redact.Shapes(s, m), secrets, m), policy, m)
 	}
 	e.Reason = redactText(e.Reason)
 	e.NextAction = redactText(e.NextAction)
@@ -176,6 +180,10 @@ type Params struct {
 	// are used only for redaction: they are never stored on the Event, serialized,
 	// or logged, and the event id does not depend on them.
 	Secrets []string
+	// Policy is the optional LLM02 C1 redaction policy (redact.Policy). The zero
+	// value adds nothing, so a producer without an inventory is unchanged. Like
+	// Secrets, it is used only for redaction and never stored on the Event.
+	Policy redact.Policy
 	// Nonce is an optional identity discriminator for a repeated synthetic event.
 	// It participates in the event id and in nothing else: it is not stored as a
 	// payload field and never reaches a channel. A caller that emits the same
@@ -230,7 +238,7 @@ func NewEvent(p Params) (Event, error) {
 	// Descriptive text is redacted before the event leaves the constructor, so no
 	// outbox row or channel payload carries a known secret value or a credential
 	// shape. The identity fields are unchanged, so the event id is unchanged.
-	redactDescriptive(&e, p.Secrets)
+	redactDescriptive(&e, p.Secrets, p.Policy)
 	e.ID = identity(e)
 	return e, nil
 }
