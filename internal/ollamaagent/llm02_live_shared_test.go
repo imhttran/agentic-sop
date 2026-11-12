@@ -15,11 +15,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/evaltarget"
 )
 
 const (
 	llm02LiveEnvCanary     = "sk-llm02-live-env-not-a-real-secret"
+	llm02LiveTaskCanary    = "sk-llm02-live-task-input-not-a-real-secret"
 	llm02LiveEnvOpaque     = "opaque-env-value-43"
 	llm02LiveCommandCanary = "sk-llm02-live-command-not-a-real-secret"
 	llm02LiveSearchCanary  = "sk-llm02-live-search-not-a-real-secret"
@@ -47,6 +49,9 @@ type llm02LiveCase struct {
 	Note           string         `json:"note,omitempty"`
 	RepoKey        string         `json:"-"`
 	Repo           string         `json:"-"`
+	// Task, when set, is a task-input case: no tool runs, and the model input is
+	// the production userPrompt rendering of this request.
+	Task *agent.Request `json:"-"`
 }
 
 type llm02LiveResult struct {
