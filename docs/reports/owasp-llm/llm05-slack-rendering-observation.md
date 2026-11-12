@@ -1,6 +1,6 @@
 # LLM05 Slack rendering and channel binding: operator observation (OWASP gap 12)
 
-**Status:** **NOT OBSERVED — awaiting operator.** One synthetic Slack delivery was
+**Status:** **OBSERVED 2026-11-12 (operator); a plain `@here` notifies.** One synthetic Slack delivery was
 accepted on 2026-11-10 ([llm10-live-delivery.md](llm10-live-delivery.md)), but no one
 has looked at how Slack rendered it, which channel it reached, or whether anything
 unfurled or pinged. This page is the observation the operator runs. Nothing in it
@@ -99,3 +99,28 @@ expected Slack display is:
 A later session records the table as OBSERVED with the date and the workspace-
 independent details only. Then the coverage statement's LLM05 wording changes from
 "not observed" to what was observed. Until then, gap 12 stays Waiting on operator.
+
+## Observed result (2026-11-12, operator)
+
+One probe event was enqueued in a disposable project and delivered once through the
+webhook with the Slack payload. The operator checked the bound private channel.
+
+| Check | Expected (before observation) | Observed |
+| --- | --- | --- |
+| Message arrived in the bound channel | Yes | Yes |
+| `<b>escaped markup</b>` shows as literal text | Literal | Literal |
+| `<https://example.com|link>` shows as literal text, not a link | Literal | Literal, not clickable |
+| `<!channel>` shows as literal text, no ping | Literal, no ping | Literal; not separately checked for a ping |
+| `<@U000PROBE>` shows as literal text, no mention | Literal, no mention | Literal |
+| A plain `@here` in the text did not notify | No ping | **Notified:** the operator received a notification |
+| Link preview for `https://example.com` | None | None |
+| `*bold*` and `` `code` `` | Formatting (not a fault) | Formatted |
+
+**Finding.** Slack treats a plain `@here` in webhook message text as a broadcast
+mention and notifies the channel. The encoder escapes `&`, `<` and `>` only, so `@here`
+and `@channel` pass through unchanged. The expectation above that a bare `@here` would
+not notify was wrong.
+
+**Open.** Neutralizing `@here` and `@channel` in the Slack encoder is a code change and
+needs a decision. Until then, model or caller text that reaches a Slack payload can
+notify the channel.
