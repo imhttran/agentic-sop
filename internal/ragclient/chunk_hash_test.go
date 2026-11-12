@@ -56,3 +56,30 @@ func TestChunkHash(t *testing.T) {
 		})
 	}
 }
+
+// sharedChunkVector is the cross-repository vector. The producer
+// (rag-template-rust, src/bin/retrieval.rs `chunk_hash_matches_shared_vector`)
+// pins the same text and hash. Computed independently with
+// `printf 'chunk hash vector: café 日本語\n' | shasum -a 256`.
+const (
+	sharedChunkVectorText = "chunk hash vector: café 日本語\n"
+	sharedChunkVectorHash = "sha256:74f755664e399d5fec1e9e418c2d9dc684fe5abcab30c6fe2f9f60767bb620a8"
+)
+
+// TestSharedChunkVector proves the consumer recomputes the producer's pinned
+// hash for the shared vector, so drift on either side fails a test.
+func TestSharedChunkVector(t *testing.T) {
+	if got := chunkHash(sharedChunkVectorText); got != sharedChunkVectorHash {
+		t.Fatalf("chunkHash(shared vector) = %s, want %s", got, sharedChunkVectorHash)
+	}
+	resp := okEvidence()
+	resp.Evidence[0].Text, resp.Evidence[0].ChunkHash = sharedChunkVectorText, sharedChunkVectorHash
+	c := newTestClient(t, Config{Executable: "/producer", AllowedCorpora: []string{"kb"}}, &fakeRunner{out: mustJSON(t, resp)})
+	got, err := c.Retrieve(context.Background(), Request{Query: "q", Filters: Filters{Corpus: "kb"}})
+	if err != nil {
+		t.Fatalf("Retrieve with the shared vector: %v", err)
+	}
+	if !got.Evidence[0].ChunkVerified() {
+		t.Fatal("the shared vector was not verified")
+	}
+}

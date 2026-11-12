@@ -380,9 +380,17 @@ above.
   (`TestBuildIdentityCoversSOPDocumentAuthority`), and schema 2 adds per-row digests
   verified by `VerifyRows` (`TestRowDigests`). No in-repo reader loads the artifact yet;
   a future reader must call `VerifyRows` and treat a v1 index as unverified.
-- GAP-5 is **fixed for evidence that carries `chunk_hash`** (`TestChunkHash`). The
-  producer side (emitting `chunk_hash`) is outside this repository; until it ships,
-  evidence is unverified. `document_hash` stays server-reported and unverified.
+- GAP-5 is **fixed for evidence that carries `chunk_hash`** (`TestChunkHash`,
+  `TestSharedChunkVector`). The producer emits `chunk_hash` in
+  rag-template-rust (`feat/rag-chunk-hash`, PR #7, not merged); until that merges
+  and a deployment uses it, evidence is unverified. `document_hash` stays
+  server-reported and unverified.
+- **Policy for evidence without `chunk_hash` (decided 2026-11-12): flag, do not
+  reject.** The client accepts such an item and reports it unverified through
+  `Evidence.ChunkVerified()` (false). Rejecting it would break every producer that
+  does not emit the hash yet. Limit: nothing outside `internal/ragclient` reads that
+  flag yet, so an unverified item is not shown to the operator or the model as
+  unverified. Surfacing it is a separate change. A mismatch is still rejected.
 - GAP-6 is **fixed** in a follow-up change. `sop memory add` (and `sop memory
   remove`) refuse to overwrite a `decisions.json` that is malformed, has another
   schema, or holds records that fail validation; they exit 1 and the file bytes are

@@ -27,7 +27,7 @@ To use one: start a fresh agent session in this repository and paste the
 | 8   | LLM02        | Operator decisions: Plan 03 acceptance, C1 default, residuals       | Decision packet | Waiting on operator | PR #409; packet refreshed in PR #430 |
 | 9   | LLM03        | Scanner integrity: hash-then-exec race, pins, signatures            | Code, gated     | In progress | PR #410 (race closed); policy proposal in docs/plans |
 | 10  | LLM04        | No production reader verifies repository index rows                 | Code            | Done        | PR #411 (merged): guard test; digests recorded as latent |
-| 11  | LLM04        | RAG producer does not emit `chunk_hash`                             | Cross-repo code | Open        |                  |
+| 11  | LLM04        | RAG producer does not emit `chunk_hash`                             | Cross-repo code | In progress | rag-template-rust PR #7 (emits chunk_hash); agentic-sop PR #431 (shared vector); policy: flag, not reject (decided); surfacing the flag is a separate change |
 | 12  | LLM05        | Slack rendering and channel binding unobserved                      | Evidence        | Waiting on operator | PR #412 (merged); escaped-markup probe undecided |
 | 13  | LLM06        | Sandbox off by default; Linux host sockets outside `/tmp`, `/run`   | Code, gated     | In progress | PR #421 (Linux socket masked and verified in a container); default-on pending |
 | 14  | LLM08        | Live RAG with PostgreSQL and embeddings `NOT_RUN`                   | Evidence        | Waiting on operator | producer lacks a retrieval-only entrypoint (blocker record) |
