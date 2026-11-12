@@ -291,3 +291,34 @@ applied. The sandbox default is unchanged.
 Status: known limit, not fixed. Closing it needs either an allow-list of the sysctl
 names the Go runtime and the tools it runs need, which is untested and fragile, or
 an operator decision to accept the residual for the opt-in sandbox.
+
+### Launch-chain options (OWASP gap 6, 2026-11-12)
+
+Probe method: a temporary darwin test, run through the production `isolate()` path
+with the sandboxed child reading `kern.procargs2` for its parent and grandparent. The
+canary is in the launch environment of a launcher process, as SOP's process has it
+(an in-process `t.Setenv` does not show up in `kern.procargs2`, so the launcher must
+be a separate process). The probe was removed after the run; it is not committed.
+
+| Launch chain | Parent readable | Grandparent readable |
+| --- | --- | --- |
+| Production: launcher → `sandbox-exec` (execs) → child | **canary visible** | not checked |
+| Intermediate: launcher → `sh` (scrubbed env) → `sandbox-exec` → child | not visible | **canary visible** |
+
+Result: an intermediate shell with a scrubbed environment closes the direct parent, but
+the sandboxed process can still walk to its grandparent through `kern.proc.pid` and read
+that process's launch environment. The SOP process is always an ancestor, so this
+option does not close the read. It was not implemented: a partial change would hide the
+measured parent read while leaving the same secret readable one level up.
+
+Options not implemented:
+
+- **Scrub SOP's own environment before launch.** This would close the read, but only by
+  removing secrets from SOP's launch environment for the whole process, which is a
+  product-wide change, not a contained sandbox change. Not tested.
+- **Reparent the intermediate process to launchd** (double fork), so SOP is no longer an
+  ancestor. This would need the child's output and kill semantics rebuilt. Not tested.
+
+Disposition: known limit for the opt-in sandbox. The default-on sandbox (gap 13) keeps
+this exposure. Closing it needs a process-wide decision about SOP's environment, not a
+sandbox-profile change.

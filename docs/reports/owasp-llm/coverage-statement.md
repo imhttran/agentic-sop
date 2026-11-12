@@ -105,7 +105,9 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     `VERIFIED`, Linux `amd64` `VERIFIED` in PR #384; see
     [llm02-disclosure.md](llm02-disclosure.md) §Sandbox credential-read denial).
     Still open on macOS: the parent process environment is readable with
-    `kern.procargs2` (measured; `process-info*` does not cover it). A pre-existing
+    `kern.procargs2` (measured; `process-info*` does not cover it; an intermediate
+    scrubbed shell hides the direct parent but not the SOP process above it, so the
+    limit stands; see [seatbelt-evidence.md](../security-shift-left/seatbelt-evidence.md#launch-chain-options-owasp-gap-6-2026-11-12)). A pre-existing
     hardlink alias to a protected workspace credential is denied on Linux and macOS
     by Option C Phase 1 (macOS attempt 3 `PASS`). A SAFE command can still read an
     alias to a credential outside the workspace, and Windows is `UNVERIFIED`. This
