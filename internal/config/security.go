@@ -118,6 +118,11 @@ type SecurityAdapterConfig struct {
 	// mismatch fails closed. It must come from a verified acquisition (the
 	// committed fetch manifest), never from hashing the local installation.
 	BinarySHA256 string `yaml:"binary_sha256"`
+	// BinarySHA256ByPlatform pins the executable per "<GOOS>/<GOARCH>" platform.
+	// Only the platforms in platformPinKeys are accepted. The running platform's
+	// entry is used when binary_sha256 is unset; a platform with no entry runs
+	// without a binary pin, as before. Setting both forms is rejected.
+	BinarySHA256ByPlatform map[string]string `yaml:"binary_sha256_by_platform"`
 	// RulesSHA256 optionally pins the Rules path's digest (64 lowercase hex, the
 	// directory digest the fetch manifest records as rules_dir_sha256). When set,
 	// a mismatch fails closed before the scanner starts.
@@ -542,6 +547,18 @@ func validateSecurityAdapterConfigs(s SecurityConfig, enabledOnly bool) error {
 				return fmt.Errorf("config: security adapter %q %s must be 64 lowercase hex characters", id, field)
 			}
 		}
+		if a.BinarySHA256 != "" && len(a.BinarySHA256ByPlatform) > 0 {
+			return fmt.Errorf("config: security adapter %q sets both binary_sha256 and binary_sha256_by_platform", id)
+		}
+		for key, v := range a.BinarySHA256ByPlatform {
+			// An unknown key would silently run unpinned, so it fails the config load.
+			if !platformPinKeys[key] {
+				return fmt.Errorf("config: security adapter %q binary_sha256_by_platform key %q is not a supported platform (linux/amd64, linux/arm64, darwin/amd64, darwin/arm64)", id, key)
+			}
+			if !isSHA256Hex(v) {
+				return fmt.Errorf("config: security adapter %q binary_sha256_by_platform[%s] must be 64 lowercase hex characters", id, key)
+			}
+		}
 		if a.RulesSHA256 != "" && strings.TrimSpace(a.Rules) == "" {
 			return fmt.Errorf("config: security adapter %q sets rules_sha256 without rules", id)
 		}
@@ -830,4 +847,23 @@ func (c *Config) validateSecurity() error {
 // isSHA256Hex reports whether v is exactly 64 lowercase hex characters.
 func isSHA256Hex(v string) bool {
 	return len(v) == 64 && strings.Trim(v, "0123456789abcdef") == ""
+}
+
+// platformPinKeys are the platforms a binary_sha256_by_platform entry may name.
+// Windows is out of scope for committed pins: the Windows run_command refusal and
+// the scanner fetch scripts do not provision these binaries there.
+var platformPinKeys = map[string]bool{
+	"linux/amd64":  true,
+	"linux/arm64":  true,
+	"darwin/amd64": true,
+	"darwin/arm64": true,
+}
+
+// PlatformBinarySHA256 returns the binary pin in effect for goos/goarch: the
+// binary_sha256 value when set, otherwise the platform entry (empty if none).
+func (a SecurityAdapterConfig) PlatformBinarySHA256(goos, goarch string) string {
+	if a.BinarySHA256 != "" {
+		return a.BinarySHA256
+	}
+	return a.BinarySHA256ByPlatform[goos+"/"+goarch]
 }
