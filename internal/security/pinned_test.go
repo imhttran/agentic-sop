@@ -169,6 +169,25 @@ func TestRulesPinStagesVerifiedTree(t *testing.T) {
 	if _, _, _, err := stageRules(rules, pin); err == nil || !strings.Contains(err.Error(), "not a regular file") {
 		t.Fatalf("symlink entry: err=%v, want a refusal", err)
 	}
+	// A single-file rules path is staged as a regular file, not as its directory.
+	single := filepath.Join(root, "single.toml")
+	writeFile(t, single, "[rules]\n")
+	singlePin, err := rulesIdentity(single)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stagedFile, singleDigest, cleanupSingle, err := stageRules(single, singlePin)
+	if err != nil {
+		t.Fatalf("single-file stage: %v", err)
+	}
+	if singleDigest != singlePin {
+		t.Fatalf("single-file digest = %s, want %s", singleDigest, singlePin)
+	}
+	if info, err := os.Stat(stagedFile); err != nil || !info.Mode().IsRegular() {
+		t.Fatalf("single-file rules staged at %q, want a regular file", stagedFile)
+	}
+	cleanupSingle()
+
 	// A single-file rules path that is itself a symlink is refused before hashing.
 	linked := filepath.Join(root, "linked.yaml")
 	if err := os.Symlink(filepath.Join(root, "outside.yaml"), linked); err != nil {
@@ -183,11 +202,12 @@ func TestRulesPinStagesVerifiedTree(t *testing.T) {
 // bytes at that path at execution time. swapTo, when set, rewrites the original
 // after the pin check, to model a writer racing the scan.
 type configRecordingExecutor struct {
-	config  string
-	body    []byte
-	swapTo  string
-	swapTxt string
-	stdout  []byte
+	config       string
+	configIsFile bool
+	body         []byte
+	swapTo       string
+	swapTxt      string
+	stdout       []byte
 }
 
 func (r *configRecordingExecutor) Run(_ context.Context, _ string, argv []string, _ []byte, _ int) ([]byte, []byte, int, error) {
@@ -204,10 +224,13 @@ func (r *configRecordingExecutor) Run(_ context.Context, _ string, argv []string
 	if r.config == "" {
 		return r.stdout, nil, 0, nil
 	}
-	if info, err := os.Stat(r.config); err == nil && info.IsDir() {
-		r.body, _ = os.ReadFile(filepath.Join(r.config, filepath.Base(r.swapTo)))
-	} else {
-		r.body, _ = os.ReadFile(r.config)
+	if info, err := os.Stat(r.config); err == nil {
+		r.configIsFile = info.Mode().IsRegular()
+		if info.IsDir() {
+			r.body, _ = os.ReadFile(filepath.Join(r.config, filepath.Base(r.swapTo)))
+		} else {
+			r.body, _ = os.ReadFile(r.config)
+		}
 	}
 	return r.stdout, nil, 0, nil
 }
@@ -288,6 +311,9 @@ func TestGitleaksRulesPinStagesTheConfigItRuns(t *testing.T) {
 	}
 	if rec.config == configPath {
 		t.Fatal("gitleaks read the writable config path")
+	}
+	if !rec.configIsFile {
+		t.Fatalf("gitleaks --config %q is not the staged regular file", rec.config)
 	}
 	if string(rec.body) != pinned {
 		t.Fatalf("gitleaks read %q, want the pinned config", rec.body)
