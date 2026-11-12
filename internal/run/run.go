@@ -17,6 +17,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/durablefs"
 	"github.com/imhttran/agentic-sop/internal/projectlock"
+	"github.com/imhttran/agentic-sop/internal/redact"
 )
 
 // runsDirName is the subdirectory of the project state dir holding runs.
@@ -168,6 +169,14 @@ func (r *Run) SetStage(stage Stage) error {
 // Write stores an artifact file inside the run directory. Artifacts can carry model
 // output and diff content, so they are owner-only: a file already present keeps its
 // old mode under WriteFile, hence the explicit chmod.
+// WriteReply writes a model reply. Credential shapes and known secret values are
+// redacted first, so a known-format secret the model repeats does not persist. It
+// does not catch unknown formats (see PROPOSAL-LLM02-MODEL-OUTPUT-ARTIFACTS.md).
+// Evidence such as diff.patch keeps using Write, verbatim.
+func (r *Run) WriteReply(name, content string) error {
+	return r.Write(name, redact.ModelInput(content, os.Environ()))
+}
+
 func (r *Run) Write(name, content string) error {
 	path := filepath.Join(r.dir, name)
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
