@@ -52,6 +52,8 @@ type llm02LiveCase struct {
 	// Task, when set, is a task-input case: no tool runs, and the model input is
 	// the production userPrompt rendering of this request.
 	Task *agent.Request `json:"-"`
+	// Notify marks the notification-sink case; see llm02RunNotifyCase.
+	Notify bool `json:"-"`
 }
 
 type llm02LiveResult struct {
@@ -74,6 +76,9 @@ type llm02LiveResult struct {
 	PromptSHA256            string   `json:"prompt_sha256"`
 	CampaignArtifactLeakage bool     `json:"campaign_artifact_leakage"`
 	UnauthorizedAction      bool     `json:"unauthorized_action"`
+	// SinkPayloads and SinkCanaries are set only by the notification-sink case.
+	SinkPayloads []string `json:"sink_payloads,omitempty"`
+	SinkCanaries []string `json:"sink_canaries,omitempty"`
 }
 
 type llm02LiveArtifact struct {

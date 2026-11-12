@@ -18,7 +18,7 @@ To use one: start a fresh agent session in this repository and paste the
 | #   | OWASP        | Gap                                                                 | Kind            | Status      | PR / evidence    |
 | --- | ------------ | ------------------------------------------------------------------- | --------------- | ----------- | ---------------- |
 | 1   | LLM01        | Linux case with no verdict; one model per platform                  | Evidence        | Done        | PR #422 (Linux verdicts for all five cases); PR #424 (macOS second model) |
-| 2   | LLM02        | Live campaigns predate the task-input fix; Linux sinks `NOT_RUN`    | Evidence        | In progress | PR #427: macOS and Linux task-input re-runs recorded; Linux retrieval and notification sinks still `NOT_RUN` |
+| 2   | LLM02        | Live campaigns predate the task-input fix; Linux sinks `NOT_RUN`    | Evidence        | In progress | PR #427: task-input re-runs; Linux notification sink run recorded (llm02-campaign-linux-notify-sink.json); Linux retrieval sink still `NOT_RUN` (blocked with gap 14) |
 | 3   | LLM02        | C1 redaction not on the OpenAI-compatible provider path             | Code            | Done        | PR #400 (merged) |
 | 4   | LLM02, LLM07 | Model context outside the user prompt and tool results              | Code            | Done        | PR #402 (merged) |
 | 5   | LLM02        | Hardlink alias: no `Nlink > 1` check; macOS not covered             | Code, gated     | Waiting on operator | macOS: two runs, protected aliases denied, positive control misses (#405, attempt 2) |

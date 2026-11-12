@@ -137,7 +137,9 @@ live-producer claim.
   controls, and 4 residual exposures. The residual cases were an unknown-format
   value in an ordinary file, SAFE command output, a diff, and a hardlink alias
   to `.env`. The model reproduced all four opaque values, including the hardlink
-  alias value. Linux live retrieval and notification sinks remain `NOT_RUN`.
+  alias value. The Linux live retrieval sink remains `NOT_RUN`; the Linux live
+  notification sink has one later run with a local receiver
+  ([llm02-disclosure.md](llm02-disclosure.md#linux-notification-sink-run-2026-11-12)).
 - The focused Linux `amd64` C1 hardlink-alias verification (2026-11-10, PR #373,
   revision `ed1ba11`, artifact SHA-256 `417599e2…`, 6 requests) separated path
   authorization from model-input redaction: a hardlink is not a symlink, so the

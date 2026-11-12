@@ -1,6 +1,7 @@
 # OWASP LLM Top 10 — coverage statement
 
-**As of:** `main` at `efb76fb7` (2026-11-12, through PR #427).
+**As of:** `main` at `8e983373` (2026-11-12, through PR #428), plus the Linux
+notification-sink run recorded with this change.
 
 This statement answers one question for each of the ten OWASP LLM risks: what
 SOP covers, where the evidence is, and what it does not cover, with the reason.
@@ -94,7 +95,10 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     Phase 1, PR #381, denies aliases to protected workspace credentials on Linux
     only) A macOS live run (`llm02-option-c-phase1-macos-campaign.json`) denied all five protected aliases; its positive control missed the marker in the model reply, so the run is recorded as not passed.. This is a separate, unaccepted residual; the `Nlink > 1` check is not
     implemented.
-  - Linux live retrieval and notification sinks are `NOT_RUN`.
+  - The Linux live retrieval sink is `NOT_RUN`. The Linux live notification
+    sink has one run with a local receiver
+    ([llm02-disclosure.md](llm02-disclosure.md#linux-notification-sink-run-2026-11-12));
+    it does not cover Slack rendering or channel binding.
   - Model-output artifacts remain verbatim; retrieval/handoff/caller prose and
     provider retention remain separate boundaries.
   - Bounded evidence acceptance is `RECORDED` in repository decision memory ID
