@@ -546,6 +546,24 @@ Option A); those are records, not acceptances.
 
 ---
 
+### C.4 Operator dispositions (chat, 2026-11-12)
+
+The operator chose the recommended disposition for each residual in chat on
+2026-11-12. These are recorded here for the audit trail. No decision-memory
+entry, configuration change, or code change is made by this section, and the
+dispositions below are not recorded in the approval repository.
+
+| ID  | Operator disposition                                                                                                                  |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| R1  | **ACCEPTED (bounded).** Context-free unknown-format values may reach the model. C1 stays opt-in; the inventory is the operational control. |
+| R2  | **ACCEPTED as bounded limits.** Outside-workspace origins, late external credentials, external removal before the first build, and Windows are bounded. Option C Phase 1 is kept. `Nlink > 1` is rejected. |
+| R3  | **DONE** (see D.5).                                                                                                                   |
+| R4  | **ACCEPTED as a known limit.** macOS parent-environment visibility through `kern.procargs2` is documented. The sandbox is not weakened. |
+| R5  | **ACCEPTED (residual).** An unknown-format value echoed into a reply file is persisted; shaped secrets are redacted (PR #450).       |
+| R6  | **MITIGATE.** Extend notification descriptive redaction to `redact.ModelInput`. This is code work and is tracked as its own follow-up; it is not done by this packet. |
+| R7  | **ACCEPTED (boundary).** Retrieval and handoff stay disabled by default. Live retrieval remains `NOT_RUN`.                           |
+| R8  | **TRANSFERRED** to the provider/compliance owner. No SOP code change.                                                                 |
+
 ## D. Single-sitting decision list
 
 1. **Plan 03:** **DONE (2026-11-12).** The 13 manual decisions and 3 check
@@ -553,14 +571,13 @@ Option A); those are records, not acceptances.
 2. **C1:** **DECIDED — keep C1 opt-in** (operator chat, 2026-11-12). The tracked
    configuration is unchanged; default enablement under B.6 is not authorized. No
    decision-memory entry is recorded for this choice.
-3. **R1:** accept the context-free unknown-format residual, or keep it open and
-   require a separate control.
+3. **R1:** DECIDED — accepted as bounded (C.4).
 4. **R2:** record the outside-workspace, late-credential, external-removal, and
    Windows cases as bounded limits, or authorize a new control.
 5. **R3:** **DONE** — default-on isolation with the operator override and Windows B1
    is approved and implemented. R2's hardlink alias and R4's parent-environment
    read still need their own disposition; do not reopen Option D.
-6. **R4:** accept the macOS parent-environment limit, or authorize a design.
+6. **R4:** DECIDED — accepted as a known limit (C.4).
 7. **R5:** Option A is merged (PR #450). Record the unknown-format reply-artifact
    residual as an acceptance, or authorize a control for it. Do not re-approve Option A.
 8. **R6:** approve the notification-prose extension, or accept caller-owned
