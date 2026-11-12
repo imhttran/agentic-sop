@@ -1,23 +1,33 @@
 # LLM02 operator decision packet (OWASP gap 8)
 
-**As of:** `main` `a26290c2` (2026-11-12; LLM02 evidence reconciled at
-`ca748cf3`, and the branch includes PR #434's LLM09/RAG documentation).
-**Status:** decision packet. This
-document records no acceptance, waiver, risk decision, memory entry, or
-configuration change. Every decision below remains the designated approver's.
+**As of:** `main` `1910490a` (2026-11-12; acceptance recorded against plan
+identity `10e84b69…` and the evidence revisions verified in this checkout).
+**Status:** **PLAN 03 ACCEPTANCE RECORDED — 16/16.** On 2026-11-12 the
+designated approver (`Tom Tran`) accepted the 13 manual criteria, and the 3
+check-mapped criteria are check-passed. The acceptances are scoped to the
+verified evidence below. This record does **not** accept any LLM02 residual
+risk, change C1 defaults, or declare LLM02 fully mitigated. The pre-acceptance
+decision-preparation state is preserved in §A.1 and the acceptance request.
 
 **Verified in this checkout**
 
-- `sop verify --plan … --archive … --json` reports `accepted: 0`, `mapped: 16`,
-  `manual: 13`, `check: 3`, `decision_eligible: 13`, `check_passed: 0`,
-  `unverified: 3`, `stale: 0`, `rejected: 0`.
+- `sop verify --plan … --archive … --json` reports `accepted: 16`, `mapped: 16`,
+  `manual: 13`, `check: 3`, `manual_accepted: 13`, `check_passed: 3`,
+  `unverified: 0`, `stale: 0`, `rejected: 0`. The `decision_eligible` counter
+  remains `13` because it is the static count of manual mappings, not a
+  remaining-work counter; the per-criterion `decision-eligible` status count is
+  `0`.
 - `sop plan historicalize --check --json …` reports `state: NONE`,
   `disposition: COMPLETE`, `eligible: false`, `reason: no active plan is recorded`.
   `COMPLETE` is lifecycle state, not acceptance.
+- The acceptance ledger is
+  `.agent-sdlc/acceptance/plan-03-sop-llm02-sensitive-information-disclosure/`
+  (`decisions.jsonl` 13 records; `checks.jsonl` 4 records). It is Git-ignored
+  local evidence.
 - The preserved archive has `runs/DISCLOSE-001/outcome.json` and
   `runs/DISCLOSE-002/outcome.json` (both `PARTIAL`), and only
-  `runs/DISCLOSE-003/external-completion.json`. There is no
-  `runs/DISCLOSE-003/outcome.json` and no `acceptance_decisions.jsonl`.
+  `runs/DISCLOSE-003/external-completion.json`. The Plan 03 per-criterion
+  decisions are in the separate historical acceptance ledger above.
 - `human.designated_approvers` names `Tom Tran` in the preserved configuration.
 - The CLI syntax below was checked against `internal/cli/historical_acceptance.go`
   (`historicalOutcomeUsage`, `historicalVerifyUsage`) and the validation in
@@ -37,12 +47,13 @@ The [coverage statement](coverage-statement.md) and
 [gap register](gap-register-20261109.md) remain authoritative for status. This
 packet is the single-sitting decision view.
 
-**Local-evidence caveat.** The archive and the acceptance ledger under
-`.agent-sdlc/archive/worktree-evidence/` are Git-ignored, local evidence. The
-commands below must run in a checkout where that archive exists (the main
-checkout used for the Plan 03 closeout). The decision-memory IDs cited below are
-preserved in committed reports; the main checkout used for the closeout reports
-`0 applicable` and `31 stale`, so the entries are not currently applied as run
+**Local-evidence caveat.** The archive under
+`.agent-sdlc/archive/worktree-evidence/` and the acceptance ledger under
+`.agent-sdlc/acceptance/` are Git-ignored, local evidence. The recorded commands
+were executed in the checkout that contains that archive (the main checkout used
+for the Plan 03 closeout). The decision-memory IDs cited below are preserved in
+committed reports; the main checkout used for the closeout reports `0
+applicable` and `31 stale`, so the entries are not currently applied as run
 context there. Staleness is not revocation, but it is a reproducibility
 limitation.
 
@@ -53,27 +64,30 @@ limitation.
 ### A.1 Verified state
 
 Plan 03 is historicalized `COMPLETE` (external completion `d3830e35`,
-historicalized `2026-11-09T17:19:47Z`). That is not acceptance. No Plan 03
-per-criterion acceptance is recorded. The separate bounded evidence acceptance
-(decision-memory ID
-`59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`) covers the
-approved A+B implementation and PR #349 within its stated scope; it
-**does not** change any of the 16 Plan 03 criterion cells.
+historicalized `2026-11-09T17:19:47Z`). Lifecycle state is separate from
+acceptance. On 2026-11-12 the designated approver recorded 13 manual accept
+decisions; the 3 check-mapped criteria are check-passed. The resulting
+acceptance is 16/16. The separate bounded evidence acceptance (decision-memory
+ID `59d98698…`) remains a separate scoped decision and did not substitute for
+these per-criterion decisions.
 
 | Item                    | Current value                                                                                    |
 | ----------------------- | ------------------------------------------------------------------------------------------------ |
 | Manual criteria         | 13 (`001.1`–`001.5`, `002.4`, `002.5`, `003.1`–`003.6`)                                          |
 | Check-mapped criteria   | 3 (`002.1`, `002.2`, `002.3`)                                                                    |
-| Accepted                | 0 / 16                                                                                           |
-| Check evidence recorded | 0 / 3                                                                                            |
-| Classification          | All 16 ready for an approver action; none recorded                                               |
-| Blockers                | None to an approver action; live retrieval remains `NOT_RUN` and limits any live-retrieval claim |
+| Accepted                | **16 / 16**                                                                                      |
+| Manual accepted         | **13 / 13**                                                                                      |
+| Check passed            | **3 / 3**                                                                                        |
+| Plan identity           | `10e84b69258c63f02c702aed7e8ce7e7b3c2f7431a2b65f93ec819e9696835de`                               |
+| Classification          | All 16 accepted 2026-11-12; no criterion remains `decision-eligible`                            |
+| Blockers                | None for acceptance; Linux live retrieval remains `NOT_RUN` and limits any live-retrieval claim |
 
 ### A.2 Criterion matrix
 
-Status and recommendation describe evidence and a proposed decision. They are
-not acceptance. `Supported` means the named evidence exists; it does not mean a
-human accepted it.
+> **Post-decision note (2026-11-12):** every row below is now accepted — 13
+> manual decisions recorded by `Tom Tran` and 3 check-passed criteria. The
+> `Classification` and `Recommendation` columns preserve the pre-decision
+> assessment; the acceptance ledger is authoritative for the outcome.
 
 | ID      | Requirement                                                                                                                          | Verified evidence                                                                                                                                                                                                                                                                                                   | Limit / remaining exposure                                                                                                                                                                                                                                    | Classification               | Recommendation                                                                                                                                                                             |
 | ------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -96,19 +110,20 @@ human accepted it.
 
 **Classification summary**
 
-- **Already accepted:** none (0/16).
-- **Ready for human decision:** 13 manual criteria, plus 3 check-mapped criteria
-  (`002.1`, `002.2`, `002.3`) whose instrument is `--run-check`, not `--accept`.
-  Check-mapped criteria cannot be manually accepted.
+- **Already accepted:** 16/16 on 2026-11-12 (13 manual accepted, 3 check-passed).
+- **Ready for human decision:** none.
 - **Blocked by missing evidence:** none for the criterion text as written. A
-  claim that live retrieval is verified is blocked; live retrieval is `NOT_RUN`.
-- **Deferred under an existing recorded decision:** none. The bounded evidence
-  acceptance is separate and does not defer any criterion.
+  claim that live retrieval is verified remains blocked; live retrieval is
+  `NOT_RUN`.
+- **Deferred under an existing recorded decision:** none.
 
-### A.3 Exact commands for the designated approver
+### A.3 Executed commands (retained for audit)
 
-Run these in the checkout that contains the preserved archive. The approver name
-must be `Tom Tran` (the preserved `human.designated_approvers` entry).
+The 13 manual commands in A.3.2 were executed on 2026-11-12; the 3 check runs in
+A.3.3 are check-passed. Do not re-run them; a re-run would append duplicate
+decisions or checks. They are retained so the acceptance can be audited against
+the exact command and evidence text. The approver name is `Tom Tran` (the
+preserved `human.designated_approvers` entry).
 
 **A.3.1 Read-only verification**
 
@@ -118,7 +133,7 @@ sop verify --plan docs/plans/PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.
   --json
 ```
 
-**A.3.2 Manual criteria (13 commands)**
+**A.3.2 Manual criteria (13 commands; executed 2026-11-12)**
 
 Each command requires non-empty `--evidence` and at least one
 `--evidence-ref path=...,sha256=...`. The digest below is the SHA-256 of
@@ -246,7 +261,7 @@ sop outcome --plan docs/plans/PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure
   --by "Tom Tran"
 ```
 
-**A.3.3 Check-mapped criteria (3 commands)**
+**A.3.3 Check-mapped criteria (3 commands; check-passed 2026-11-12)**
 
 `--run-check` executes the archived `go test` command, requires a clean tree,
 records the tested revision, exit status, and log digest, and refuses to count a
@@ -272,10 +287,11 @@ sop outcome --plan docs/plans/PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure
   --run-check 002.3 --by "Tom Tran"
 ```
 
-**A.3.4 Rejection and annotation alternatives**
+**A.3.4 Rejection and annotation alternatives (not used)**
 
-Use `--reject` instead of `--accept` with the same `--evidence` and
-`--evidence-ref` requirements. Use `--annotate` to record reviewed manual
+No rejection or annotation was recorded for Plan 03. The alternatives are
+retained for audit. Use `--reject` instead of `--accept` with the same
+`--evidence` and `--evidence-ref` requirements. Use `--annotate` to record reviewed manual
 evidence without accepting it; it requires `--reviewed-evidence`, `--reason`, and
 at least one verified `--evidence-ref`. `--accept`, `--reject`, and `--annotate`
 are refused for the three check-mapped criteria; use `--run-check` for those.
@@ -312,6 +328,24 @@ after the evidence files are final.
 - It does **not** close any residual risk in section C.
 - It does **not** change the separate bounded evidence acceptance or the C1
   authorization.
+
+### A.5 Recorded acceptance (2026-11-12)
+
+- **Approver:** `Tom Tran`.
+- **Plan identity:** `10e84b69258c63f02c702aed7e8ce7e7b3c2f7431a2b65f93ec819e9696835de`.
+- **Ledger:** `.agent-sdlc/acceptance/plan-03-sop-llm02-sensitive-information-disclosure/`
+  (`decisions.jsonl` 13 accept records; `checks.jsonl` 4 records, latest per
+  criterion passing).
+- **Decisions:** `001.1`–`001.5`, `002.4`, `002.5`, `003.1`–`003.6` accepted by
+  `Tom Tran`; `002.1`–`002.3` check-passed.
+- **Verification:** `accepted: 16`; `manual_accepted: 13`; `check_passed: 3`;
+  `unverified: 0`; `stale: 0`; `rejected: 0`.
+- **Field note:** `decision_eligible: 13` in `sop verify --json` is the static
+  count of manual mappings. Every criterion status is `manually-accepted` or
+  `check-passed`; zero criteria remain `decision-eligible`.
+- **Scope:** the acceptance is limited to the criterion-specific evidence and
+  scopes in A.2/A.3.2. No LLM02 residual risk is accepted, and no C1 default
+  changed.
 
 ---
 
@@ -476,10 +510,11 @@ rejection is recorded by this packet.
 | Option D                          | Bounded pre-existing subprocess hardlink alias inside the opt-in Bubblewrap sandbox                                        | Same decision-memory repository, source `operator:option-d-subprocess-hardlink-2026-11-10`; PR #387                                              |
 | Seven-format enhancement          | Seven approved provider formats under C1                                                                                   | Decision memory `c7f143fe3b1f3e79308f6f9bcdaf7657a17cae36107739e54a1700d90a83366b`, source `operator:llm02-seven-format-2026-11-10`              |
 | A+B model-input credential policy | Direct credential-path denial and model-bound tool-result/error redaction                                                  | Decision memory `f891d5cbe5dd578addbba83ee95b47c35752970219b4d0ad6d3fc2be254a741c`                                                               |
+| Plan 03 per-criterion acceptance  | 13 manual accepted + 3 check-passed; scoped to the evidence in §A.3.2; no residual risk accepted                           | Historical acceptance ledger `.agent-sdlc/acceptance/plan-03-sop-llm02-sensitive-information-disclosure/`; approver `Tom Tran`; 2026-11-12        |
 
 ### C.2 Proposed versus existing
 
-- **Existing recorded approvals:** the six rows in C.1. They are preserved.
+- **Existing recorded approvals:** the seven rows in C.1. They are preserved.
 - **Proposed dispositions:** R1 `ACCEPT_PROPOSED`, R2 bounded residual limits,
   R3 `GAP`/bounded residual or defer, R4 accept as known limit or authorize a
   design, R5 `INVESTIGATE`, R6 `MITIGATE`, R7 `ACCEPT_PROPOSED`, R8
@@ -492,17 +527,17 @@ rejection is recorded by this packet.
 
 ### C.3 What this packet does not decide
 
-It does not change any default, record any acceptance or risk decision, edit the
-archive, reopen Plan 03, or claim full LLM02 coverage. LLM02 remains `OPEN` and
-Plan 03 remains `0/16` until the approver records the decisions above.
+It records Plan 03 acceptance only. It does not change any default, record any
+residual-risk decision, edit the archive, reopen Plan 03, or claim full LLM02
+coverage. LLM02 remains `OPEN`, and every residual risk in section C remains
+unaccepted except the bounded Option D decision already recorded.
 
 ---
 
 ## D. Single-sitting decision list
 
-1. **Plan 03:** run `sop verify`, then record the 13 manual decisions and 3
-   check runs in A.3.2 and A.3.3. Accept, reject, or annotate each; do not
-   blanket-accept.
+1. **Plan 03:** **DONE (2026-11-12).** The 13 manual decisions and 3 check
+   runs are recorded; `sop verify` reports `accepted: 16/16`. Do not re-record.
 2. **C1:** keep C1 opt-in (recommended), or explicitly choose default
    enablement with the prerequisites in B.6.
 3. **R1:** accept the context-free unknown-format residual, or keep it open and
@@ -537,3 +572,7 @@ All paths are repository-relative. Digests are SHA-256 of the current files.
 | `docs/reports/owasp-llm/llm02-seven-format-campaign.json`                   | `316ac2e87f13719c16eaf79b3ceff83f5841b0f9e8033360a59d9f1a22078553` |
 | `docs/reports/owasp-llm/llm02-sandbox-credential-linux-campaign.json`       | `1baa836ba7511d73dc79c907e6e6af01d86ca62936d634d08c1687b8ddb661f3` |
 | `docs/reports/owasp-llm/llm02-disclosure.md`                                | `e06325a8402f445b5707b434269b079849fa1132edf9592872ac1ae3c044e3bb` |
+
+The acceptance ledger is local, Git-ignored evidence and is not committed:
+`.agent-sdlc/acceptance/plan-03-sop-llm02-sensitive-information-disclosure/`
+(`decisions.jsonl`, `checks.jsonl`, and the check logs).
