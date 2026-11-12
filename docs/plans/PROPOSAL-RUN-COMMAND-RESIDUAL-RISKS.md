@@ -1,7 +1,7 @@
 # Proposal: post-default-on residual risks (OWASP Gap 13 / LLM02)
 
-**Status: R2 and R4 have recorded dispositions; H2S is `NEEDS_HUMAN`.** Nothing
-here accepts, waives, transfers, or closes a risk. Default-on isolation is
+**Status: all three exposures have recorded dispositions; none is accepted.**
+Nothing here accepts, waives, transfers, or closes a risk. Default-on isolation is
 implemented and enforced; the exposures it does not close are listed with the
 evidence for each.
 
@@ -9,7 +9,10 @@ evidence for each.
   2026-11-12. It is *not* accepted, and no separate control is authorized.
 - **R4** has a recorded disposition: known limit for the opt-in sandbox (gap 6,
   PR #447). It is *not* accepted, and none of the measured options is implemented.
-- **H2S** has no recorded decision and needs one.
+- **H2S** has a recorded disposition: Option A, bounded architectural property,
+  2026-11-12 (decision memory `a73749c2c7fc634dc0e37b10f6b0d5f8e7e7ae8046500e9b71792ed1cc54d719`,
+  source `operator:h2s-option-a-2026-11-12`). It is *not* a residual-risk
+  acceptance.
 
 ## Tracking matrix
 
@@ -21,7 +24,7 @@ a bounded limit; it is **not** a risk acceptance.
 | --- | --- | --- | --- | --- | --- |
 | **R2** | Pre-existing hardlink alias to a credential | Operator (risk); `internal/toolharness/identity.go` (control) | `RECORDED` — bounded residual, not accepted | Gap 5 option 1, 2026-11-12; Option D `RISK_ACCEPTED — SUBPROCESS HARDLINK ALIAS (BOUNDED)` for the Linux subprocess case | `TestLinuxIsolationPreExistingCredentialHardlink`, `TestDarwinIsolationSAFECommandCredentialRead`, `TestRunCommandIsolationDeniesCredentialHardlink` |
 | **R4** | macOS parent launch-time environment (`kern.procargs2`) | Operator (risk); `internal/toolharness/isolation.go` (control) | `RECORDED` — known limit, not accepted | Gap 6, PR #447 | `seatbelt-evidence.md` launch-chain options; measurement report |
-| **H2S** | Host-to-sandbox Unix socket connectivity | Operator (decision pending); `internal/toolharness/isolation.go` profile rule | `OPEN` — awaiting operator decision | none | Measured on both backends; reverse direction pinned by `TestRunCommandIsolationAllowsOwnUnixSocketOnly` |
+| **H2S** | Host-to-sandbox Unix socket connectivity | Operator (risk); `internal/toolharness/isolation.go` profile rule | `RECORDED` — bounded architectural property, not accepted | H2S Option A, 2026-11-12, decision memory `a73749c2…`, source `operator:h2s-option-a-2026-11-12` | Measured on both backends; reverse direction pinned by `TestRunCommandIsolationAllowsOwnUnixSocketOnly` |
 | **OVR** | Authorized operator `off` override restores policy-only execution on macOS/Linux | Operator (explicit action) | `AUTHORIZED BY POLICY` — exposure tracked here so it is never read as enforced isolation | Default-on approval, PR #441 §8 | `TestIsolationPolicyNotice`, `TestRunCommandIsolationOffKeepsExecCapturedPath`; `sop run` / `sop prompt` notice |
 | **VC** | Verification coverage gaps | SOP maintainers | `PARTIAL` — Linux host and Linux `amd64` are `NOT_RUN` | none needed (evidence gap, not a risk decision) | Platform table below |
 | **OPS** | Operational limits: 120 s default `CommandTimeout` against a ~90 s in-sandbox suite; 20 000-entry `$HOME` scan bound that refuses the command | SOP maintainers | `DOCUMENTED` — not a risk decision | none | Measurement report |
@@ -215,18 +218,27 @@ recorded as a bounded property, not as an accepted risk.
 > This is not a risk acceptance. Outbound AF_UNIX and non-loopback IP access stay
 > denied, and sandbox-to-host socket access stays denied.
 
-**Supported recording command.** The operator runs this; it is not run by the
-documentation change:
+**Disposition (recorded 2026-11-12).** The operator approved **Option A**. The
+decision is recorded in decision memory
+(`a73749c2c7fc634dc0e37b10f6b0d5f8e7e7ae8046500e9b71792ed1cc54d719`, source
+`operator:h2s-option-a-2026-11-12`, scope `architecture`):
+
+> Retain the scoped AF_UNIX `network-bind` rule. Host-to-sandbox Unix-socket
+> connectivity is recorded as a bounded architectural property, not as a formal
+> residual-risk acceptance. Sandbox-to-host connections, outbound AF_UNIX and
+> non-loopback IP access stay denied.
+
+The Seatbelt rule is unchanged, no production isolation behaviour changed, and the
+regression tests that keep the reverse direction closed stay in place. To record a
+different disposition later, the supported command is:
 
 ```bash
 sop memory add --scope architecture \
-  --source "operator:h2s-option-a-2026-11-12" \
-  --decision "Retain the scoped AF_UNIX network-bind rule; record host-to-sandbox Unix-socket connectivity as a bounded architectural property, not a risk acceptance." \
-  --reason "The direction is not model-reachable, the socket can only exist under a writable dir, and outbound AF_UNIX and non-loopback IP stay denied. Removing the rule would break legitimate sandboxed builds and diverge from Linux." \
+  --source "operator:<disposition>-<date>" \
+  --decision "<the decision text>" \
+  --reason "<the rationale>" \
   --evidence "docs/plans/PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md#h2s---host-to-sandbox-unix-socket-direction"
 ```
-
-For Option B, substitute the decision text and note the skips in the evidence.
 
 ## Platform coverage behind these assessments
 
