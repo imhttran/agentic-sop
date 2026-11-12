@@ -318,7 +318,11 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   write SOP state (`TestSubprocessStateWriteIsDeniedByDefault`); the exposure
   returns only through the operator override
   ([llm07-state-write-detection-phase1.md](llm07-state-write-detection-phase1.md)).
-  Live-model and Linux runs are `NOT_RUN`.
+  A bounded live run on Linux and macOS shows the opt-in `run_command` sandbox
+  denies a state write from the allowed test command, and that the write goes
+  through with the sandbox off (
+  [llm07-state-write-detection-phase1.md](llm07-state-write-detection-phase1.md#live-evidence-gap-15-2026-11-12)).
+  The sandbox is off by default, so the residual remains for default installs.
 
 ### LLM10 Unbounded Consumption — covered for time, output and process bounds
 
