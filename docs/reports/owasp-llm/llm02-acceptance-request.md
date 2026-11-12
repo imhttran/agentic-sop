@@ -1,7 +1,7 @@
 # Plan 03 — acceptance request for the bounded live campaign
 
 Status: **BOUNDED EVIDENCE ACCEPTANCE RECORDED; PLAN 03 PER-CRITERION
-ACCEPTANCE NOT RECORDED.** The bounded decision is recorded in repository
+ACCEPTANCE RECORDED (16/16, 2026-11-12).** The bounded decision is recorded in repository
 decision memory ID
 `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`
 (source `operator:bounded-acceptance-2026-11-10`). It is a separate scoped
@@ -16,8 +16,9 @@ hardlink-alias verification (PR #373, revision `ed1ba11`, artifact SHA-256
 that the alias is a path-denial bypass, that C1 redacts known, inventoried, and
 contextual values after the read, and that one unlisted opaque value remains
 exposed; the hardlink residual is not closed. The live campaigns are evidence,
-not acceptance. Full Plan 03 per-criterion acceptance remains `NEEDS_HUMAN`.
-The final criterion matrix,
+not acceptance; the per-criterion acceptance was later recorded through
+`sop outcome --plan` and is summarized in §Acceptance recorded (2026-11-12).
+The final pre-acceptance criterion matrix,
 evidence identity, and exact human decisions are in §Final closeout
 (2026-11-10); sections dated 2026-11-09 are preserved as history.
 
@@ -870,16 +871,25 @@ What this refresh changes:
   Phase 1 scope.
 - Linux live retrieval remains `NOT_RUN` and is still the only live sink gap
   inside the Plan 03 scope.
-- `sop verify` still reports `accepted: 0/16`; full Plan 03 acceptance remains
-  `NEEDS_HUMAN`.
+- At the time of this evidence refresh, `sop verify` reported `accepted: 0/16`.
+  Plan 03 acceptance was recorded later on 2026-11-12; see §Acceptance recorded.
 
 The refreshed per-criterion evidence, limitations, recommendations, and exact
 approver commands are in
 [llm02-decision-packet.md](llm02-decision-packet.md) §A.
 
-## Exact next action
+## Acceptance recorded (2026-11-12)
 
-The designated approver must choose one of the decisions in §Decision packet
-(2026-11-10; corrected). Until an authorized acceptance decision exists, the matrix keeps the
-live row at `OBSERVED`, the user-prompt fix at `VERIFIED (deterministic)`, and
-Plan 03 acceptance at `NEEDS_HUMAN`. No acceptance is recorded by this request.
+The designated approver (`Tom Tran`) recorded the 13 manual accept decisions;
+the 3 check-mapped criteria are check-passed. `sop verify --plan … --archive …`
+reports `accepted: 16` (16/16), `manual_accepted: 13`, `check_passed: 3`,
+`unverified: 0`, `stale: 0`, `rejected: 0`. The ledger is local and Git-ignored
+at `.agent-sdlc/acceptance/plan-03-sop-llm02-sensitive-information-disclosure/`.
+
+This acceptance is limited to the criterion-specific evidence and scopes in
+[llm02-decision-packet.md](llm02-decision-packet.md) §A.3.2. It does not accept
+any LLM02 residual risk, does not change C1 defaults, and does not declare LLM02
+fully mitigated. The request body above is preserved as the pre-acceptance
+record. `llm02-disclosure.md` is also preserved as the pre-acceptance evidence
+snapshot; its `NEEDS_HUMAN` line is historical, and the acceptance ledger is
+authoritative for Plan 03.
