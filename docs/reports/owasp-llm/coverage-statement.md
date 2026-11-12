@@ -379,11 +379,11 @@ These cannot be closed by code in this repository:
 3. The macOS live notification and retrieval sinks (`NOT_RUN`), and a second
    live RAG deployment. The Linux sinks have one run each; the notification run
    covers a local receiver only.
-4. Disposing of the residual exposures that the default-on decision did **not**
-   settle: the macOS `kern.procargs2` parent-environment read (R4), the Option-D
-   pre-existing hardlink alias, and the host-to-sandbox socket direction. The
-   policy itself is decided:
-   [PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md](../../plans/PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md).
+4. One residual decision left by default-on isolation: the host-to-sandbox Unix
+   socket direction (H2S). R2 and R4 are already recorded as bounded/known limits
+   and are **not** accepted; the Option-D subprocess hardlink alias is accepted
+   within its bounded scope. Decision packet:
+   [PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md](../../plans/PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md).
 
 ## Code follow-ups worth doing
 
