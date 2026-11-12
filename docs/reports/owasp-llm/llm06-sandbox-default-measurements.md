@@ -82,9 +82,15 @@ The production default was exercised directly: `DefaultConfig()`, no
 | macOS arm64 | exit 0, 90.4 s, audit detail `isolate=seatbelt backend=/usr/bin/sandbox-exec`, `scrubbed_env=15` |
 | Linux arm64 (container, bwrap 0.12.0) | exit 0, 66.2 s, audit detail `isolate=bubblewrap backend=/usr/bin/bwrap`, failures identical to the same container's no-sandbox baseline |
 
-The operator override and the B1 refusal are pinned by
-`TestRunCommandIsolationIsOnByDefault`,
-`TestRunCommandIsolationDefaultsToFailClosed` and `TestIsolationPolicyNotice`.
+The default, the operator override and the platform rule are pinned by
+`TestRunCommandIsolationIsOnByDefault`, `TestIsolationPolicyNotice`,
+`TestIsolationDecisionUnsupportedPlatforms` and
+`TestRunCommandIsolationDefaultsToFailClosed` (a stripped `PATH` simulates a
+backend-less host). Where the platform has no backend the refusal is
+unconditional: the platform check runs before the override, so no override value
+and no `Config.IsolateCommands` value reaches the policy-only path, and the
+startup notice is suppressed. The `windows (install.ps1)` CI job runs
+`TestRunCommandIsolationOnWindowsRefuses` for runtime enforcement.
 
 The post-remediation in-sandbox runs (87.3 s and 91.3 s) are within a few seconds
 of the same host's unsandboxed run (86.1 s), so the cold

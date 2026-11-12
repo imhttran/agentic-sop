@@ -190,9 +190,9 @@ waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-ga
   macOS sinks, live timeout, and live cancellation remain unobserved.
 - `run_command` isolation is required by default after PR #441, using Seatbelt
   on macOS and bubblewrap on Linux. Direct credential reads and `.agent-sdlc`
-  writes are denied by default. The documented Windows B1 guarantee is currently
-  incomplete: `SOP_AGENT_RUN_COMMAND_ISOLATION=off` bypasses backend refusal on
-  Windows and permits policy-only execution (unresolved PR #441 P2).
+  writes are denied by default. On a platform with no backend (Windows) the
+  command is refused for every override value; the PR #441 P2 that let `off`
+  bypass that refusal (recorded in #442) is fixed.
 - Pre-existing hardlink aliases, macOS `kern.procargs2` parent-environment
   access, and the host-to-sandbox Unix-socket direction remain open residuals.
 - Every `exec.CommandContext` subprocess path binds process-group termination,

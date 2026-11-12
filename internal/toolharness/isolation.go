@@ -27,24 +27,33 @@ const IsolationEnv = "SOP_AGENT_RUN_COMMAND_ISOLATION"
 // backend can enforce it, so the command never runs unsandboxed.
 var errIsolationUnavailable = errors.New("run_command isolation unavailable")
 
+// isOffValue reports whether an override value disables isolation. An
+// unrecognized value leaves the default in place rather than silently disabling
+// the sandbox.
+func isOffValue(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "0", "false", "no", "off":
+		return true
+	}
+	return false
+}
+
 // isolationOverrideOff reports whether the environment explicitly disables
 // isolation, and the raw value, so the caller can echo what the operator set.
-// An unrecognized value leaves the default in place rather than silently
-// disabling the sandbox.
 func isolationOverrideOff() (bool, string) {
 	raw := strings.TrimSpace(os.Getenv(IsolationEnv))
-	switch strings.ToLower(raw) {
-	case "0", "false", "no", "off":
-		return true, raw
-	}
-	return false, raw
+	return isOffValue(raw), raw
 }
 
 // IsolationPolicyNotice is the one-line notice `sop` prints at startup when the
 // environment disables run_command isolation, so a stale or inherited value
 // cannot remove the control silently. It returns "" when isolation is in effect.
-// A missing backend is not a notice: that path refuses the command instead.
+// A missing backend is not a notice: that path refuses the command instead, and
+// the override has no effect there.
 func IsolationPolicyNotice() string {
+	if !hasBackend(runtime.GOOS) {
+		return ""
+	}
 	off, raw := isolationOverrideOff()
 	if !off {
 		return ""
@@ -52,16 +61,45 @@ func IsolationPolicyNotice() string {
 	return fmt.Sprintf("[config] %s=%q disables run_command isolation; commands run with policy checks only", IsolationEnv, raw)
 }
 
-// isolationRequested reports whether the command must run inside the OS sandbox.
-// The default is on for every platform, so an unsupported platform fails closed.
-func (h *Harness) isolationRequested() bool {
-	if h.cfg.IsolateCommands {
+// backendFor maps a GOOS to the sandbox backend and the binary it needs. An empty
+// name means the platform has no supported backend. sandboxArgv and the isolation
+// decision both use it, so the platform table exists once.
+func backendFor(goos string) (name, bin string) {
+	switch goos {
+	case "darwin":
+		return "seatbelt", "sandbox-exec"
+	case "linux":
+		return "bubblewrap", "bwrap"
+	}
+	return "", ""
+}
+
+// hasBackend reports whether a platform can enforce isolation at all.
+func hasBackend(goos string) bool {
+	name, _ := backendFor(goos)
+	return name != ""
+}
+
+// isolationDecision reports whether the command must run inside the OS sandbox.
+// It is pure so the platform rule can be tested on any host.
+//
+// A platform with no backend always returns true: the caller then refuses the
+// command through sandboxArgv, and no override can turn that into policy-only
+// execution (Windows B1). Where a backend exists the default is true, the
+// operator override can disable it, and Config.IsolateCommands always wins.
+func isolationDecision(goos, override string, isolateCommands bool) bool {
+	if !hasBackend(goos) {
 		return true
 	}
-	if off, _ := isolationOverrideOff(); off {
-		return false
+	if isolateCommands {
+		return true
 	}
-	return true
+	return !isOffValue(override)
+}
+
+// isolationRequested reports whether the command must run inside the OS sandbox.
+func (h *Harness) isolationRequested() bool {
+	return isolationDecision(runtime.GOOS, os.Getenv(IsolationEnv), h.cfg.IsolateCommands)
 }
 
 // isolate wraps argv in the platform sandbox: Seatbelt on macOS, bubblewrap
@@ -108,12 +146,8 @@ func sandboxEnv(cache string) (env []string, dropped int) {
 
 // sandboxArgv builds the sandbox prefix and a fresh build-cache dir for one run.
 func sandboxArgv(root string) (prefix []string, detail, cache string, err error) {
-	name, bin := "seatbelt", "sandbox-exec"
-	switch runtime.GOOS {
-	case "darwin":
-	case "linux":
-		name, bin = "bubblewrap", "bwrap"
-	default:
+	name, bin := backendFor(runtime.GOOS)
+	if name == "" {
 		return nil, "", "", fmt.Errorf("%w: no sandbox backend on %s", errIsolationUnavailable, runtime.GOOS)
 	}
 	tool, err := exec.LookPath(bin)
@@ -133,9 +167,10 @@ func sandboxArgv(root string) (prefix []string, detail, cache string, err error)
 		return nil, "", "", err
 	}
 	var args []string
-	if name == "seatbelt" {
+	switch name {
+	case "seatbelt":
 		args = []string{"-p", seatbeltProfile(canon, writableDirs(canon), denyRead)}
-	} else {
+	case "bubblewrap":
 		if err := refuseSymlinkedState(canon); err != nil {
 			return nil, "", "", err
 		}
@@ -147,6 +182,10 @@ func sandboxArgv(root string) (prefix []string, detail, cache string, err error)
 			return nil, "", "", err
 		}
 		args = bubblewrapArgs(canon, writableDirs(canon), append(denyRead, socks...))
+	default:
+		// A backendFor entry without an argv builder must fail closed rather than
+		// silently run with another backend's arguments.
+		return nil, "", "", fmt.Errorf("%w: no argv builder for backend %q", errIsolationUnavailable, name)
 	}
 	// Under the temp dir, which both backends keep writable (on Linux it is
 	// the sandbox's private /tmp, so the host dir only reserves the name).

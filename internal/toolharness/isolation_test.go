@@ -18,12 +18,16 @@ import (
 // (sandbox-exec cannot nest; bwrap needs unprivileged user namespaces).
 func needSandbox(t *testing.T) {
 	t.Helper()
-	probe := map[string][]string{
-		"darwin": {"sandbox-exec", "-p", "(version 1)(allow default)", "true"},
-		"linux":  {"bwrap", "--ro-bind", "/", "/", "--unshare-net", "true"},
-	}[runtime.GOOS]
-	if probe == nil {
+	name, bin := backendFor(runtime.GOOS)
+	if name == "" {
 		t.Skipf("no sandbox backend on %s", runtime.GOOS)
+	}
+	probe := map[string][]string{
+		"seatbelt":   {bin, "-p", "(version 1)(allow default)", "true"},
+		"bubblewrap": {bin, "--ro-bind", "/", "/", "--unshare-net", "true"},
+	}[name]
+	if probe == nil {
+		t.Skipf("no start probe for backend %q", name)
 	}
 	if err := exec.Command(probe[0], probe[1:]...).Run(); err != nil {
 		t.Skipf("%s cannot start here: %v", probe[0], err)
@@ -82,6 +86,13 @@ func TestIsolationPolicyNotice(t *testing.T) {
 	for _, v := range []string{"off", "0", "false", "no", "OFF"} {
 		t.Setenv(IsolationEnv, v)
 		got := IsolationPolicyNotice()
+		if !hasBackend(runtime.GOOS) {
+			// B1: the override has no effect where no backend exists.
+			if got != "" {
+				t.Fatalf("notice for %q on %s = %q, want none: the override cannot disable isolation here", v, runtime.GOOS, got)
+			}
+			continue
+		}
 		if !strings.Contains(got, IsolationEnv) || !strings.Contains(got, "policy checks only") {
 			t.Fatalf("notice for %q = %q, want it to name the variable and the effect", v, got)
 		}
@@ -117,7 +128,9 @@ func TestRunCommandIsolationDefaultsToFailClosed(t *testing.T) {
 	t.Setenv("PATH", t.TempDir()) // no sandbox backend
 	log := NewAuditLog(0)
 	h := New(t.TempDir(), DefaultConfig(), log)
-	_, err := h.Run(context.Background(), ToolRunCommand, map[string]any{"command": "go list ./..."})
+	// `go build` carries no path argument, so the isolation refusal is what this
+	// exercises on every platform rather than command-policy path resolution.
+	_, err := h.Run(context.Background(), ToolRunCommand, map[string]any{"command": "go build"})
 	if !errors.Is(err, errIsolationUnavailable) {
 		t.Fatalf("err = %v, want errIsolationUnavailable", err)
 	}
@@ -131,7 +144,7 @@ func TestRunCommandIsolationOnFailsClosedWithoutBackend(t *testing.T) {
 	t.Setenv("PATH", t.TempDir()) // no sandbox-exec on PATH
 	log := NewAuditLog(0)
 	h := New(t.TempDir(), DefaultConfig(), log)
-	_, err := h.Run(context.Background(), ToolRunCommand, map[string]any{"command": "go list ./..."})
+	_, err := h.Run(context.Background(), ToolRunCommand, map[string]any{"command": "go build"})
 	if !errors.Is(err, errIsolationUnavailable) {
 		t.Fatalf("err = %v, want errIsolationUnavailable", err)
 	}

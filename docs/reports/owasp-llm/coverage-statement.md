@@ -1,8 +1,9 @@
 # OWASP LLM Top 10 — coverage statement
 
-**As of:** `main` at `8fd729bc` (2026-11-12, through PR #441). PR #441
-enabled default-on `run_command` isolation but merged with an unresolved Windows
-B1 override defect, recorded below.
+**As of:** `main` at `8fd729bc` plus the Windows B1 correction (2026-11-12).
+PR #441 enabled default-on `run_command` isolation; the defect it merged with —
+`SOP_AGENT_RUN_COMMAND_ISOLATION=off` bypassing backend refusal on Windows,
+recorded in PR #442 — is fixed and regression-tested.
 
 This statement answers one question for each of the ten OWASP LLM risks: what
 SOP covers, where the evidence is, and what it does not cover, with the reason.
@@ -23,7 +24,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 | LLM03      | Plan 04 / LLM04   | Supply Chain                                          | Partial                                                                                                                                                                                                                                                                                                                                                           | Model provenance and publisher signatures out of SOP's control                                                                                                                                                                                                                   |
 | LLM04      | Plan 05 / LLM05   | Data and Model Poisoning                              | Partial                                                                                                                                                                                                                                                                                                                                                           | Integrity proves bytes, not benign content; provider training external                                                                                                                                                                                                           |
 | LLM05      | Plan 10 / LLM10   | Improper Output Handling                              | Covered for SOP's sinks                                                                                                                                                                                                                                                                                                                                           | Third-party rendering (terminal, IDE, Slack) external                                                                                                                                                                                                                            |
-| LLM06      | Plan 01 / LLM03   | Excessive Agency                                      | Covered (policy) + default-on sandbox on macOS and Linux                                                                                                                                                                                                                                                                                                          | Windows B1 is incomplete because the operator `off` override bypasses backend refusal; cold build cache per run; residual hardlink, parent-environment and host-to-sandbox socket exposure                                                                                                                                                                                                                                 |
+| LLM06      | Plan 01 / LLM03   | Excessive Agency                                      | Covered (policy) + default-on sandbox on macOS and Linux                                                                                                                                                                                                                                                                                                          | Windows B1 refuses every override value and is fixed since PR #441's P2; cold build cache per run; residual hardlink, parent-environment and host-to-sandbox socket exposure                                                                                                                                                                                                                                 |
 | LLM07      | Plan 08 / LLM08   | System Prompt Leakage (repo: Hidden Context Exposure) | Partial                                                                                                                                                                                                                                                                                                                                                           | Prompt secrecy is not claimed by design                                                                                                                                                                                                                                          |
 | LLM08      | Plan 09 / LLM09   | Vector and Embedding Weaknesses                       | Covered for the shipped (disabled-by-default) path                                                                                                                                                                                                                                                                                                                | One live producer run (2026-11-12, `rag-template-rust`, PostgreSQL 17 + pgvector, `nomic-embed-text`): isolation, scope, positive controls and a poisoned chunk observed; `TIMEOUT` and cancellation not observed live                                                                                                                                                                                                                                     |
 | LLM09      | Plan 07 / LLM07   | Misinformation                                        | Partial, by scope                                                                                                                                                                                                                                                                                                                                                 | Factual correctness of model output is out of scope                                                                                                                                                                                                                              |
@@ -226,15 +227,18 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     it fails closed when no sandbox is available. Each run gets its own throwaway
     build cache and the shared module cache is read-only, so one run cannot poison
     a later run's Go caches.
-  - The operator override `SOP_AGENT_RUN_COMMAND_ISOLATION=off` (also `0`, `false`,
-    `no`) is the only way to run commands with policy checks alone; `sop run` and
-    `sop prompt` print a startup notice when it is set. The override is
-    operator-scoped: a model cannot set its own parent's environment.
-  - With no override, a host with no backend refuses `run_command` rather than
-    running it unsandboxed. However, PR #441 merged with an unresolved P2:
-    `SOP_AGENT_RUN_COMMAND_ISOLATION=off` makes `isolationRequested` false on
-    Windows, bypasses `sandboxArgv`, and runs through the policy-only execution
-    path. The existing B1 test covers an empty override, not this case.
+  - Where a backend exists (macOS, Linux), the operator override
+    `SOP_AGENT_RUN_COMMAND_ISOLATION=off` (also `0`, `false`, `no`) is the only way
+    to run commands with policy checks alone, and `sop run` and `sop prompt` print
+    a startup notice when it is set. The override is operator-scoped: a model
+    cannot set its own parent's environment.
+  - A platform with no backend refuses `run_command` rather than running it
+    unsandboxed (Windows B1, selected by the operator). The refusal is
+    unconditional there: no override value and no `Config.IsolateCommands` value
+    can turn it into policy-only execution, and the startup notice is suppressed
+    because the override does nothing. The PR #441 P2 recorded in #442 is fixed
+    and pinned by `TestIsolationDecisionUnsupportedPlatforms` and, at runtime on
+    Windows, `TestRunCommandIsolationOnWindowsRefuses`.
 
   Evidence: [llm03-agency.md](llm03-agency.md),
   [seatbelt-evidence.md](../security-shift-left/seatbelt-evidence.md#run_command-opt-in-sandbox-llm03).
