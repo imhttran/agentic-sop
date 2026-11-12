@@ -298,3 +298,28 @@ This work addresses the 2026 LLM04 supply-chain category as described by the
 supplied Cycode article. It confirms the SOP-owned loading and execution paths
 above, not a formal OWASP edition mapping or a certification claim. Confirm the
 official OWASP edition before publishing a compliance claim.
+
+## Update 2026-11-12 — execution-time binary and rules races
+
+The 2026-11-09 record above is preserved as historical evidence. Three items have
+since moved:
+
+- The binary hash-then-exec window is closed by PR #410. `pinnedExecutor` stages a
+  private copy of the pinned bytes and executes that copy (`TestPinnedExecutor`).
+- The rules-tree analogue is closed by PR #462. `stageRules` copies and
+  verifies the rules file or tree, and the adapter hands the copy to the scanner
+  (`TestRulesPinStagesVerifiedTree`,
+  `TestSemgrepRulesPinStagesTheTreeItRuns`,
+  `TestGitleaksRulesPinStagesTheConfigItRuns`). On macOS arm64, a real Semgrep
+  1.183.0 scan under the tracked rules pin was `COMPLETED` with `COMPLETE`
+  coverage and provenance `rules_identity = d90ff1b1…`; appending one line to a
+  rule file produced `rules pin mismatch` and Semgrep never started.
+- Per-platform binary pins are committed for Gitleaks and OSV-Scanner on
+  linux/darwin (PR #461, operator-approved item 1); the baseline and negative
+  control are in [llm03-scanner-binary-pins.md](llm03-scanner-binary-pins.md).
+
+Still unchanged: cargo-audit and Semgrep have no committed execution-time binary
+pin, publisher signatures are not checked, and the repository remains report-only
+with empty `required_categories`. Those policy items are in
+[PROPOSAL-SCANNER-PIN-POLICY.md](../../plans/PROPOSAL-SCANNER-PIN-POLICY.md), not
+decided here. Windows and noexec-temp staging remain `NOT_RUN`.

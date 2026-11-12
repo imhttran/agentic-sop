@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/imhttran/agentic-sop/internal/config"
 )
@@ -111,6 +112,185 @@ func TestPinnedExecutor(t *testing.T) {
 	}
 	if _, wrapped := a.(*gitleaksAdapter).exec.(pinnedExecutor); !wrapped {
 		t.Fatal("a pinned adapter must use the pinned executor")
+	}
+}
+
+// OWASP LLM03 (repository Plan 04; PROPOSAL-SCANNER-BINARY-PINS option B): a configured rules pin is
+// verified against a private copy, and the scanner reads that copy. A writer
+// that changes the original after the digest is computed cannot change what the
+// scanner loads, and a changed tree still fails closed.
+func TestRulesPinStagesVerifiedTree(t *testing.T) {
+	root := t.TempDir()
+	rules := filepath.Join(root, "rules")
+	pinned := "rules:\n  - id: a\n    languages: [go]\n"
+	writeFile(t, filepath.Join(rules, "r.yaml"), pinned)
+	writeFile(t, filepath.Join(rules, "nested", "s.yaml"), "rules: []\n")
+	// "a.txt" sorts before "a/z.yaml", but WalkDir visits the directory first.
+	// The digest assertion below proves stageRules uses the same sorted framing.
+	writeFile(t, filepath.Join(rules, "a.txt"), "x\n")
+	writeFile(t, filepath.Join(rules, "a", "z.yaml"), "rules: []\n")
+	pin, err := rulesIdentity(rules)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	staged, digest, cleanup, err := stageRules(rules, pin)
+	if err != nil {
+		t.Fatalf("stage: %v", err)
+	}
+	if digest != pin {
+		t.Fatalf("staged digest = %s, want the pin %s", digest, pin)
+	}
+	if staged == rules {
+		t.Fatal("staged path is the writable original")
+	}
+	if got, _ := os.ReadFile(filepath.Join(staged, "r.yaml")); string(got) != pinned {
+		t.Fatalf("staged rule = %q, want the pinned bytes", got)
+	}
+	// The original is rewritten after staging; the copy keeps the pinned bytes.
+	writeFile(t, filepath.Join(rules, "r.yaml"), "rules: [attacker]\n")
+	if got, _ := os.ReadFile(filepath.Join(staged, "r.yaml")); string(got) != pinned {
+		t.Fatalf("staged rule changed after the original was rewritten: %q", got)
+	}
+	cleanup()
+	if _, err := os.Stat(staged); !os.IsNotExist(err) {
+		t.Fatalf("staged rules %s were not removed", staged)
+	}
+
+	// The changed tree no longer matches the pin.
+	if _, _, _, err := stageRules(rules, pin); err == nil || !strings.Contains(err.Error(), "rules pin mismatch") {
+		t.Fatalf("changed tree: err=%v, want a rules pin mismatch", err)
+	}
+	// A symlink entry is refused even though rulesIdentity would skip it.
+	writeFile(t, filepath.Join(root, "outside.yaml"), "rules: [x]\n")
+	if err := os.Symlink(filepath.Join(root, "outside.yaml"), filepath.Join(rules, "extra.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := stageRules(rules, pin); err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("symlink entry: err=%v, want a refusal", err)
+	}
+	// A single-file rules path that is itself a symlink is refused before hashing.
+	linked := filepath.Join(root, "linked.yaml")
+	if err := os.Symlink(filepath.Join(root, "outside.yaml"), linked); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := stageRules(linked, pin); err == nil || !strings.Contains(err.Error(), "not a regular file") {
+		t.Fatalf("symlinked rules file: err=%v, want a refusal", err)
+	}
+}
+
+// configRecordingExecutor records the --config path it was asked to read and the
+// bytes at that path at execution time. swapTo, when set, rewrites the original
+// after the pin check, to model a writer racing the scan.
+type configRecordingExecutor struct {
+	config  string
+	body    []byte
+	swapTo  string
+	swapTxt string
+	stdout  []byte
+}
+
+func (r *configRecordingExecutor) Run(_ context.Context, _ string, argv []string, _ []byte, _ int) ([]byte, []byte, int, error) {
+	if r.swapTo != "" {
+		if err := os.WriteFile(r.swapTo, []byte(r.swapTxt), 0o644); err != nil {
+			panic(err)
+		}
+	}
+	for i := 0; i+1 < len(argv); i++ {
+		if argv[i] == "--config" {
+			r.config = argv[i+1]
+		}
+	}
+	if r.config == "" {
+		return r.stdout, nil, 0, nil
+	}
+	if info, err := os.Stat(r.config); err == nil && info.IsDir() {
+		r.body, _ = os.ReadFile(filepath.Join(r.config, filepath.Base(r.swapTo)))
+	} else {
+		r.body, _ = os.ReadFile(r.config)
+	}
+	return r.stdout, nil, 0, nil
+}
+
+func TestSemgrepRulesPinStagesTheTreeItRuns(t *testing.T) {
+	root := t.TempDir()
+	rules := filepath.Join(root, "rules")
+	pinned := "rules:\n  - id: a\n    languages: [go]\n"
+	writeFile(t, filepath.Join(rules, "r.yaml"), pinned)
+	pin, err := rulesIdentity(rules)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := &configRecordingExecutor{
+		swapTo:  filepath.Join(rules, "r.yaml"),
+		swapTxt: "rules: [attacker]\n",
+		stdout:  []byte("{\"version\":\"1.183.0\",\"results\":[],\"errors\":[],\"paths\":{\"scanned\":[],\"skipped\":[]}}"),
+	}
+	a := &semgrepAdapter{
+		id:        "semgrep",
+		category:  CategorySAST,
+		command:   []string{"semgrep"},
+		rules:     "rules",
+		rulesPin:  pin,
+		exec:      rec,
+		timeout:   time.Minute,
+		maxOutput: 1 << 20,
+	}
+	exec, err := a.Scan(context.Background(), Request{WorkspaceRoot: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exec.Provenance.RulesIdentity != pin {
+		t.Fatalf("provenance rules identity = %s, want the staged digest %s", exec.Provenance.RulesIdentity, pin)
+	}
+	if rec.config == "" {
+		t.Fatal("no --config argument was recorded")
+	}
+	if rec.config == rules {
+		t.Fatal("semgrep read the writable rules path")
+	}
+	if string(rec.body) != pinned {
+		t.Fatalf("semgrep read %q, want the pinned rules", rec.body)
+	}
+}
+
+func TestGitleaksRulesPinStagesTheConfigItRuns(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, "gitleaks.toml")
+	pinned := "[rules]\n"
+	writeFile(t, configPath, pinned)
+	pin, err := rulesIdentity(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := &configRecordingExecutor{
+		swapTo:  configPath,
+		swapTxt: "[rules]\nattacker = true\n",
+	}
+	a := &gitleaksAdapter{
+		id:        "gitleaks",
+		category:  CategorySecrets,
+		command:   []string{"gitleaks"},
+		rules:     "gitleaks.toml",
+		rulesPin:  pin,
+		exec:      rec,
+		timeout:   time.Minute,
+		maxOutput: 1 << 20,
+	}
+	exec, _ := a.Scan(context.Background(), Request{WorkspaceRoot: root})
+	if exec.Provenance.RulesIdentity != pin {
+		t.Fatalf("provenance rules identity = %s, want the staged digest %s", exec.Provenance.RulesIdentity, pin)
+	}
+	if rec.config == "" {
+		t.Fatal("no --config argument was recorded")
+	}
+	if rec.config == configPath {
+		t.Fatal("gitleaks read the writable config path")
+	}
+	if string(rec.body) != pinned {
+		t.Fatalf("gitleaks read %q, want the pinned config", rec.body)
 	}
 }
 
