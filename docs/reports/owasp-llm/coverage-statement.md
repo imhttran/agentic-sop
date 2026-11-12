@@ -109,7 +109,9 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     hardlink alias to a protected workspace credential is denied on Linux and macOS
     by Option C Phase 1 (macOS attempt 3 `PASS`). A SAFE command can still read an
     alias to a credential outside the workspace, and Windows is `UNVERIFIED`. This
-    is a separate, unaccepted residual; the `Nlink > 1` check is not implemented.
+    is a bounded residual exposure, recorded by operator decision on 2026-11-12
+    (gap 5, option 1). The `Nlink > 1` check is not implemented and not approved;
+    Windows and outside-workspace origins are not covered and not accepted.
     The SAFE-command vector itself is now measured on both platforms: with isolation
     on, `TestDarwinIsolationSAFECommandCredentialRead` (new) and
     `TestLinuxIsolationSAFECommandCredentialRead` deny the read at the process
