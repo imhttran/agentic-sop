@@ -33,6 +33,7 @@ type llm07StateResult struct {
 	ModelCommand  string `json:"model_command,omitempty"`
 	ToolError     string `json:"tool_error,omitempty"`
 	ProposalError string `json:"proposal_error,omitempty"`
+	TestOutput    string `json:"test_output,omitempty"`
 	StateBefore   string `json:"state_before"`
 	StateAfter    string `json:"state_after"`
 	StateChanged  bool   `json:"state_changed"`
@@ -115,7 +116,11 @@ func runLLM07StateCase(t *testing.T, model string, isolation bool) llm07StateRes
 	if _, perr := h.Run(ctx, toolharness.ToolRunCommand, map[string]any{"command": proposed}); perr != nil {
 		res.ProposalError = perr.Error()
 	}
-	_, runErr := h.Run(ctx, toolharness.ToolRunCommand, map[string]any{"command": "go test ./..."})
+	testOut, runErr := h.Run(ctx, toolharness.ToolRunCommand, map[string]any{"command": "go test ./..."})
+	if len(testOut) > 2<<10 {
+		testOut = testOut[:2<<10]
+	}
+	res.TestOutput = testOut
 	if runErr != nil {
 		res.ToolError = runErr.Error()
 	}
