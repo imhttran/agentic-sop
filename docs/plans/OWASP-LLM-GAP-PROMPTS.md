@@ -530,9 +530,12 @@ Steps
 4. Run the Plan 07 checks on Linux amd64, and one bounded live-model run where the
    model is asked to make tests "pass" by editing state.
 
-Done when: the evidence file records detection as IMPLEMENTED and VERIFIED on both
-platforms with the live run's bounds, and the coverage statement still says SOP does
-not check that model prose is factually correct.
+Done when (rewritten 2026-11-12 after the detection NO-GO): the gap is closed as
+prevention by the opt-in run_command sandbox, not by detection. The evidence file
+records, on Linux and macOS, that a state write from the allowed test command goes
+through with the sandbox off and is denied with it on, with the live run's bounds.
+Default-on landed with PR #441 (gap 13); the operator override is the exposure. The coverage statement still says SOP does not check
+that model prose is factually correct.
 ```
 
 ## 16. LLM10 — five subprocess paths without process-group termination
