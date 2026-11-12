@@ -1,12 +1,15 @@
 # Proposal: post-default-on residual risks (OWASP Gap 13 / LLM02)
 
-**Status: R2 is decided; R4 and H2S are `NEEDS_HUMAN`.** Nothing here accepts,
-waives, transfers, or closes a risk. Default-on isolation is implemented and
-enforced; the exposures it does not close are listed with the evidence for each.
+**Status: R2 and R4 have recorded dispositions; H2S is `NEEDS_HUMAN`.** Nothing
+here accepts, waives, transfers, or closes a risk. Default-on isolation is
+implemented and enforced; the exposures it does not close are listed with the
+evidence for each.
 
 - **R2** has a recorded disposition: bounded residual exposure, gap 5 option 1,
   2026-11-12. It is *not* accepted, and no separate control is authorized.
-- **R4** and **H2S** have no recorded decision.
+- **R4** has a recorded disposition: known limit for the opt-in sandbox (gap 6,
+  PR #447). It is *not* accepted, and none of the measured options is implemented.
+- **H2S** has no recorded decision.
 
 Related:
 [PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md](PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md)
@@ -109,23 +112,29 @@ environment at launch. Unsetting the variable after start does **not** help:
 `kern.procargs2` reads the launch-time stack, not the current environment
 (measured).
 
-**Mitigation feasibility without changing the approved execution model.**
+**Options measured (gap 6, PR #447).**
 
-- **Operational (available now):** do not put long-lived secrets in SOP's
-  environment; supply them through a file, config, or keychain that the relevant
-  component reads. This is guidance, not an enforced control.
-- **Design (not authorized):** a sysctl allow-list for the names the Go runtime
-  and common tools need. Untested and fragile; would change the profile.
-- **Design (not authorized):** re-exec SOP with a scrubbed environment so the
-  process that becomes the sandbox parent never holds the secret. This changes
-  the execution model and would need its own decision.
+- An **intermediate scrubbed shell** hides the direct parent, but the sandboxed
+  process still reaches the SOP process above it through `kern.proc.pid` and
+  `kern.procargs2`. It does not close the exposure.
+- A **narrow sysctl deny** has no effect; a full `(deny sysctl-read)` aborts the Go
+  runtime.
+- **Scrubbing SOP's own environment** is a process-wide change, not a contained
+  sandbox change, and is untested. Unsetting after start does not help either,
+  because `kern.procargs2` reads the launch-time stack (measured).
+- **Reparenting to launchd** would need the output and kill semantics rebuilt; untested.
 
-**Recommended disposition.** Accept as a documented bounded limit, and record the
-operational guidance. The sandbox cannot close it without either an untested
-allow-list or an execution-model change.
+**Disposition (recorded).** Gap 6 records this as a **known limit for the opt-in
+sandbox**, and default-on keeps the exposure. That is a recorded limit, **not** an
+acceptance, and no option is implemented.
 
-**Operator decision.** Accept the limit plus guidance, or authorize one of the
-designs.
+**Operational guidance (available now, not enforced).** Do not put long-lived
+secrets in SOP's environment; supply them through a file, config, or keychain that
+the relevant component reads.
+
+**Operator decision.** Formally accept the known limit, or authorize one of the
+unimplemented designs (SOP environment scrub, or launchd reparenting) as its own
+change.
 
 ### H2S - Host-to-sandbox Unix socket direction
 
