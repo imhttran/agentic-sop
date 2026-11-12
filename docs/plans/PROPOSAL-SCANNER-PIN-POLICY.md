@@ -192,7 +192,7 @@ adding a trust requirement.
 | D1 | Committed binary pins | **Decided:** option B. Per-platform pins for Gitleaks and OSV-Scanner on linux/darwin (amd64+arm64) are committed (PR #461). Cargo-audit, Semgrep, and Windows remain unpinned. | Recorded (operator, 2026-11-12). Any further pin is a new decision. |
 | D2 | Publisher signatures | **A.** Defer; keep "a digest is not authenticity". **B.** Approve Sigstore/cosign verification with a new dependency and a per-scanner policy. | A. |
 | D3 | Semgrep rules source | **A.** Keep the pinned commit + manifest digest (current). **B.** Change the pinned commit or digest. | A. |
-| D4 | Enforcement | **A.** Keep report-only. **B.** Require `sast` + `secrets` after a clean baseline. **C.** Also require `dependencies` once offline databases are stable. | A until the baseline is recorded; then B. |
+| D4 | Enforcement | **A.** Keep report-only. **B.** Require `secrets` + `dependencies`. **C.** Require `secrets` + `dependencies` + `sast`. See the [D4 readiness assessment](PROPOSAL-LLM03-D4-ENFORCEMENT.md) for the blocking set and dispositions. | A now; C after the dispositions in the readiness assessment. |
 | D5 | Version alignment | **A.** Keep CI Semgrep 1.136.0 and the tracked 1.183.0 descriptive. **B.** Align CI and the tracked config to one version. | B; aligns CI with the committed pins. |
 
 **How to record a decision.** Reply on the pull request with the decision IDs and
@@ -221,7 +221,8 @@ and the platform record in
 - **D2 (publisher signatures): option A, deferred** (operator, chat, 2026-11-12).
   No signature dependency is added; a digest is not authenticity.
 - **D4 (enforcement): not decided.** The baseline is triaged in
-  `llm03-baseline-triage.md` (PR #464);
+  `llm03-baseline-triage.md` (PR #464) and assessed in
+  [PROPOSAL-LLM03-D4-ENFORCEMENT.md](PROPOSAL-LLM03-D4-ENFORCEMENT.md);
   the choice of required categories is still open.
 - **D3 and D5:** no decision recorded; the current rules source and CI version
   remain.
