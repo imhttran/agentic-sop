@@ -540,7 +540,9 @@ risk acceptance. This packet does not dispose of them, and R3 is not closed.
 It records Plan 03 acceptance only. It does not change any default, record any
 residual-risk decision, edit the archive, reopen Plan 03, or claim full LLM02
 coverage. LLM02 remains `OPEN`, and every residual risk in section C remains
-unaccepted except the bounded Option D decision already recorded.
+unaccepted except the bounded Option D decision already recorded. R2, R4 and H2S
+have recorded bounded/known-limit dispositions (gap 5 option 1, gap 6, and H2S
+Option A); those are records, not acceptances.
 
 ---
 

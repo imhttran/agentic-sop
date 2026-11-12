@@ -89,7 +89,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     and one unlisted opaque value reached the model. **Path authorization and
     model-input redaction are separate controls.** Outside-workspace origins,
     credentials created outside the model tools after the registry snapshot,
-    external removal before the first build, and Windows remain open. `Nlink > 1`
+    external removal before the first build, and Windows remain outside the control; they are recorded as bounded residual exposures (gap 5 option 1) and are not accepted. `Nlink > 1`
     is not implemented and is not approved. The unlisted-value residual is unchanged
     and remains open: Option C denies aliases to protected workspace credentials, but
     an unlisted value in an ordinary file is still outside C1 and outside identity.
