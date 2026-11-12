@@ -128,7 +128,9 @@ func TestRunCommandIsolationDefaultsToFailClosed(t *testing.T) {
 	t.Setenv("PATH", t.TempDir()) // no sandbox backend
 	log := NewAuditLog(0)
 	h := New(t.TempDir(), DefaultConfig(), log)
-	_, err := h.Run(context.Background(), ToolRunCommand, map[string]any{"command": "go list ./..."})
+	// `go build` carries no path argument, so the isolation refusal is what this
+	// exercises on every platform rather than command-policy path resolution.
+	_, err := h.Run(context.Background(), ToolRunCommand, map[string]any{"command": "go build"})
 	if !errors.Is(err, errIsolationUnavailable) {
 		t.Fatalf("err = %v, want errIsolationUnavailable", err)
 	}
@@ -142,7 +144,7 @@ func TestRunCommandIsolationOnFailsClosedWithoutBackend(t *testing.T) {
 	t.Setenv("PATH", t.TempDir()) // no sandbox-exec on PATH
 	log := NewAuditLog(0)
 	h := New(t.TempDir(), DefaultConfig(), log)
-	_, err := h.Run(context.Background(), ToolRunCommand, map[string]any{"command": "go list ./..."})
+	_, err := h.Run(context.Background(), ToolRunCommand, map[string]any{"command": "go build"})
 	if !errors.Is(err, errIsolationUnavailable) {
 		t.Fatalf("err = %v, want errIsolationUnavailable", err)
 	}
