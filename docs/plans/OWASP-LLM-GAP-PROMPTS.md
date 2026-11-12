@@ -460,12 +460,16 @@ satisfied. Platform coverage is uneven and separate from them: macOS arm64 on a
 real host and Linux arm64 in a privileged container are `VERIFIED`; a Linux
 distribution host and Linux `amd64` are `NOT_RUN`.
 
-The gap is `Done` as implementation. Residuals are tracked separately in
+The gap is `Done` as implementation. All three surviving exposures now have
+recorded dispositions, tracked in
 [PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md](PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md):
-R2 and R4 are recorded as bounded and known limits (not accepted), H2S awaits an
-operator decision, and the authorized operator override is tracked there so it is
-never read as enforced isolation. Verification is complete only within the tested
-environments - a Linux distribution host and Linux `amd64` remain `NOT_RUN`.
+R2 (bounded residual, gap 5 option 1) and R4 (known limit, gap 6) are recorded and
+not accepted, and H2S is recorded as a bounded architectural property under H2S
+Option A (decision memory `a73749c2…`, source `operator:h2s-option-a-2026-11-12`,
+2026-11-12) - also not a risk acceptance. The authorized operator override is
+tracked there so it is never read as enforced isolation. No residual decision
+remains open. Verification is complete only within the tested environments - a
+Linux distribution host and Linux `amd64` remain `NOT_RUN`.
 
 ```text
 Gap: the run_command sandbox (SOP_AGENT_RUN_COMMAND_ISOLATION=1) is off by default, so
