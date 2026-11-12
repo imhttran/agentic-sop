@@ -41,14 +41,44 @@ func ModelInputWithPolicy(content string, env []string, policy Policy) string {
 		content = ShapesValues(content, Fixed("[redacted]"))
 		return content
 	}
-	// The C1 path uses a precise assignment rule: the default detector's broad
-	// suffix also redacts ordinary words such as "secretary", which the approved
-	// false-positive corpus requires to survive. The default ModelInput path is
-	// untouched.
-	content = renderWithRules(content, Fixed("[redacted]"), true, modelInputRules())
-	content = contextualValues(content, Fixed("[redacted]"))
-	content = knownFormats(content, Fixed("[redacted]"))
-	return content
+	return c1Redact(content, Fixed("[redacted]"))
+}
+
+// Scrub redacts secret text in one pass over the original string. Exact secret
+// values (the caller's, plus the policy's inventory when enabled) and credential
+// shape matches are collected as spans of the same text, and overlapping spans
+// merge into one marker. A pass per detector in sequence cannot do this: shape
+// first leaves the tail of an inventory value that extends past a token shape,
+// and exact values first leaves the tail of a token that an inventory value only
+// prefixes. When the policy is enabled, its rules replace the default assignment
+// rule, and the contextual and known-format passes run on the merged result.
+func Scrub(s string, secrets []string, policy Policy, m Marker) string {
+	if s == "" {
+		return s
+	}
+	ruleSet := rules
+	if policy.Enabled {
+		secrets = append(append([]string(nil), secrets...), policy.Values...)
+		ruleSet = modelInputRules()
+	}
+	hits := exactHits(s, secrets)
+	hits = append(hits, findHitsWithRules(s, ruleSet)...)
+	out := renderSpans(s, hits, m)
+	if policy.Enabled {
+		out = contextualValues(out, m)
+		out = knownFormats(out, m)
+	}
+	return out
+}
+
+// c1Redact is the C1 tail used by ModelInputWithPolicy. The C1
+// path uses a precise assignment rule: the default detector's broad suffix also
+// redacts ordinary words such as "secretary", which the approved false-positive
+// corpus requires to survive. The default ModelInput path is untouched.
+func c1Redact(content string, m Marker) string {
+	content = renderWithRules(content, m, true, modelInputRules())
+	content = contextualValues(content, m)
+	return knownFormats(content, m)
 }
 
 // preciseAssignmentRule is the assignment rule used only when the C1 policy is
@@ -62,11 +92,19 @@ var preciseAssignmentRule = rule{
 	value: 2,
 }
 
+// connectorAssignmentRule covers credential keys that the precise rule misses: a
+// suffix word after the key (tokenvalue=) or a connector phrase before the
+// separator (password for db: hunter2). Neither form applies to "secretary=",
+// because "secret" is not followed by one of the listed suffixes or a connector.
+var connectorAssignmentRule = rule{
+	re:    regexp.MustCompile("(?i)\\b(api[\\s_-]?key|access[_-]?key|private[_-]?key|secret(?:[\\s_-]?key)?|token|password|passwd|credential|authorization)(?:value|val|data|id|code)?(?:\\s+(?:for|of|to|on|in)\\s+[a-z0-9_.-]+)?[\"']?\\s*[:=]\\s*[\"']?([^\\s\"',;}\\[\\]`]+)"),
+	kind:  KindAssignment,
+	value: 2,
+}
+
 func modelInputRules() []rule {
-	out := make([]rule, len(rules))
-	copy(out, rules)
-	out[0] = preciseAssignmentRule
-	return out
+	out := []rule{preciseAssignmentRule, connectorAssignmentRule}
+	return append(out, rules[1:]...)
 }
 
 // credentialKeySegments are the key-name segments that make an assignment value

@@ -32,21 +32,24 @@ const redactionMarker = "[REDACTED]"
 const redactedCommandNote = " (credential redacted; not directly executable)"
 
 // redactDescriptive applies the shared redaction vocabulary to the event's
-// descriptive text before NewEvent returns. The credential-shape detector runs
-// first, then exact values the caller supplied (typically the values of
-// secret-named environment variables). That order matters: an exact value can be
-// a credential key or token prefix, so replacing it before shape detection would
-// disarm the detector and expose the value the shape matched. Every outbox row and
-// every channel payload therefore carries already-redacted text. Identity fields
-// are untouched, so the event id is unchanged.
+// descriptive text before NewEvent returns. Exact values the caller supplied
+// (typically the values of secret-named environment variables) and credential
+// shapes are matched in one pass over the original text by redact.Scrub, so
+// neither detector's replacement can hide the tail of the other's match. Every
+// outbox row and every channel payload therefore carries already-redacted text.
+// Identity fields are untouched, so the event id is unchanged.
 //
 // The notify package never reads the process environment. A producer extracts the
 // exact values with redact.EnvSecrets and supplies them through Params, which keeps
 // NewEvent deterministic and keeps the raw collection off the Event.
-func redactDescriptive(e *Event, secrets []string) {
+//
+// When the C1 policy is enabled, the same text also passes through its inventory,
+// contextual-key, and known-format rules (redact.ApplyPolicy), so a notification
+// carries the same model-input vocabulary a configured model input does.
+func redactDescriptive(e *Event, secrets []string, policy redact.Policy) {
 	m := redact.Fixed(redactionMarker)
 	redactText := func(s string) string {
-		return redact.Values(redact.Shapes(s, m), secrets, m)
+		return redact.Scrub(s, secrets, policy, m)
 	}
 	e.Reason = redactText(e.Reason)
 	e.NextAction = redactText(e.NextAction)
@@ -176,6 +179,10 @@ type Params struct {
 	// are used only for redaction: they are never stored on the Event, serialized,
 	// or logged, and the event id does not depend on them.
 	Secrets []string
+	// Policy is the optional LLM02 C1 redaction policy (redact.Policy). The zero
+	// value adds nothing, so a producer without an inventory is unchanged. Like
+	// Secrets, it is used only for redaction and never stored on the Event.
+	Policy redact.Policy
 	// Nonce is an optional identity discriminator for a repeated synthetic event.
 	// It participates in the event id and in nothing else: it is not stored as a
 	// payload field and never reaches a channel. A caller that emits the same
@@ -230,7 +237,7 @@ func NewEvent(p Params) (Event, error) {
 	// Descriptive text is redacted before the event leaves the constructor, so no
 	// outbox row or channel payload carries a known secret value or a credential
 	// shape. The identity fields are unchanged, so the event id is unchanged.
-	redactDescriptive(&e, p.Secrets)
+	redactDescriptive(&e, p.Secrets, p.Policy)
 	e.ID = identity(e)
 	return e, nil
 }

@@ -253,3 +253,47 @@ func renderWithRules(s string, m Marker, valueOnly bool, ruleSet []rule) string 
 	b.WriteString(s[last:])
 	return b.String()
 }
+
+// exactHits returns a span for every occurrence of each non-blank secret.
+func exactHits(s string, secrets []string) []hit {
+	var hits []hit
+	for _, v := range secrets {
+		if strings.TrimSpace(v) == "" {
+			continue
+		}
+		for i := 0; ; {
+			j := strings.Index(s[i:], v)
+			if j < 0 {
+				break
+			}
+			start := i + j
+			hits = append(hits, hit{matchStart: start, matchEnd: start + len(v), kind: KindKnown})
+			i = start + len(v)
+		}
+	}
+	return hits
+}
+
+// renderSpans replaces each run of overlapping hit spans with one marker, taken
+// from the run's first hit. The run extends to the furthest end it reaches, so no
+// part of an overlapping match survives.
+func renderSpans(s string, hits []hit, m Marker) string {
+	sort.SliceStable(hits, func(i, j int) bool { return hits[i].matchStart < hits[j].matchStart })
+	var b strings.Builder
+	last := 0
+	for i := 0; i < len(hits); {
+		start, end, kind := hits[i].matchStart, hits[i].matchEnd, hits[i].kind
+		j := i + 1
+		for ; j < len(hits) && hits[j].matchStart < end; j++ {
+			end = max(end, hits[j].matchEnd)
+		}
+		if start >= last {
+			b.WriteString(s[last:start])
+			b.WriteString(m(kind))
+			last = end
+		}
+		i = j
+	}
+	b.WriteString(s[last:])
+	return b.String()
+}

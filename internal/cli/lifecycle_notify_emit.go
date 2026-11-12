@@ -40,10 +40,20 @@ func setLifecycleSink(s EventSink) EventSink {
 // notification outbox and enqueues there, so an event recorded by a short-lived
 // process (a detached background job) survives to be delivered. Emission is
 // best-effort provenance: a store that cannot be opened or a transition the
-// emitter rejects yields no event and never changes the run outcome.
+// emitter rejects yields no event and never changes the run outcome. An enabled C1
+// inventory that fails to load also yields no event, so nothing is emitted
+// unredacted.
 func emitTransition(projectDir string, req EmitRequest) (notify.Event, bool, error) {
+	var policy redact.Policy
+	if strings.TrimSpace(projectDir) != "" {
+		p, err := redactionPolicyFromProject(projectDir)
+		if err != nil {
+			return notify.Event{}, false, err
+		}
+		policy = p
+	}
 	emitter := func(sink EventSink) *LifecycleEmitter {
-		return &LifecycleEmitter{Sink: sink, Secrets: notificationRedactionSecrets()}
+		return &LifecycleEmitter{Sink: sink, Secrets: notificationRedactionSecrets(), Policy: policy}
 	}
 	if lifecycleSink != nil {
 		return emitter(lifecycleSink).Emit(req)
