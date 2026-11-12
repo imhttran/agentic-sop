@@ -104,9 +104,7 @@ func TestLiveLLM08Campaign(t *testing.T) {
 }
 
 func runLLM08CampaignDriver(t *testing.T) {
-	if !IsolationAvailable() {
-		t.Skip("sandbox-exec is not available")
-	}
+	requireSandbox(t)
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)

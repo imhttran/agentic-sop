@@ -2,12 +2,14 @@ package dqharness
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -32,20 +34,79 @@ func TestReplayFixtureRequiresProvenance(t *testing.T) {
 	}
 }
 
-// requireIsolation skips a replay test on hosts without an OS-level isolation tool.
-// Production never falls back to unsandboxed replay; it reports the blocker instead.
-// Set SOP_REPLAY_ISOLATION_REQUIRED=1 to turn the skip into a failure where isolation
-// must be present.
+// requireIsolation skips a replay test on hosts without a usable OS-level
+// isolation tool. Production never falls back to unsandboxed replay; it reports
+// the blocker instead. Set SOP_REPLAY_ISOLATION_REQUIRED=1 to turn the skip into a
+// failure where isolation must be present.
 func requireIsolation(t *testing.T) {
 	t.Helper()
-	iso := DetectIsolation()
-	if iso.Available {
+	err := isolationBlocker()
+	if err == nil {
 		return
 	}
 	if v := strings.TrimSpace(os.Getenv("SOP_REPLAY_ISOLATION_REQUIRED")); v == "1" || strings.EqualFold(v, "true") {
-		t.Fatalf("required replay isolation is unavailable: %s", iso.Reason)
+		t.Fatalf("required replay isolation is unavailable: %v", err)
 	}
-	t.Skipf("no OS-level isolation available: %s; set SOP_REPLAY_ISOLATION_REQUIRED=1 to require it", iso.Reason)
+	t.Skipf("OS-level isolation cannot run here: %v; set SOP_REPLAY_ISOLATION_REQUIRED=1 to require it", err)
+}
+
+// isolationBlocker reports why the OS sandbox cannot run a replay command on
+// this host, or nil when it can. A backend that exists but cannot start is
+// unusable: macOS Seatbelt refuses sandbox_apply inside another sandbox, and
+// nested bubblewrap cannot mount /proc once a user and PID namespace are both
+// unshared. The probe uses this package's own command builders, so it reflects
+// the real argument list. Production stays fail-closed and never reuses the
+// parent's boundary.
+func isolationBlocker() error {
+	isolationOnce.Do(func() { isolationProbeErr = probeIsolation() })
+	return isolationProbeErr
+}
+
+var (
+	isolationOnce     sync.Once
+	isolationProbeErr error
+)
+
+// isolationProbeTimeout bounds the one-shot start probe.
+const isolationProbeTimeout = 30 * time.Second
+
+func probeIsolation() error {
+	iso := DetectIsolation()
+	if !iso.Available {
+		return errors.New(iso.Reason)
+	}
+	dir, err := os.MkdirTemp("", "sop-replay-probe-")
+	if err != nil {
+		return fmt.Errorf("create probe directory: %w", err)
+	}
+	defer os.RemoveAll(dir)
+
+	var tool string
+	var args []string
+	switch iso.Backend {
+	case BackendSeatbelt:
+		bound, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			return err
+		}
+		tool, args = "sandbox-exec", seatbeltCommand(bound, []string{"true"})
+	case BackendBubblewrap:
+		_, a, err := bubblewrapCommand(dir, []string{"true"})
+		if err != nil {
+			return err
+		}
+		tool, args = "bwrap", a
+	default:
+		return fmt.Errorf("unknown isolation backend %q", iso.Backend)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), isolationProbeTimeout)
+	defer cancel()
+	if out, err := exec.CommandContext(ctx, tool, args...).CombinedOutput(); err != nil {
+		return fmt.Errorf("%s cannot run a replay sandbox here: %v: %s (a nested OS sandbox is the usual cause, and it is not supported)",
+			tool, err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // TestIsolatedReplayFailsClosedWithoutIsolation runs on every host: with no isolation

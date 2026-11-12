@@ -1,9 +1,11 @@
 package skill
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -71,10 +73,18 @@ func TestMCPLiveValidationSkillContract(t *testing.T) {
 // Claude prepares a candidate, ChatGPT records independent results, and a second
 // agent resumes from the evidence. It also proves invalid handoffs are rejected
 // without touching the candidate, baseline, or running process. The script needs
-// bash, git, ps, and python3; it is skipped on Windows.
+// bash, git, ps, and python3; it is skipped on Windows, and where the process
+// table cannot be read (see below).
 func TestValidationHandoffPortability(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the portability fixture uses POSIX processes and shell")
+	}
+	// The handoff validator proves a candidate is running by reading the process
+	// table. macOS `ps` is setuid and an OS sandbox rightly refuses to execute
+	// setuid binaries, so this fixture cannot run inside a sandbox. Skip rather
+	// than weaken the validator's liveness check.
+	if err := exec.Command("ps", "-p", strconv.Itoa(os.Getpid()), "-o", "command=").Run(); err != nil {
+		t.Skipf("the process table is not readable here, so the liveness check cannot run: %v", err)
 	}
 	cmd := exec.Command("bash", filepath.Join("..", "..", "scripts", "checks", "test-validation-handoff-portability.sh"))
 	out, err := cmd.CombinedOutput()

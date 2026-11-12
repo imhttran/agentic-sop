@@ -391,6 +391,14 @@ func seatbeltProfile(root string, writable []string, denyRead []credentialPath) 
 	// (local ip ...) on network* would also match outbound sockets, so only
 	// bind/inbound are keyed on the local address.
 	b.WriteString("(allow network-bind network-inbound (local ip \"localhost:*\"))\n(allow network* (remote ip \"localhost:*\"))\n")
+	// (deny network*) also denies AF_UNIX bind, which a sandboxed build
+	// legitimately needs for its own test listeners, caches and dev servers; the
+	// Linux backend allows it inside its private /tmp. Re-allow bind only for
+	// socket paths under a writable dir. Outbound AF_UNIX stays denied, so a host
+	// socket outside those dirs is still unreachable.
+	for _, d := range writable {
+		fmt.Fprintf(&b, "(allow network-bind (subpath %q))\n", d)
+	}
 	b.WriteString("(deny file-write*)\n")
 	for _, d := range writable {
 		fmt.Fprintf(&b, "(allow file-write* (subpath %q))\n", d)

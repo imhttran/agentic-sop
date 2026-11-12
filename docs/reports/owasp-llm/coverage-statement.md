@@ -238,11 +238,17 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   - The sandbox wraps `run_command` only. Validation commands
     (`internal/testrunner`, `sh -c`), security scanners, and the `git`/`gh` sinks
     are not sandboxed and this row makes no claim about them.
-  - With the sandbox on, the repository's own suite still fails on macOS (12
-    tests in 5 packages: AF_UNIX `bind` denied, Seatbelt cannot nest, setuid `ps`
-    refused, and one env-scrub interaction) and on Linux (a nested sandbox cannot
-    mount `/proc`). On macOS the in-sandbox suite takes 87-93 s against 86 s
-    unsandboxed; the Linux container run took 69 s.
+  - With the sandbox on, the repository's own suite passes on macOS (87-91 s
+    in-sandbox against 86 s unsandboxed, no failures) and has no sandbox-caused
+    failures on Linux arm64 in a container (two container artifacts remain). Tests
+    that need a nested sandbox or the process table skip with an explicit reason
+    (Seatbelt cannot nest, nested bubblewrap cannot mount `/proc`, and a sandbox
+    refuses setuid `ps`), so those inner boundaries are covered only outside the
+    sandbox.
+  - AF_UNIX `bind` is allowed only for socket paths under a writable dir; outbound
+    AF_UNIX and non-loopback IP network access stay denied. A same-user host
+    process can therefore dial a socket the sandbox created, which is a new
+    direction and not a closed boundary.
   - On Linux the sandbox uses its own network namespace, so a test cannot
     reach a server on the host's loopback; one it starts itself works. Host
     Unix sockets under `/tmp` and `/run` are hidden. PR #421 also masks sockets
