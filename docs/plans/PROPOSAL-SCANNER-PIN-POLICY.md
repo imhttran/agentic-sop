@@ -33,7 +33,17 @@ and the platform record in [llm03-scanner-integrity-evidence.md](../reports/owas
 Do 1 next, after the scanner versions are settled. Defer 2. Make 3 a separate decision
 taken on the baseline from 1.
 
-## Decision for the operator
+## Operator decision record
+
+- **Item 1: approved** (operator, chat, 2026-11-12). Per-platform binary pins are
+  committed for Gitleaks and OSV-Scanner on linux and darwin, and the baseline ran.
+  Implementation and digests: [llm03-scanner-binary-pins.md](../reports/owasp-llm/llm03-scanner-binary-pins.md).
+- **Item 2: not decided.** Still deferred per the recommendation; no signature
+  dependency is added.
+- **Item 3: not decided.** The baseline findings are recorded and not triaged; the
+  choice of required categories is still open.
+
+## Decision for the operator (original options, retained)
 
 - Approve 1 (committed per-platform pins) and the baseline run it needs.
 - Confirm 2 stays deferred, or approve the dependency it would add.

@@ -18,6 +18,10 @@ func TestSecurityAdapterPinsValidate(t *testing.T) {
 		{"uppercase binary pin", SecurityAdapterConfig{BinarySHA256: strings.Repeat("A", 64)}, "binary_sha256"},
 		{"prefixed rules pin", SecurityAdapterConfig{Rules: "rules", RulesSHA256: "sha256:" + good[:57]}, "rules_sha256"},
 		{"rules pin without rules", SecurityAdapterConfig{RulesSHA256: good}, "without rules"},
+		{"valid platform pin", SecurityAdapterConfig{BinarySHA256ByPlatform: map[string]string{"darwin/arm64": good}}, ""},
+		{"unknown platform key", SecurityAdapterConfig{BinarySHA256ByPlatform: map[string]string{"windows/amd64": good}}, "not a supported platform"},
+		{"malformed platform pin", SecurityAdapterConfig{BinarySHA256ByPlatform: map[string]string{"linux/amd64": "abc"}}, "binary_sha256_by_platform"},
+		{"both pin forms", SecurityAdapterConfig{BinarySHA256: good, BinarySHA256ByPlatform: map[string]string{"darwin/arm64": good}}, "both"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

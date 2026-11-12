@@ -89,6 +89,14 @@ security:
       protocol: builtin
       command: [gitleaks]
       version: "8.30.1"
+      # Executable digests of the extracted gitleaks 8.30.1 binary, derived from the
+      # archives pinned in scripts/checks/security-integration.sh (see
+      # docs/reports/owasp-llm/llm03-scanner-binary-pins.md). Windows is not pinned.
+      binary_sha256_by_platform:
+        linux/amd64: 88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509
+        linux/arm64: 00e91bbe655bd7c47753e8cfe61cb76ea1a5d7e7702fe161ee40102b46b3823b
+        darwin/amd64: cee01fea7173f1b779dff188e1c26ecbcb4027d394acc573b23aaf0be260e291
+        darwin/arm64: ba52fb1bfabbcde42f032afad3d6e0b19dff8ed105229a16e7caa338bbc0e84f
     - id: semgrep
       category: sast
       protocol: builtin
@@ -105,6 +113,13 @@ security:
       command: [osv-scanner]
       languages: [go, rust]
       version: "2.7.0"
+      # The OSV-Scanner release asset is the executable itself, so these are the
+      # SHA-256 values pinned in scripts/security/osv-scanner-manifest.json.
+      binary_sha256_by_platform:
+        linux/amd64: 160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b
+        linux/arm64: 4061ef4c021ed3c47f203b818f337e351336cc5cd67c0274fc36bd1dfc728dd7
+        darwin/amd64: e82c5df7ab0a42dff29a1cd0660711447b56b4c0483ff66ad8634df10fd81a45
+        darwin/arm64: d4926ef8da134332543be276dff157e4c170f99ad91fc48e89448a8816bdf70b
   evaluation:
     # Kept out of the routine scan path: an enabled evaluation adds ~121 s to
     # every task's quality-stage scan (SEC-LEFT-001 artifact: 121006 ms of

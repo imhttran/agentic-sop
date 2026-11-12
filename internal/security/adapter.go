@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -128,6 +129,9 @@ func BuildAdapter(raw config.SecurityAdapterConfig, opts BuildOptions) (Adapter,
 	id := strings.TrimSpace(raw.ID)
 	category := Category(strings.ToLower(strings.TrimSpace(raw.Category)))
 	command := append([]string(nil), raw.Command...)
+	// The pin in effect for this platform is part of the adapter identity and the
+	// executor below, so it is resolved before either is built.
+	raw.BinarySHA256 = raw.PlatformBinarySHA256(runtime.GOOS, runtime.GOARCH)
 	configDigest := adapterConfigDigest(raw)
 	if raw.BinarySHA256 != "" {
 		opts.Executor = pinnedExecutor{inner: opts.Executor, binarySHA256: raw.BinarySHA256}
