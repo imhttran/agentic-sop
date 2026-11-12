@@ -381,10 +381,14 @@ above.
   verified by `VerifyRows` (`TestRowDigests`). No in-repo reader loads the artifact yet;
   a future reader must call `VerifyRows` and treat a v1 index as unverified.
 - GAP-5 is **fixed for evidence that carries `chunk_hash`** (`TestChunkHash`,
-  `TestSharedChunkVector`). The producer emits `chunk_hash` in
-  rag-template-rust (`feat/rag-chunk-hash`, PR #7, not merged); until that merges
-  and a deployment uses it, evidence is unverified. `document_hash` stays
-  server-reported and unverified.
+  `TestSharedChunkVector`). Chunk-hashed evidence is verified end to end in the
+  code and tests of both repositories: the producer emits `chunk_hash` for the
+  retrieval response (rag-template-rust PR #7, merged 2026-11-12), and SOP
+  recomputes it from the exact text and rejects a mismatch (agentic-sop PR #431,
+  merged 2026-11-12). A shared vector pins the value in both. No live deployment
+  run was performed, so evidence from a real deployment is not claimed.
+  `document_hash` stays server-reported and unverified, and publisher authenticity
+  is not established.
 - **Policy for evidence without `chunk_hash` (decided 2026-11-12): flag, do not
   reject.** The client accepts such an item and reports it unverified through
   `Evidence.ChunkVerified()` (false). Rejecting it would break every producer that
