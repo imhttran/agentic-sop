@@ -17,8 +17,8 @@ Changing the default is an operator decision; see
 
 | Item     | macOS                              | Linux                                                                |
 | -------- | ---------------------------------- | -------------------------------------------------------------------- |
-| Host     | Darwin 25.6.0 arm64 (macOS 26.6.2) | Debian 13 (trixie) arm64, `golang:1.27` container, privileged, uid 0 |
-| Backend  | `/usr/bin/sandbox-exec` (Seatbelt) | `bubblewrap 0.12.0`                                                  |
+| Host     | Darwin 25.6.0 arm64 (macOS 26.6.2) | Debian 13 (trixie) arm64, kernel 6.18.60-0-virt, `golang:1.27` container, privileged, uid 0 |
+| Backend  | `/usr/bin/sandbox-exec` (Seatbelt) | `bubblewrap 0.12.0`; `user.max_user_namespaces=59993`                |
 | Go       | 1.27.1 darwin/arm64                | 1.27.4 linux/arm64                                                   |
 | Revision | `333eca51` (PR #437 baseline)      | same working tree, bind-mounted                                      |
 
