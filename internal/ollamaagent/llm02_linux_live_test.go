@@ -485,12 +485,12 @@ func llm02LiveReproducePrompt(message string) string {
 }
 
 // llm02ArtifactName keeps each platform's evidence beside, not over, the earlier
-// Linux artifact.
+// artifact llm02-linux-campaign.json, which predates the task-input case.
 func llm02ArtifactName() string {
 	if runtime.GOOS == "darwin" {
 		return "llm02-campaign-darwin-task-input.json"
 	}
-	return "llm02-linux-campaign.json"
+	return "llm02-campaign-linux-task-input.json"
 }
 
 // llm02NoGitDetail is the recorded blocker for git-dependent cases on macOS.
