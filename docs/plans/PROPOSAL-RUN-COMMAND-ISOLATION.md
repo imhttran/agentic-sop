@@ -7,6 +7,13 @@ matrix row, and no README status changes are part of this task. Every
 [`../reports/security-shift-left/execution-path-matrix.md`](../reports/security-shift-left/execution-path-matrix.md)
 stays as it is today.
 
+**Implementation note (2026-11-12):** the opt-in design below was implemented in
+PRs #343 (Seatbelt), #354 (bubblewrap), and #356 (throwaway `GOCACHE`,
+read-only module cache). The "design only, nothing implemented" status above
+describes this document as written. The default is still off; the default-on
+decision is a separate proposal,
+[PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md](PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md).
+
 Related: `8-llm03-run-command-isolation-design.md`, the plan this proposal
 answers (an agent prompt, since removed from the repository).
 

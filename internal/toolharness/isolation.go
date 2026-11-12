@@ -199,8 +199,11 @@ func homeCredentials() ([]credentialPath, error) {
 }
 
 const (
-	// maxHomeSocketDepth and maxHomeSocketEntries bound the home scan. Exceeding either
-	// fails closed, so the command is refused rather than run with a socket unmasked.
+	// maxHomeSocketDepth bounds how deep the home walk goes, and
+	// maxHomeSocketEntries bounds how many entries it visits. Passing the entry
+	// bound fails closed, so the command is refused rather than run with a socket
+	// unmasked; passing the depth bound only ends the walk, so a socket deeper than
+	// that is not masked.
 	maxHomeSocketDepth   = 4
 	maxHomeSocketEntries = 20000
 )
