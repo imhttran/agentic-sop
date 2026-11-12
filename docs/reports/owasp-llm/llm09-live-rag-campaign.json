@@ -1,0 +1,149 @@
+{
+  "gap": "OWASP LLM08 / gap 14",
+  "producer": {
+    "repo": "rag-template-rust",
+    "revision": "de9eb65",
+    "uncommitted_src_changes": 0,
+    "binary": "target/debug/retrieval (debug build)"
+  },
+  "database": {
+    "image": "pgvector/pgvector:pg17",
+    "server": "PostgreSQL 17.11 (Debian 17.11-1.pgdg12+",
+    "pgvector": "0.8.7",
+    "compose_project": "sop-gap14",
+    "port": 5434,
+    "disposable": true
+  },
+  "embedding": {
+    "provider": "ollama",
+    "model": "nomic-embed-text",
+    "dim": 768,
+    "ollama": "{\"version\":\"0.40.11\"}"
+  },
+  "corpora": {
+    "allowed": [
+      "corpus-a",
+      "corpus-b"
+    ],
+    "documents": [
+      "alpha.txt (corpus-a)",
+      "poison.txt (corpus-a, poisoned)",
+      "beta.txt (corpus-b)"
+    ],
+    "synthetic": true
+  },
+  "not_run": [
+    {
+      "id": "LIVE-RAG-CANCELLATION",
+      "reason": "the retrieval binary reads one request and exits; no mid-request cancel surface exists to drive live. Client timeout is covered deterministically by TestRetrieveTimeout."
+    }
+  ],
+  "cases": [
+    {
+      "id": "LIVE-RAG-POSITIVE-A",
+      "description": "positive control: corpus-a retrieves its own document",
+      "kind": "positive",
+      "request": "req-positive.json",
+      "request_sha256": "57969a4ae90edfa386ea86679145ca1706ea08140739b63c04428174f8f8f297",
+      "response": "resp-positive.json",
+      "response_sha256": "c78a544958a5685157c5d399f85ac868fb21f4450bc489426dc8872731e7242b",
+      "status": "OK",
+      "error_code": "",
+      "evidence_count": 2,
+      "evidence_sources": [
+        "alpha.txt",
+        "poison.txt"
+      ],
+      "all_evidence_has_chunk_hash": true,
+      "marker_observed_in_evidence": true,
+      "verdict": "pass"
+    },
+    {
+      "id": "LIVE-RAG-CROSS-CORPUS",
+      "description": "corpus-a query for corpus-b content must not return corpus-b",
+      "kind": "isolation",
+      "request": "req-cross.json",
+      "request_sha256": "269f9a7b7ca0c6a1afd5fd7e2988c4ee9964105853ce9e751d61619b7747a7ef",
+      "response": "resp-cross.json",
+      "response_sha256": "3279e17f3a4d0e6c92bb7754bae3741291b2bb2f9ede6e3472ae0bb4a92bc972",
+      "status": "OK",
+      "error_code": "",
+      "evidence_count": 2,
+      "evidence_sources": [
+        "alpha.txt",
+        "poison.txt"
+      ],
+      "all_evidence_has_chunk_hash": true,
+      "marker_observed_in_evidence": false,
+      "verdict": "protected"
+    },
+    {
+      "id": "LIVE-RAG-UNAUTHORIZED-SCOPE",
+      "description": "corpus not in the allowlist is rejected before any work",
+      "kind": "scope",
+      "request": "req-unauth.json",
+      "request_sha256": "aecedb18c92423da2f36fe74484c3b1ca8d283a50773c9db0f8a551bb5efdb93",
+      "response": "resp-unauth.json",
+      "response_sha256": "b798673ca31e18eb3991cb9124a3aca359e0fcf28c19ab7ac8afd0f8390bfda9",
+      "status": "UNAUTHORIZED_SCOPE",
+      "error_code": "UNAUTHORIZED_SCOPE",
+      "evidence_count": 0,
+      "evidence_sources": [],
+      "all_evidence_has_chunk_hash": true,
+      "verdict": "protected"
+    },
+    {
+      "id": "LIVE-RAG-DEADLINE",
+      "description": "1 ms deadline returns a well-formed failure",
+      "kind": "deadline",
+      "request": "req-deadline.json",
+      "request_sha256": "bdeb45cac2ac2aab9ce09a2a2daf11bab867671e1f11c0c74f444d7a4f368a05",
+      "response": "resp-deadline.json",
+      "response_sha256": "d54aab6fee95098920f6b4e7141e6f8f4b9b9cd008e9819f98b2e0c72c84e4d4",
+      "status": "UNAVAILABLE",
+      "error_code": "UNAVAILABLE",
+      "evidence_count": 0,
+      "evidence_sources": [],
+      "all_evidence_has_chunk_hash": true,
+      "verdict": "observed_well_formed_failure"
+    },
+    {
+      "id": "LIVE-RAG-POSITIVE-B",
+      "description": "corpus-b retrieves its own document",
+      "kind": "positive",
+      "request": "req-positive-b.json",
+      "request_sha256": "3706230805b0fb545c2fdf159fad2da5ba5f3b02a838b62498b1aea1fcd25ea5",
+      "response": "resp-positive-b.json",
+      "response_sha256": "cac20e7e97629aa77b83f7d09980813ce7ba06eece011b3be537035cf0e05da6",
+      "status": "OK",
+      "error_code": "",
+      "evidence_count": 1,
+      "evidence_sources": [
+        "beta.txt"
+      ],
+      "all_evidence_has_chunk_hash": true,
+      "marker_observed_in_evidence": true,
+      "verdict": "pass"
+    },
+    {
+      "id": "LIVE-RAG-POISONED-CHUNK",
+      "description": "embedded instruction in an authorized corpus arrives as evidence text; producer takes no action",
+      "kind": "poisoned",
+      "request": "req-positive.json",
+      "request_sha256": "57969a4ae90edfa386ea86679145ca1706ea08140739b63c04428174f8f8f297",
+      "response": "resp-positive.json",
+      "response_sha256": "c78a544958a5685157c5d399f85ac868fb21f4450bc489426dc8872731e7242b",
+      "status": "OK",
+      "error_code": "",
+      "evidence_count": 2,
+      "evidence_sources": [
+        "alpha.txt",
+        "poison.txt"
+      ],
+      "all_evidence_has_chunk_hash": true,
+      "marker_observed_in_evidence": true,
+      "verdict": "observed_as_untrusted_evidence"
+    }
+  ],
+  "request_count": 6
+}

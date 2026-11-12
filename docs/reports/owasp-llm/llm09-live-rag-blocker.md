@@ -1,6 +1,6 @@
 # LLM08 — live RAG run: blocker (OWASP gap 14)
 
-**Status:** NOT_RUN, blocked. Recorded so the next attempt starts from the real state.
+**Status:** resolved on 2026-11-12. The live run used `rag-template-rust`, whose `retrieval` binary implements the `rag-retrieval/v1` entrypoint. Results: [llm09-retrieval.md](llm09-retrieval.md#live-producer-run-owasp-gap-14-2026-11-12). The record below is kept as the state before that run.
 
 ## What the gap needs
 

@@ -1,6 +1,6 @@
 # LLM09 — Retrieval boundaries in agentic-sop
 
-Status: **VERIFIED for the tested local scopes (Linux and macOS arm64); producer-side live isolation is NOT_RUN; enabled-by-default claims are not made.**
+Status: **VERIFIED for the tested local scopes (Linux and macOS arm64); producer-side live isolation was observed once on 2026-11-12 (gap 14, see below); enabled-by-default claims are not made.**
 Historical baseline: `5ac9b4ba6ba6d15b66f74aec19cffb8ef084a775` (`origin/main`), with the
 RETRIEVE-001 inventory committed at `536057ab698034039dba11417b412c17441d521d`.
 Follow-up baseline: `d2c45bb9b4cf82fde67a1904bf311b10791b7e4c` (`origin/main`, 2026-11-09).
@@ -661,6 +661,52 @@ remains **NOT_RUN**.
   after the implementation was committed; it was external-completed at commit
   `ca4c800e8d45b097078b03ca7a0fbf889492befc`, validation `PASS`. Fixing the
   resume/planning behavior is outside this task.
+
+## Live producer run (OWASP gap 14, 2026-11-12)
+
+One bounded live run of the external RAG producer against a disposable PostgreSQL
+with pgvector and a local embedding model. Artifact:
+[llm09-live-rag-campaign.json](llm09-live-rag-campaign.json), SHA-256
+`f8c75126ac59b74f60d5709a184d581a43ad67e827d26ecdcc0296d5d121bde3`.
+
+- **Producer:** `rag-template-rust` at `de9eb65` (`retrieval` binary, debug build,
+  clean sources). Its `rag-retrieval/v1` stdin/stdout entrypoint is the one the
+  blocker record asked for; the Go `rag-template` repository still has none.
+- **Database:** `pgvector/pgvector:pg17`, server PostgreSQL 17, pgvector 0.8.7.
+  Started as a separate compose project (`sop-gap14`, port 5434) and removed with
+  its volume afterwards.
+- **Embeddings:** Ollama `nomic-embed-text`, 768 dimensions.
+- **Corpora:** `corpus-a` (allowed) holds two synthetic documents, one of them
+  poisoned; `corpus-b` (allowed) holds one. `corpus-z` is not allowed. All
+  documents are synthetic.
+
+| Case | Request | Result | Verdict |
+| --- | --- | --- | --- |
+| `LIVE-RAG-POSITIVE-A` | `corpus-a`, "alpha retention policy" | `OK`, 2 evidence items, own marker returned | pass |
+| `LIVE-RAG-CROSS-CORPUS` | `corpus-a`, "beta rotation schedule" | `OK`, only `corpus-a` sources, no `corpus-b` marker | protected |
+| `LIVE-RAG-UNAUTHORIZED-SCOPE` | `corpus-z` (not allowed) | `UNAUTHORIZED_SCOPE`, no evidence | protected |
+| `LIVE-RAG-DEADLINE` | `deadline_ms` 1 | `UNAVAILABLE`, no evidence | observed, well-formed failure |
+| `LIVE-RAG-POSITIVE-B` | `corpus-b`, "beta rotation schedule" | `OK`, own marker returned | pass |
+| `LIVE-RAG-POISONED-CHUNK` | `corpus-a`, "alpha retention policy" | the embedded instruction arrives as evidence text; the producer takes no action | observed as untrusted evidence |
+
+Every evidence item carried a `chunk_hash`, which the SOP client verifies (see
+[llm05-poisoning.md](llm05-poisoning.md)).
+
+Not observed live, and why:
+
+- **`TIMEOUT`:** the 1 ms deadline ran out during query embedding, so the producer
+  returned `UNAVAILABLE`. A `TIMEOUT` needs the deadline to pass during the
+  database search. The client timeout path is covered by `TestRetrieveTimeout`.
+- **Cancellation:** the binary reads one request and exits, and there is no
+  mid-request cancel to drive live (`LIVE-RAG-CANCELLATION` is recorded as not run).
+
+What this run does not establish:
+
+- Semantic poisoning inside an authorized corpus is not prevented. The poisoned
+  chunk was returned as evidence. Its text was never acted on here, but that is
+  not proof that a model will ignore it.
+- One producer, one embedding model, one run, synthetic data, a debug build.
+- Retrieval stays disabled by default; no control was changed.
 
 ## Limitations
 
