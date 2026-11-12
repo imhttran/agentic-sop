@@ -351,9 +351,10 @@ results are not evidence of real-host compatibility. See
 
 ### Remaining operator actions
 
-- Disposition the three residual exposures - R2 hardlink alias, R4 macOS
-  `kern.procargs2`, H2S host-to-sandbox socket - in
+- Disposition the two residual exposures that still have no decision - R4 macOS
+  `kern.procargs2` and H2S host-to-sandbox socket - in
   [PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md](PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md).
+  R2 (hardlink alias) is already recorded as a bounded residual, gap 5 option 1.
 - Record this decision in decision memory if a durable ledger entry is wanted;
   this document is the in-repository record, and no decision-memory entry is
   created by the implementing change.

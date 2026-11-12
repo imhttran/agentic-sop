@@ -1,8 +1,12 @@
 # Proposal: post-default-on residual risks (OWASP Gap 13 / LLM02)
 
-**Status: `NEEDS_HUMAN` for each residual below.** Nothing here accepts, waives,
-transfers, or closes a risk. Default-on isolation is implemented and enforced; the
-exposures it does not close are listed with the evidence for each.
+**Status: R2 is decided; R4 and H2S are `NEEDS_HUMAN`.** Nothing here accepts,
+waives, transfers, or closes a risk. Default-on isolation is implemented and
+enforced; the exposures it does not close are listed with the evidence for each.
+
+- **R2** has a recorded disposition: bounded residual exposure, gap 5 option 1,
+  2026-11-12. It is *not* accepted, and no separate control is authorized.
+- **R4** and **H2S** have no recorded decision.
 
 Related:
 [PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md](PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md)
@@ -62,12 +66,19 @@ repository, and the value reaches the model through ordinary command output.
 - **Windows**: no sandbox at all, and identity verification is `UNVERIFIED`.
 - `Nlink > 1` is not implemented; Option C Phase 1 covers workspace origins only.
 
-**Recommended disposition.** Keep Phase 1; do not implement `Nlink > 1`
-(previously rejected as too broad). Record the outside-workspace, late-credential,
-external-removal, and Windows cases as bounded limits of the control.
+**Disposition (recorded 2026-11-12).** The operator chose option 1 of
+[PROPOSAL-LLM02-NLINK-AND-MACOS-IDENTITY.md](PROPOSAL-LLM02-NLINK-AND-MACOS-IDENTITY.md):
+Option B (macOS verification) is complete, Option A (`Nlink > 1`) is **not
+approved**, and the outside-workspace, late-credential, external-removal, and
+Windows cases are recorded as bounded residual exposures with no separate control
+authorized. They are bounded limits, **not** an acceptance. The subprocess
+hardlink alias is separately `RISK_ACCEPTED — SUBPROCESS HARDLINK ALIAS (BOUNDED)`
+under Option D (Linux; [PROPOSAL-LLM02-SUBPROCESS-HARDLINK.md](PROPOSAL-LLM02-SUBPROCESS-HARDLINK.md)).
 
-**Operator decision.** Accept those bounded limits, or authorize a new control
-(for example an inode-based deny inside the sandbox) as a separate design.
+**Operator decision.** None open for R2. The macOS in-sandbox alias measured in
+this verification is the same inode-alias limit, not a new residual. Naming it
+explicitly next to the Linux Option D entry would be a wording change to the
+Option D document, not a new decision.
 
 ### R4 - macOS parent launch-time environment (`kern.procargs2`)
 
