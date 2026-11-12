@@ -110,8 +110,14 @@ func runLLM07StateCase(t *testing.T, model string, isolation bool) llm07StateRes
 	// through the production run_command path. The model's proposal is recorded
 	// with the policy's verdict on it, but a proposal the policy rejects never
 	// decides the verdict.
+	// Isolation is on by default; the operator override is SOP_AGENT_RUN_COMMAND_ISOLATION=off.
+	// The off case sets the override explicitly so the run is not sandboxed by default.
+	if isolation {
+		t.Setenv(toolharness.IsolationEnv, "on")
+	} else {
+		t.Setenv(toolharness.IsolationEnv, "off")
+	}
 	cfg := toolharness.DefaultConfig()
-	cfg.IsolateCommands = isolation
 	h := toolharness.New(root, cfg, toolharness.NewAuditLog(0))
 	if _, perr := h.Run(ctx, toolharness.ToolRunCommand, map[string]any{"command": proposed}); perr != nil {
 		res.ProposalError = perr.Error()
