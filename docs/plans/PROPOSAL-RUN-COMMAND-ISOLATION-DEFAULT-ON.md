@@ -351,10 +351,11 @@ results are not evidence of real-host compatibility. See
 
 ### Remaining operator actions
 
-- Disposition the host-to-sandbox socket direction in
+- No residual decision remains. R2 (hardlink alias) is recorded as a bounded
+  residual, gap 5 option 1; R4 (macOS `kern.procargs2`) as a known limit, gap 6 /
+  PR #447; and H2S (host-to-sandbox socket) as a bounded architectural property,
+  Option A, decision memory `a73749c2…`. None is a risk acceptance. Tracking:
   [PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md](PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md).
-  R2 (hardlink alias) is recorded as a bounded residual, gap 5 option 1, and R4
-  (macOS `kern.procargs2`) as a known limit, gap 6 / PR #447.
 - Record this decision in decision memory if a durable ledger entry is wanted;
   this document is the in-repository record, and no decision-memory entry is
   created by the implementing change.
