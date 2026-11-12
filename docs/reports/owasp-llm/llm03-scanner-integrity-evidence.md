@@ -1,6 +1,6 @@
 # LLM03 scanner integrity: execution-time evidence (OWASP gap 9)
 
-**As of:** `main` at `6ea2221f` plus the rules-staging change in this pull request
+**As of:** `main` at `6ea2221f` plus the rules-staging change in PR #462
 (2026-11-12). **Scope:** execution-time integrity for local scanner binaries and
 rules in `internal/security`. Policy items — committed per-platform binary pins,
 publisher signatures, and required categories — are not decided here; they are in
