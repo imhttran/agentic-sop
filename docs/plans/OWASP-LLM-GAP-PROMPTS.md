@@ -26,7 +26,7 @@ To use one: start a fresh agent session in this repository and paste the
 | 7   | LLM02        | Model-output artifacts persisted verbatim                           | Investigation   | In progress | PR #408 (option C); option A pending, proposal PR #407 |
 | 8   | LLM02        | Operator decisions: Plan 03 acceptance, C1 default, residuals       | Decision packet | Waiting on operator | PR #409 |
 | 9   | LLM03        | Scanner integrity: hash-then-exec race, pins, signatures            | Code, gated     | In progress | PR #410 (race closed); policy proposal in docs/plans |
-| 10  | LLM04        | No production reader verifies repository index rows                 | Code            | In progress | PR #411 (guard; digests latent) |
+| 10  | LLM04        | No production reader verifies repository index rows                 | Code            | Done        | PR #411 (merged): guard test; digests recorded as latent |
 | 11  | LLM04        | RAG producer does not emit `chunk_hash`                             | Cross-repo code | Open        |                  |
 | 12  | LLM05        | Slack rendering and channel binding unobserved                      | Evidence        | Waiting on operator | PR #412 (merged); escaped-markup probe undecided |
 | 13  | LLM06        | Sandbox off by default; Linux host sockets outside `/tmp`, `/run`   | Code, gated     | In progress | PR #421 (Linux socket masked and verified in a container); default-on pending |
@@ -34,7 +34,7 @@ To use one: start a fresh agent session in this repository and paste the
 | 15  | LLM09        | Subprocess can write SOP state with the sandbox off; live `NOT_RUN` | Code + evidence | Waiting on operator | fingerprint check was NO-GO (2026-11-09); the sandbox that denies .agent-sdlc writes is opt-in; default-on waits on gap 13 |
 | 16  | LLM10        | Five subprocess paths without process-group termination             | Code            | Done        | PR #398 (merged) |
 | 17  | LLM10        | Token budget is off by default and is not a dollar cap              | Code, optional  | Done | PR #417 (merged): option A, token budget only |
-| 18  | All          | Coverage statement and evidence matrix lag current merged evidence  | Docs            | In progress | PR #425          |
+| 18  | All          | Coverage statement and evidence matrix lag current merged evidence  | Docs            | Done        | PR #425 (merged); refreshed through PR #427 |
 
 **Tracking.** The Status and PR / evidence columns track progress on this list
 only. Statuses: `Open`, `In progress`, `Waiting on operator` (a proposal or
