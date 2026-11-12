@@ -227,7 +227,9 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   Evidence: [llm10-output-handling.md](llm10-output-handling.md).
 
 - **Not covered, and why:** rendering in third-party terminals and IDEs,
-  persisted Markdown, and Slack unfurl are outside SOP. The operator observed a
+  persisted Markdown, and Slack unfurl are outside SOP. A plain `@here` in Slack
+  payload text notifies the channel (observed 2026-11-12; the encoder escapes `&`,
+  `<` and `>` only). Neutralizing `@here` and `@channel` is open work under gap 12. The operator observed a
   plain `sop notify test` event reach the intended Slack channel with literal text
   and no unexpected unfurl or mention (PR #412). The fixed test event contains no
   markup, link, or mention-shaped canary, so escaped-markup rendering remains
