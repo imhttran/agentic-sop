@@ -92,11 +92,19 @@ var preciseAssignmentRule = rule{
 	value: 2,
 }
 
+// connectorAssignmentRule covers credential keys that the precise rule misses: a
+// suffix word after the key (tokenvalue=) or a connector phrase before the
+// separator (password for db: hunter2). Neither form applies to "secretary=",
+// because "secret" is not followed by one of the listed suffixes or a connector.
+var connectorAssignmentRule = rule{
+	re:    regexp.MustCompile("(?i)\\b(api[\\s_-]?key|access[_-]?key|private[_-]?key|secret(?:[\\s_-]?key)?|token|password|passwd|credential|authorization)(?:value|val|data|id|code)?(?:\\s+(?:for|of|to|on|in)\\s+[a-z0-9_.-]+)?[\"']?\\s*[:=]\\s*[\"']?([^\\s\"',;}\\[\\]`]+)"),
+	kind:  KindAssignment,
+	value: 2,
+}
+
 func modelInputRules() []rule {
-	out := make([]rule, len(rules))
-	copy(out, rules)
-	out[0] = preciseAssignmentRule
-	return out
+	out := []rule{preciseAssignmentRule, connectorAssignmentRule}
+	return append(out, rules[1:]...)
 }
 
 // credentialKeySegments are the key-name segments that make an assignment value
