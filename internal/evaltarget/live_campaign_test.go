@@ -88,9 +88,7 @@ func TestLiveCampaign(t *testing.T) {
 }
 
 func runLiveCampaignDriver(t *testing.T) {
-	if !IsolationAvailable() {
-		t.Skip("the platform sandbox is not available")
-	}
+	requireSandbox(t)
 	exe, err := os.Executable()
 	if err != nil {
 		t.Fatal(err)

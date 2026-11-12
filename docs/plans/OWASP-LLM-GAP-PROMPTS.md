@@ -1,6 +1,6 @@
 # OWASP LLM Top 10 — end-to-end prompts for the remaining gaps
 
-**As of:** `main` at `333eca51` (2026-11-12, UTC). **Status:** working aid, not a plan
+**As of:** `main` at `e4ca505d` (2026-11-12, UTC). **Status:** working aid, not a plan
 of record and not normative.
 
 One prompt per open gap, taken from
@@ -432,12 +432,13 @@ runs it, the coverage statement says what was observed instead of "not observed"
 
 ## 13. LLM06 — sandbox off by default; Linux host sockets outside `/tmp`, `/run`
 
-**Current state (2026-11-12, `main` `333eca51`).** The Linux socket gap is
+**Current state (2026-11-12, `main` `e4ca505d`).** The Linux socket gap is
 closed: PR #421 masks sockets found under the Linux home directory with a
 bounded, fail-closed scan, verified in a container. Default-on feasibility is
-now measured: the full suite runs inside the sandbox on macOS arm64 (87–93 s
-against 86 s outside, 12 failing tests in 5 packages) and on Linux arm64
-(69 s, one sandbox-caused failure). The earlier `could not create module cache`
+now measured and remediated: the full suite runs inside the sandbox on macOS
+arm64 (91 s against 86 s outside, no failures) and on Linux arm64 in a
+container (no sandbox-caused failures). Nested-sandbox and process-table tests are classified
+unsupported and skip with an explicit reason. The earlier `could not create module cache`
 blocker did not reproduce. Two residuals are unchanged and were re-confirmed:
 a pre-existing hardlink alias and the macOS parent-environment read
 (`kern.procargs2`) are both readable with the sandbox on. Measurements:

@@ -37,9 +37,7 @@ func runIsolated(t *testing.T, live bool, root string, argv []string, env []stri
 // denied, filesystem reads outside the root fail, secret environment variables
 // are scrubbed, and the default sandbox still denies all network.
 func TestLiveIsolationDarwin(t *testing.T) {
-	if !IsolationAvailable() {
-		t.Skip("sandbox-exec is not available")
-	}
+	requireSandbox(t)
 	root := t.TempDir()
 	env := IsolateEnv(append(os.Environ(), "OPENAI_API_KEY=sk-canary-should-not-appear", "SOP_LIVE_CANARY=visible"), "")
 

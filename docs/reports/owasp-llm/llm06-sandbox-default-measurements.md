@@ -3,7 +3,8 @@
 **Status:** measured on macOS arm64 and Linux arm64. The measurements below
 supersede the partial 2026-11-11 run in
 [Superseded measurement](#superseded-measurement-2026-11-11) (PR #414); that
-section is preserved as history, not as current fact.
+section is preserved as history, not as current fact. The compatibility section
+records the post-remediation re-measurement of the failures PR #437 reported.
 
 **Scope:** the OS sandbox that wraps **only** the agent `run_command` tool
 (`internal/toolharness.isolate`). No other execution path is covered here. The
@@ -19,7 +20,10 @@ Changing the default is an operator decision; see
 | Host     | Darwin 25.6.0 arm64 (macOS 26.6.2) | Debian 13 (trixie) arm64, `golang:1.27` container, privileged, uid 0 |
 | Backend  | `/usr/bin/sandbox-exec` (Seatbelt) | `bubblewrap 0.12.0`                                                  |
 | Go       | 1.27.1 darwin/arm64                | 1.27.4 linux/arm64                                                   |
-| Revision | `333eca51` (merge of PR #436)      | same working tree, bind-mounted                                      |
+| Revision | `333eca51` (PR #437 baseline)      | same working tree, bind-mounted                                      |
+
+The PR #437 baseline was measured at `333eca51`. The post-remediation rows were
+measured on branch `security/llm06-isolation-compat` on top of `e4ca505d`.
 
 The Linux host is a container because this machine has no `bwrap`. It runs
 privileged so `bwrap` can create namespaces; the sandbox semantics are
@@ -49,46 +53,84 @@ git/gh sinks, and this document makes no claim about them.
 ## Compatibility inside the sandbox
 
 Measured with the sandbox forced on and the full repository suite run through
-`run_command`.
+`run_command`. PR #437 recorded the baseline; the tables below are the
+post-remediation re-measurement, and every originally failing test is listed with
+its disposition.
 
 ### macOS arm64
 
-| Measurement                                     | Result                                                                                                    |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `go test ./...` outside the sandbox             | PASS, 86.1 s                                                                                              |
-| `go test ./...` inside the sandbox              | 87.2 s and 91.1 s (two runs), exit 1; **12 test failures in 5 packages**                                  |
-| `go build ./...` inside the sandbox             | exit 0, 7.8 s                                                                                             |
-| `go vet ./internal/redact/` inside the sandbox  | exit 0, 1.9 s                                                                                             |
-| `go test ./internal/redact/` inside the sandbox | exit 0, 2.7 s                                                                                             |
-| Module cache                                    | readable read-only; `go` prints a non-fatal `writing stat cache: … operation not permitted` and continues |
+| Measurement                                      | PR #437 baseline                        | After remediation          |
+| ------------------------------------------------ | --------------------------------------- | -------------------------- |
+| `go test ./...` outside the sandbox              | PASS, 86.1 s                            | PASS                       |
+| `go test ./...` inside the sandbox               | exit 1, 87-91 s, **12 failures / 5 pkgs** | exit 0, **87-91 s, 0 failures** |
+| `go build ./...` inside the sandbox              | exit 0, 7.8 s                           | exit 0, 7.3 s              |
+| `go vet ./...` inside the sandbox                | one package, exit 0, 1.9 s              | exit 0, 8.7 s              |
+| `go test ./internal/redact/` inside the sandbox  | exit 0, 2.7 s                           | exit 0, 2.3 s              |
+| Module cache                                     | readable read-only, non-fatal stat-cache warning | unchanged         |
 
-The in-sandbox suite is 1–6 s slower than the unsandboxed suite, so the cold
-`GOCACHE` per run is no longer a material cost at this size. It still must fit
-the harness's default 120 s `CommandTimeout`; 87–93 s leaves little margin.
+The post-remediation in-sandbox runs (87.3 s and 91.3 s) are within a few seconds
+of the same host's unsandboxed run (86.1 s), so the cold
+`GOCACHE` per run is not a material cost at this size. It still must fit the
+harness's default 120 s `CommandTimeout`; 87-91 s leaves little margin.
 
-| Package                      | Failing test                                                                                                                                                                                    | Cause                                                                                                                                                                                                                                              |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `internal/toolharness`       | `TestHomeSocketsAreMasked`, `TestHomeSymlinkToDirectoryIsFollowed`                                                                                                                              | `listen unix …: bind: operation not permitted`. The profile's `(deny network*)` denies AF_UNIX **bind**, so a sandboxed process cannot create its own socket.                                                                                      |
-| `internal/dqharness`         | `TestIsolatedReplayReplayDirWritesSucceed`, `TestIsolatedReplayRunsVerificationInFreshDir`, `TestIsolatedReplayScrubsCredentials`, `TestIsolatedReplayTimesOut`, `TestIsolatedReplayUnixSocket` | `sandbox-exec: sandbox_apply: Operation not permitted`. Seatbelt cannot nest.                                                                                                                                                                      |
-| `internal/evaltarget`        | `TestDarwinIsolationBlocksOrdinaryWorkspace`, `TestDarwinIsolationStripsSecrets`, `TestLiveIsolationDarwin`                                                                                     | Same nesting failure.                                                                                                                                                                                                                              |
-| `internal/skill`             | `TestValidationHandoffPortability`                                                                                                                                                              | `/bin/ps: Operation not permitted`. Seatbelt refuses the setuid `ps`.                                                                                                                                                                              |
-| `internal/controller/config` | `TestLoadWorkspacesWithoutProjects` (package aborts)                                                                                                                                            | Environment-dependent. `sandboxEnv` dropped the operator shell's real `SOP_CONTROLLER_TOKEN` while keeping `SOP_CONTROLLER_ALLOW_NETWORK=true`, so `Load()` reached its `log.Fatal` and exited. The credential value never appeared in any output. |
+### macOS dispositions
+
+| Failing test (PR #437)                                                                  | Classification      | Root cause                                                                                                                                                 | Disposition                                                                                                                                                                                                                       |
+| --------------------------------------------------------------------------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `internal/toolharness` `TestHomeSocketsAreMasked`, `TestHomeSymlinkToDirectoryIsFollowed` | Isolation defect    | `(deny network*)` also denies AF_UNIX **bind**, so a sandboxed process cannot create its own socket. Linux allows the same operation inside its private `/tmp`. | **Fixed.** The profile re-allows `network-bind` only for socket paths under a writable dir. Outbound AF_UNIX to a host socket is still denied, pinned by `TestRunCommandIsolationAllowsOwnUnixSocketOnly`; `TestSeatbeltProfileScopesUnixSocketBind` blocks a blanket allow. |
+| `internal/dqharness` `TestIsolatedReplay*` (5)                                          | Unsupported workflow | Seatbelt cannot nest: `sandbox_apply: Operation not permitted`.                                                                                            | **Classified unsupported.** `isolationBlocker` probes the real backend arguments and the tests skip with the reason. Production is unchanged and fail-closed; the parent boundary is never reused.                                  |
+| `internal/evaltarget` `TestDarwinIsolation*`, `TestLiveIsolationDarwin` (3)              | Unsupported workflow | Same nesting limit.                                                                                                                                        | Same: `requireSandbox` skips when the sandbox cannot start.                                                                                                                                                                        |
+| `internal/skill` `TestValidationHandoffPortability`                                     | Unsupported workflow | The handoff validator proves a candidate is running by reading the process table; Seatbelt refuses the setuid `ps`.                                         | **Classified unsupported** for that check. The whole workflow needs the process table: the fixture script no longer calls `ps`, but the validator it drives (`scripts/validation-handoff.py`) does, so the test skips when the table is unreadable. The validator's liveness check is **not** weakened.                          |
+| `internal/controller/config` `TestLoadWorkspacesWithoutProjects` (package aborts)        | Test assumption     | Ambient `SOP_CONTROLLER_ALLOW_NETWORK=true` paired with a scrubbed `SOP_CONTROLLER_TOKEN` reached `Load()`'s `log.Fatal`.                                   | **Fixed** in test infrastructure: a package `TestMain` clears ambient `SOP_CONTROLLER_*`, so the tests no longer depend on the operator's shell.                                                                                    |
 
 ### Linux arm64 (privileged container)
 
-| Measurement                                                                      | Result         |
-| -------------------------------------------------------------------------------- | -------------- |
-| Isolation test subset (`Isolation`, `Bubblewrap`, `HomeSocket`, `LLM02Linux`, …) | 21 pass, 1 skip (the macOS-only keychain probe) |
-| `go test ./...` inside the sandbox                                               | exit 1, 69 s   |
+| Measurement                        | PR #437 baseline                          | After remediation                                                    |
+| ---------------------------------- | ----------------------------------------- | -------------------------------------------------------------------- |
+| `go test ./...` inside the sandbox | exit 1, 69 s, 1 sandbox-caused failure    | exit 1, **0 sandbox-caused**; the 2 failures below fail identically without the sandbox |
+| Touched packages, no sandbox       | -                                         | PASS                                                                 |
+| Unix-socket and credential controls inside the sandbox | -                        | PASS                                                                 |
 
-| Package               | Failing test                                  | Cause                                                                                                                              |
-| --------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `internal/evaltarget` | `TestLiveIsolationLinuxCancelsProcessGroup`   | `bwrap: Can't mount proc on /proc: Operation not permitted` at nesting depth 2. A nested sandbox that mounts `/proc` cannot start. |
-| `internal/dist`       | `TestInstallerInstallsThePlannerSetupCommand` | Also fails in the same container **without** the sandbox (worktree `.git` is unreachable from the mount). Not sandbox-caused.      |
-| `internal/testfast`   | `TestInstallOllamaAgentStopsWhenGateFails`    | Also fails in the same container **without** the sandbox. Not sandbox-caused.                                                      |
+| Package               | Failing test                                  | Cause                                                                                                                         |
+| --------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `internal/dist`       | `TestInstallerInstallsThePlannerSetupCommand` | Fails in the same container **without** the sandbox (the worktree's `.git` is unreachable from the mount). Not sandbox-caused. |
+| `internal/testfast`   | `TestInstallOllamaAgentStopsWhenGateFails`    | Fails in the same container **without** the sandbox. Not sandbox-caused.                                                      |
 
-Nested `bwrap` without `--proc` works, so the failure is specific to mounting
-`/proc` inside an existing PID namespace, not to bubblewrap in general.
+`TestLiveIsolationLinuxCancelsProcessGroup` now skips with the reason
+`bwrap: Can't mount proc on /proc: Operation not permitted`, matching the macOS
+nesting class.
+
+No real Linux host was available, so these numbers are one privileged container
+on arm64 only; see [What this does not cover](#what-this-does-not-cover).
+
+### Nested isolation: why the parent boundary is not reused
+
+Nested sandboxing is **not** a production requirement of the `run_command`
+sandbox. `evaltarget` and `dqharness` isolation are entered from `sop` CLI
+commands, not from a sandboxed `run_command`, so nesting happens only when the
+repository's own suite runs inside the sandbox.
+
+Propagating the parent boundary to the child was evaluated and rejected. The
+inner policy is not a subset of the outer one: `evaltarget`'s live variant needs a
+Unix-socket proxy to exactly one endpoint, and `dqharness` replay confines writes
+to a replay directory and hides host paths, while the `run_command` profile
+allows writes across the repository root and temp. Reusing the outer boundary
+would either break the inner workflow or silently widen the inner confinement.
+No mechanism proves "the inherited boundary satisfies the child's policy", so
+nothing is inherited and the child stays fail-closed.
+
+Measured nesting constraint on Linux: nested `bwrap` fails only when
+`--unshare-all` (user and PID namespaces) is combined with `--proc /proc`.
+Nested `bwrap` without `--proc`, or without `--unshare-pid`, starts. This is what
+the probe reproduces, so the skip is tied to the real condition rather than to a
+guess.
+
+### Profile observation (pre-existing, unchanged)
+
+The `(allow network-bind network-inbound (local ip "localhost:*"))` rule does not
+prevent a sandboxed process from **binding** `0.0.0.0`; inbound connections stay
+loopback-only. This was already true before this change and is not altered here.
+Changing it is a policy decision, not a compatibility fix.
 
 ## Protection matrix
 
@@ -107,8 +149,8 @@ nothing here is inferred from the profile text alone.
 | Login keychain                             | denied (`com.apple.SecurityServer` mach lookup) — measured                                     | n/a                                                                                                                        | n/a         |
 | Outbound network                           | denied, except host `localhost` (the profile re-allows loopback, so a host service on 127.0.0.1 stays reachable) | denied (`--unshare-net`, so even host loopback is unreachable) | n/a |
 | Writes                                     | root + temp only; `.agent-sdlc` denied — measured                                              | root + temp only; `.agent-sdlc` read-only — measured                                                                       | n/a         |
-| Unix sockets                               | AF_UNIX `bind` denied — measured; unix traffic falls under `network*`                           | host `/tmp`, `/run` hidden; `$HOME` masked by a bounded fail-closed scan; sockets elsewhere on the host remain connectable | n/a         |
-| Nested sandbox                             | impossible — measured                                                                          | `/proc` mount fails at depth 2 — measured                                                                                  | n/a         |
+| Unix sockets                               | AF_UNIX `bind` allowed only under a writable dir; outbound AF_UNIX denied, but a same-user host process can dial a created socket — measured | host `/tmp`, `/run` hidden; `$HOME` masked by a bounded fail-closed scan; sockets elsewhere on the host remain connectable | n/a         |
+| Nested sandbox                             | impossible (Seatbelt cannot nest); tests skip, production fails closed — measured               | `/proc` mount fails at depth 2 — measured                                                                                  | n/a         |
 | Missing backend                            | fail closed, nothing executes — measured                                                       | fail closed — measured                                                                                                     | fail closed |
 | Backend present but refuses to start       | fail closed, no fallback — measured (`TestRunCommandIsolationDoesNotFallBackWhenBackendFails`) | same                                                                                                                       | n/a         |
 
@@ -168,6 +210,11 @@ directory would turn every `run_command` into a denial.
 - A live model. Every result here is deterministic or a direct execution
   measurement, not a live agent campaign.
 - Any execution path other than `run_command`.
+- The nested-isolation tests themselves, when the suite runs inside the sandbox.
+  They skip with an explicit reason and still run unsandboxed, so the inner
+  boundaries stay covered in CI and on a developer host.
+- The credential-read guarantees under `bwrap` on a real distribution host; only
+  the container was available.
 
 ## Superseded measurement (2026-11-11)
 

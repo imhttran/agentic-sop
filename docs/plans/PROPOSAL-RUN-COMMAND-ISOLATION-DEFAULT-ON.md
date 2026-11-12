@@ -55,12 +55,35 @@ and is denied with isolation on
 
 ### Compatibility evidence (from the measurement report)
 
-With the sandbox on, on macOS arm64: `go test ./...` takes 87–93 s against 86 s
-unsandboxed and fails 12 tests in 5 packages — AF_UNIX `bind` denied, nested
-Seatbelt impossible, setuid `ps` refused, and one env-scrub interaction. On Linux
-arm64 inside a privileged container: 69 s, with the one sandbox-caused failure
-being nested `bwrap` unable to mount `/proc`. `go build`, `go vet` and single
-package tests all succeed.
+Post-remediation, with the sandbox on:
+
+- **macOS arm64:** `go test ./...` passes in 87-91 s inside the sandbox against
+  86 s outside, with **zero failures**. `go build`, `go vet` and single-package
+  tests succeed.
+- **Linux arm64 (privileged container):** `go test ./...` has **zero
+  sandbox-caused failures**. The two failures in that container also fail with
+  the sandbox off, so they are container artifacts, not isolation.
+
+PR #437 recorded 12 failures in 5 packages. Reaching zero took two fixes and two
+classifications:
+
+- **Fixed:** the macOS profile now allows AF_UNIX `bind` for socket paths under a
+  writable dir, so a sandboxed build can create its own test listener. Outbound
+  AF_UNIX and non-loopback IP access stay denied.
+  **This is a profile change and needs its own authorization (see §8).**
+- **Fixed:** the controller-config tests no longer read the operator's ambient
+  `SOP_CONTROLLER_*` environment, which a scrub could split into an invalid pair.
+- **Classified unsupported:** nested OS sandboxing. Seatbelt cannot nest, and
+  nested bubblewrap cannot mount `/proc` under `--unshare-all`. The affected
+  `evaltarget` and `dqharness` tests skip with an explicit reason; production
+  stays fail-closed and never inherits the parent boundary.
+- **Classified unsupported:** the handoff portability fixture needs the process
+  table, which a sandbox refuses (setuid `ps`). It skips when the table is
+  unreadable rather than weakening its liveness check.
+
+Two operational limits remain: a full suite takes about 91 s against the 120 s
+default `CommandTimeout`, and the `$HOME` socket scan refuses a home with more
+than 20 000 entries.
 
 ### The override is not a model-reachable bypass
 
@@ -135,9 +158,11 @@ the audit contract. The notice covers visibility.
   `TestRunCommandIsolationOffKeepsExecCapturedPath`.
 - Tests that exercise `run_command` through `DefaultConfig()` on Darwin/Linux
   will now sandbox; each needs an explicit `IsolateCommands` decision.
-- The 12 in-sandbox incompatibilities are a separate decision: migrate the test,
-  accept the failure, or change policy (for example allowing AF_UNIX `bind`,
-  which is a policy change and is **not** proposed here).
+- The in-sandbox incompatibilities are settled separately: the macOS profile now
+  allows AF_UNIX `bind` under a writable dir (a profile change, item 6 in §8), the
+  nested-sandbox and process-table tests are classified unsupported and skip with
+  a reason, and the controller-config tests no longer read ambient
+  `SOP_CONTROLLER_*`.
 
 ## 5. Acceptance criteria
 
@@ -151,8 +176,8 @@ the audit contract. The notice covers visibility.
 4. The chosen unsupported-platform behavior is observable and documented.
 5. `TestDarwinIsolationSAFECommandCredentialRead` and
    `TestLinuxIsolationSAFECommandCredentialRead` pass.
-6. `make check` passes outside the sandbox; inside it reports only the documented
-   incompatibility list, or those tests are migrated.
+6. `make check` passes outside the sandbox, and the suite passes inside it with
+   only the documented unsupported-workflow skips.
 7. `gofmt`, `go vet ./...`, `go build ./...` clean.
 
 ## 6. Residual exposure that default-on does not close
@@ -171,6 +196,11 @@ the audit contract. The notice covers visibility.
 - **Every other execution path** — validation commands, scanners, git/gh — stays
   unsandboxed.
 - **Windows** has no sandbox at all.
+- **Host-to-sandbox sockets.** Allowing AF_UNIX `bind` lets a same-user host
+  process dial a socket a sandboxed command created, so the sandbox is no longer
+  a purely one-way listener boundary in that direction. The model cannot create a
+  cooperating host process, and the socket can only exist under a writable dir,
+  but this is a new capability and is recorded rather than claimed as closed.
 
 ## 7. Migration and rollback
 
@@ -193,8 +223,14 @@ The operator is asked to approve exactly this:
 4. Approval to migrate the repository's own tests for default-on, without
    changing any other execution path.
 5. Whether to record the remaining residual exposure in §6 as accepted, in
-   particular the macOS hardlink alias (Option D is Linux-scoped) and the macOS
-   parent-environment read (R4).
+   particular the macOS hardlink alias (Option D is Linux-scoped), the macOS
+   parent-environment read (R4), and the host-to-sandbox socket direction.
+6. The macOS Seatbelt profile rule `(allow network-bind (subpath "<writable dir>"))`
+   added for compatibility. It is scoped to the dirs that were already writable
+   for files, keeps outbound AF_UNIX and non-loopback IP access denied, and is
+   pinned by `TestRunCommandIsolationAllowsOwnUnixSocketOnly` and
+   `TestSeatbeltProfileScopesUnixSocketBind`. Approve or reject it explicitly;
+   rejecting it means keeping the two socket-scan tests as documented skips.
 
-Until 1–5 are recorded, this proposal stays `NEEDS_HUMAN` and the default stays
+Until 1–6 are recorded, this proposal stays `NEEDS_HUMAN` and the default stays
 opt-in.
