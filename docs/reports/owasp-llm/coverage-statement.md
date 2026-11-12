@@ -229,7 +229,8 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 - **Not covered, and why:** rendering in third-party terminals and IDEs,
   persisted Markdown, and Slack unfurl are outside SOP. A plain `@here` in Slack
   payload text notifies the channel (observed 2026-11-12; the encoder escapes `&`,
-  `<` and `>` only). Neutralizing `@here` and `@channel` is open work under gap 12. The operator observed a
+  `<` and `>` only). Accepted as a documented residual by the operator (2026-11-12): it
+  causes channel noise, not data exposure. See the observation page. The operator observed a
   plain `sop notify test` event reach the intended Slack channel with literal text
   and no unexpected unfurl or mention (PR #412). The fixed test event contains no
   markup, link, or mention-shaped canary, so escaped-markup rendering remains
