@@ -1,7 +1,9 @@
 # Proposal — model-output artifacts persisted verbatim (OWASP gap 7)
 
-**Status:** PROPOSAL, not approved. Option C is implemented (PR #408): `Run.Write` writes
-these files `0600`. Measured exposure is recorded below (2026-11-12). **Gap:** OWASP gap 7 in
+**Status:** Option C is implemented (PR #408): `Run.Write` writes these files `0600`.
+Option A is operator-approved for the reply files (2026-11-12): `Run.WriteReply` redacts
+known-format secrets for `implementation.md`, `fix-N.md`, `result.md`. Unknown formats
+remain (measured below). `diff.patch` stays verbatim. **Gap:** OWASP gap 7 in
 [OWASP-LLM-GAP-PROMPTS.md](OWASP-LLM-GAP-PROMPTS.md). **Decision needed:** how to handle
 the prose artifacts the model writes (see Options).
 
@@ -86,6 +88,21 @@ runs and persisted in the reply artifact. Mode `0600` stops other local users fr
 reading it; it does not change the content. Not measured: `report.md`, `plan.md`,
 `fix-N.md` and `result.md` (same writer, not run), the Linux platform, and a model
 recalling or inventing a secret.
+
+## After option A (2026-11-12)
+
+Same live test, now calling `Run.WriteReply`, with two canaries, three runs each. Artifact:
+[llm02-artifact-after-option-a-darwin.json](../reports/owasp-llm/llm02-artifact-after-option-a-darwin.json), SHA-256 `23ee6284b57151b022e203ed59de6b44598dabac64871cfee72d1afd1a3c7c83`.
+
+| Canary | Echoed by the model | In the artifact |
+| --- | --- | --- |
+| Credential-shaped (`sk-…`) | 2 of 3 | 0 of 3 |
+| Unknown format (before and after) | 3 of 3 | 3 of 3 |
+
+Reading: option A stops a known-format secret from persisting. It does not stop an
+unknown-format value, which is outside the redactor by design. That residual is accepted
+by the operator decision above; C1 unknown-format redaction, when enabled, is the only
+control that addresses it.
 
 ## Decision for the operator
 
