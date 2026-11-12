@@ -7,11 +7,14 @@ section is preserved as history, not as current fact. The compatibility section
 records the post-remediation re-measurement of the failures PR #437 reported.
 
 **Scope:** the OS sandbox that wraps **only** the agent `run_command` tool
-(`internal/toolharness.isolate`). No other execution path is covered here. The
-sandbox default is unchanged: still opt-in
-(`SOP_AGENT_RUN_COMMAND_ISOLATION=1` or `toolharness.Config.IsolateCommands`).
-Changing the default is an operator decision; see
+(`internal/toolharness.isolate`). No other execution path is covered here.
+
+**Default:** isolation is **required by default** on every platform, approved by
+the operator and recorded in
 [PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md](../../plans/PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md).
+`SOP_AGENT_RUN_COMMAND_ISOLATION=off` is the operator override and prints one
+startup notice; a host with no backend refuses the command (Windows B1). The
+measurements below therefore also cover the default path directly.
 
 ## Environment
 
@@ -67,6 +70,21 @@ its disposition.
 | `go vet ./...` inside the sandbox                | one package, exit 0, 1.9 s              | exit 0, 8.7 s              |
 | `go test ./internal/redact/` inside the sandbox  | exit 0, 2.7 s                           | exit 0, 2.3 s              |
 | Module cache                                     | readable read-only, non-fatal stat-cache warning | unchanged         |
+
+### Default path (no configuration, no override)
+
+The production default was exercised directly: `DefaultConfig()`, no
+`IsolateCommands`, the override cleared, and `go test ./...` run through
+`run_command`.
+
+| Platform | Result |
+| --- | --- |
+| macOS arm64 | exit 0, 90.4 s, audit detail `isolate=seatbelt backend=/usr/bin/sandbox-exec`, `scrubbed_env=15` |
+| Linux arm64 (container, bwrap 0.12.0) | exit 0, 66.2 s, audit detail `isolate=bubblewrap backend=/usr/bin/bwrap`, failures identical to the same container's no-sandbox baseline |
+
+The operator override and the B1 refusal are pinned by
+`TestRunCommandIsolationIsOnByDefault`,
+`TestRunCommandIsolationDefaultsToFailClosed` and `TestIsolationPolicyNotice`.
 
 The post-remediation in-sandbox runs (87.3 s and 91.3 s) are within a few seconds
 of the same host's unsandboxed run (86.1 s), so the cold

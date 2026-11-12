@@ -20,6 +20,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/router"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/taskfile"
+	"github.com/imhttran/agentic-sop/internal/toolharness"
 	"github.com/imhttran/agentic-sop/internal/workitem"
 )
 
@@ -194,6 +195,11 @@ func runPrompt(args []string, stdout, stderr io.Writer, d deps) int {
 	if err != nil {
 		fmt.Fprintf(stderr, "prompt: %v\n", err)
 		return exitUsage
+	}
+	// Surface an operator override that disables run_command isolation, so a stale
+	// or inherited value cannot remove the control silently.
+	if notice := toolharness.IsolationPolicyNotice(); notice != "" {
+		fmt.Fprintln(stderr, notice)
 	}
 	// Operator-declared deliverables are validated before any work. A declaration is
 	// only meaningful for the mutating capability: a read-only prompt never changes

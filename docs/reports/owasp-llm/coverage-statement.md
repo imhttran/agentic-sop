@@ -94,13 +94,13 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     an unlisted value in an ordinary file is still outside C1 and outside identity.
   - SAFE `run_command` (`go test` is `SAFE`) can run model-written code that
     reads `$HOME` credential files directly, or `os.Link`s them into the repo.
-    With the opt-in `run_command` sandbox off (the default), this works; with it
-    on, macOS denies these reads and the `ln`, scrubs credential-named and
-    credential-shaped env values, resolves the credential locations named by
+    With the `run_command` sandbox on (the default), macOS denies these reads and
+    the `ln`, scrubs credential-named and credential-shaped env values, resolves
+    the credential locations named by
     `KUBECONFIG`, `DOCKER_CONFIG`, `GNUPGHOME`, `CLOUDSDK_CONFIG`,
     `GH_CONFIG_DIR`, `XDG_CONFIG_HOME`, `CARGO_HOME`, `NPM_CONFIG_USERCONFIG`,
     `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AZURE_CONFIG_DIR`, `NETRC`, and `XDG_CONFIG_HOME/git/credentials`, and denies the
-    `com.apple.SecurityServer` mach lookup so the Keychain is not reachable. The read-deny rule is implemented opt-in (macOS
+    `com.apple.SecurityServer` mach lookup so the Keychain is not reachable. The read-deny rule is now on by default (macOS
     `VERIFIED`, Linux `amd64` `VERIFIED` in PR #384; see
     [llm02-disclosure.md](llm02-disclosure.md) §Sandbox credential-read denial).
     Still open on macOS: the parent process environment is readable with
@@ -131,8 +131,9 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   - The six-item residual-risk decision matrix records that the PR #376 review
     did not approve Option C as proposed, that the operator later approved
     Option C Phase 1 (PR #381, Linux `VERIFIED`; macOS `VERIFIED` in attempt 3),
-    and that a SAFE `run_command`
-    credential read with isolation off is a separate unaccepted residual; it recommends
+    and that a SAFE `run_command` credential read with isolation off is a
+    separate unaccepted residual, now reachable only through the operator
+    override; it recommends
     `INVESTIGATE` for
     unknown-format and artifact risks; `MITIGATE` for notification
     prose; `INVESTIGATE`/`ACCEPT_PROPOSED` for retrieval/handoff; and
@@ -214,26 +215,33 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   `NOT_OBSERVED`. All six Plan 10 manual criteria were accepted, and Plan 10 was
   historicalized `COMPLETE`.
 
-### LLM06 Excessive Agency — covered by policy, with opt-in sandboxing on macOS and Linux
+### LLM06 Excessive Agency — covered by policy, with default-on sandboxing on macOS and Linux
 
 - **Covered:**
   - Root and command policy, with read-only roots.
   - OS isolation on the replay and evaltarget paths, on both macOS and Linux.
   - Since PR #343 (macOS, Seatbelt) and the bubblewrap follow-up (Linux),
-    `run_command` can run inside an opt-in sandbox
-    (`SOP_AGENT_RUN_COMMAND_ISOLATION=1`). In it, outbound network is blocked,
-    writes are limited to the root and temp, `.agent-sdlc/` is denied, and it
-    fails closed when no sandbox is available. Each run gets its own throwaway
-    build cache and the shared module cache is read-only, so one run cannot
-    poison a later run's Go caches.
+    `run_command` runs inside an OS sandbox by default. In it, outbound network is
+    blocked, writes are limited to the root and temp, `.agent-sdlc/` is denied, and
+    it fails closed when no sandbox is available. Each run gets its own throwaway
+    build cache and the shared module cache is read-only, so one run cannot poison
+    a later run's Go caches.
+  - The operator override `SOP_AGENT_RUN_COMMAND_ISOLATION=off` (also `0`, `false`,
+    `no`) is the only way to run commands with policy checks alone; `sop run` and
+    `sop prompt` print a startup notice when it is set. The override is
+    operator-scoped: a model cannot set its own parent's environment.
+  - A host with no backend refuses `run_command` rather than running it
+    unsandboxed (Windows B1, selected by the operator). This is `VERIFIED` by
+    `TestRunCommandIsolationDefaultsToFailClosed` and
+    `TestRunCommandIsolationIsOnByDefault`.
 
   Evidence: [llm03-agency.md](llm03-agency.md),
   [seatbelt-evidence.md](../security-shift-left/seatbelt-evidence.md#run_command-opt-in-sandbox-llm03).
 
 - **Not covered, and why:**
-  - The sandbox is off by default, so normal agent execution is policy-only and
-    the LLM02 R3 credential read is live. Default-on feasibility is measured and
-    the decision is `NEEDS_HUMAN`:
+  - Windows has no backend, so `run_command` is unavailable there under B1. The
+    agent's build/test loop and any workflow that shells out for validation cannot
+    run on Windows. Decision and impact:
     [PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md](../../plans/PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md),
     [llm06-sandbox-default-measurements.md](llm06-sandbox-default-measurements.md).
   - The sandbox wraps `run_command` only. Validation commands
@@ -303,8 +311,9 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   [llm07-misinformation.md](llm07-misinformation.md).
 - **Not covered, and why:** SOP checks that decisions rest on real evidence. It
   does not check that model prose is factually correct, which cannot be decided
-  mechanically. A `run_command` subprocess can write SOP state unless the
-  opt-in sandbox is on (macOS and Linux)
+  mechanically. With isolation on by default, a `run_command` subprocess cannot
+  write SOP state (`TestSubprocessStateWriteIsDeniedByDefault`); the exposure
+  returns only through the operator override
   ([llm07-state-write-detection-phase1.md](llm07-state-write-detection-phase1.md)).
   Live-model and Linux runs are `NOT_RUN`.
 
@@ -348,9 +357,10 @@ These cannot be closed by code in this repository:
 3. The macOS live notification and retrieval sinks (`NOT_RUN`), and a second
    live RAG deployment. The Linux sinks have one run each; the notification run
    covers a local receiver only.
-4. Whether to enable the `run_command` sandbox by default on macOS and Linux
-   (OWASP gap 13), the unsupported-platform behavior, and whether to accept the
-   macOS hardlink-alias and parent-environment residuals. Proposal:
+4. Disposing of the residual exposures that the default-on decision did **not**
+   settle: the macOS `kern.procargs2` parent-environment read (R4), the Option-D
+   pre-existing hardlink alias, and the host-to-sandbox socket direction. The
+   policy itself is decided:
    [PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md](../../plans/PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md).
 
 ## Code follow-ups worth doing

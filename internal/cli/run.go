@@ -34,6 +34,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/security"
 	"github.com/imhttran/agentic-sop/internal/taskfile"
 	"github.com/imhttran/agentic-sop/internal/testrunner"
+	"github.com/imhttran/agentic-sop/internal/toolharness"
 	"github.com/imhttran/agentic-sop/internal/validate"
 	"github.com/imhttran/agentic-sop/internal/verifcache"
 )
@@ -52,6 +53,11 @@ func runRun(args []string, stdout, stderr io.Writer, d deps) int {
 		return exitUsage
 	}
 	d.modelClass = opts.modelClass
+	// Surface an operator override that disables run_command isolation, so a stale
+	// or inherited value cannot remove the control silently.
+	if notice := toolharness.IsolationPolicyNotice(); notice != "" {
+		fmt.Fprintln(stderr, notice)
+	}
 	var err error
 	d.taskInputs, err = loadTaskInputs()
 	if err != nil {

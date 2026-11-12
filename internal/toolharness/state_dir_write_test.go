@@ -61,12 +61,13 @@ func TestStateDirectoryAliasesAreRecognized(t *testing.T) {
 	}
 }
 
-// TestSubprocessStateWriteIsOutsideFileToolBoundary records the actual boundary:
-// the file tools refuse .agent-sdlc, but a SAFE command's own subprocess is not
-// sandboxed and can still write there. This keeps the report from claiming
-// comprehensive protection against model-authored state; a future subprocess
-// isolation change should update this test and the report together.
+// TestSubprocessStateWriteIsOutsideFileToolBoundary records the boundary when an
+// operator disables isolation: the file tools refuse .agent-sdlc, but a SAFE
+// command's own subprocess can still write there. Isolation is on by default, so
+// the override must be set explicitly; TestSubprocessStateWriteIsDeniedByDefault
+// pins the default.
 func TestSubprocessStateWriteIsOutsideFileToolBoundary(t *testing.T) {
+	t.Setenv(IsolationEnv, "off")
 	root := t.TempDir()
 	writeRepoFile(t, root, "go.mod", "module example.com/stateprobe\n\ngo 1.27\n")
 	writeRepoFile(t, root, "probe_test.go", `package stateprobe
@@ -95,6 +96,41 @@ func TestWriteState(t *testing.T) {
 		t.Fatalf("expected the subprocess write to exist (current boundary): %v", err)
 	}
 	t.Log("verified limitation: run_command subprocesses are outside the file-tool state-write boundary")
+}
+
+// TestSubprocessStateWriteIsDeniedByDefault pins the default boundary: with
+// isolation on, a SAFE command's own subprocess cannot write SOP state, so a
+// model-authored artifact cannot become evidence through run_command.
+func TestSubprocessStateWriteIsDeniedByDefault(t *testing.T) {
+	t.Setenv(IsolationEnv, "")
+	needSandbox(t)
+	root := t.TempDir()
+	writeRepoFile(t, root, ".agent-sdlc/state.db", "state")
+	writeRepoFile(t, root, "go.mod", "module example.com/stateprobe\n\ngo 1.27\n")
+	writeRepoFile(t, root, "probe_test.go", `package stateprobe
+
+import (
+	"os"
+	"testing"
+)
+
+func TestWriteState(t *testing.T) {
+	if err := os.MkdirAll(".agent-sdlc", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(".agent-sdlc/subprocess-probe.txt", []byte("written"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+`)
+
+	h := newTestHarness(t, root, nil)
+	if _, err := h.Run(context.Background(), ToolRunCommand, map[string]any{"command": "go test ./..."}); err != nil {
+		t.Fatalf("go test did not run: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".agent-sdlc", "subprocess-probe.txt")); err == nil {
+		t.Fatal("a sandboxed subprocess wrote SOP state")
+	}
 }
 
 // TestStateDirectoryIsWriteProtectedForModelTools pins the misinformation

@@ -787,10 +787,11 @@ A+B policy. "Policy-blocked" means a fix needs a separate operator decision.
 
 ### Sandbox credential-read denial (2026-11-10)
 
-The opt-in `run_command` sandbox (`SOP_AGENT_RUN_COMMAND_ISOLATION=1` or
-`Config.IsolateCommands`) now also denies reads of a fixed set of home-relative
-credential locations, so a sandboxed command cannot print, copy, or hardlink
-them. This is sandbox-only: the default (isolation off) is unchanged and no new
+The `run_command` sandbox (`Config.IsolateCommands`, or the environment override)
+also denies reads of a fixed set of home-relative credential locations, so a
+sandboxed command cannot print, copy, or hardlink them. This is sandbox-only: the
+denial applies whenever isolation runs, which is now the default; the operator
+override `SOP_AGENT_RUN_COMMAND_ISOLATION=off` removes it and no other
 configuration option exists. The locations reuse the `internal/sensitivepath`
 names (directories `.aws`, `.ssh`, `.kube`, `.gnupg`; files `.netrc`,
 `.git-credentials`, `.npmrc`) and add only `.config/gh`, `.config/gcloud`,
