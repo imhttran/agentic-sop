@@ -436,7 +436,7 @@ func runPromptReadOnly(dir string, cfg config.Config, d deps, wi workitem.WorkIt
 		return failPrompt(rn, stderr, fmt.Errorf("prompt: %s: %w", wi.Capability, err))
 	}
 
-	_ = rn.Write("result.md", content)
+	_ = rn.WriteReply("result.md", content)
 	writePromptRoutingArtifact(rn, wi, tr, sel)
 
 	doc := promptResultDoc{
