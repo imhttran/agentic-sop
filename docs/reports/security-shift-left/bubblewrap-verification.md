@@ -114,8 +114,9 @@ Limits:
   sandbox (verified 2026-11-10). Path-based masking does not close inode
   aliases. This bounded residual is
   `RISK_ACCEPTED — SUBPROCESS HARDLINK ALIAS (BOUNDED)`; it is not fixed.
-- Isolation is off by default. With it off, the credential read succeeds and
-  A+B redaction is the only model-bound control.
+- Isolation is required by default since the gap 13 decision. Under the operator
+  override (`SOP_AGENT_RUN_COMMAND_ISOLATION=off`) the credential read succeeds
+  and A+B redaction is the only model-bound control.
 
 ### Credential read-deny — Linux amd64 verification (2026-11-10)
 

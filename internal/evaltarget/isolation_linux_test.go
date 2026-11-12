@@ -106,9 +106,7 @@ func hostDialable(host, port string) bool {
 // environment variables are scrubbed. Every denial that can have an
 // unsandboxed positive control is paired with one.
 func TestLiveIsolationLinux(t *testing.T) {
-	if !IsolationAvailable() {
-		t.Skip("bwrap is not available")
-	}
+	requireSandbox(t)
 	nc, err := exec.LookPath("nc")
 	if err != nil {
 		t.Skip("nc is not available")
@@ -204,9 +202,7 @@ func TestLiveIsolationLinux(t *testing.T) {
 // not leave the sandboxed shell or its descendant behind. The marker appears in
 // both command lines, so a survivor is detected by scanning /proc on the host.
 func TestLiveIsolationLinuxCancelsProcessGroup(t *testing.T) {
-	if !IsolationAvailable() {
-		t.Skip("bwrap is not available")
-	}
+	requireSandbox(t)
 	sh, err := exec.LookPath("sh")
 	if err != nil {
 		t.Skip("sh is not available")
@@ -301,6 +297,8 @@ func TestProbeEndpointTimesOut(t *testing.T) {
 // on the same case root do not reuse a socket path. Without unique paths, closing
 // an earlier listener can unlink the replacement listener's socket.
 func TestLiveIsolationLinuxUsesUniqueSocketPaths(t *testing.T) {
+	// This test builds live-isolation commands without starting a sandbox, so it
+	// only needs the backend to exist; the start probe would over-skip it.
 	if !IsolationAvailable() {
 		t.Skip("bwrap is not available")
 	}

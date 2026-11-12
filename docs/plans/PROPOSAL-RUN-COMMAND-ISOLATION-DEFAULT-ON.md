@@ -1,8 +1,20 @@
 # Proposal: default-on OS sandbox for `run_command` (OWASP gap 13)
 
-**Status: `NEEDS_HUMAN` — proposal only.** Nothing here is implemented. The
-sandbox default is unchanged (opt-in). Changing it is a security-policy change
-and requires the operator authorization listed at the end.
+**Status: `APPROVED` / `IMPLEMENTED`.** The operator authorized the policy
+verbatim: "Approve macOS/Linux default-on isolation with an operator-controlled
+override, subject to documented compatibility constraints. Select Windows B1
+(fail closed), with its compatibility impact explicitly acknowledged."
+
+Implemented as: isolation is required by default on every platform, the
+`SOP_AGENT_RUN_COMMAND_ISOLATION` override accepts `off`/`0`/`false`/`no` with a
+startup notice, and a host with no backend refuses `run_command` (B1) instead of
+running it unsandboxed. `Config.IsolateCommands` remains the programmatic opt-in
+and wins over the override. Verification is recorded in the
+[measurement report](../reports/owasp-llm/llm06-sandbox-default-measurements.md).
+
+Not accepted by this decision: the residual exposures in section 6. R3 moves to
+`MITIGATED` for the direct-read vector only; R4 and the Option-D hardlink alias
+stay open.
 
 Related: [PROPOSAL-RUN-COMMAND-ISOLATION.md](PROPOSAL-RUN-COMMAND-ISOLATION.md)
 (the original opt-in design, implemented in PRs #343, #354, #356),
@@ -55,12 +67,35 @@ and is denied with isolation on
 
 ### Compatibility evidence (from the measurement report)
 
-With the sandbox on, on macOS arm64: `go test ./...` takes 87–93 s against 86 s
-unsandboxed and fails 12 tests in 5 packages — AF_UNIX `bind` denied, nested
-Seatbelt impossible, setuid `ps` refused, and one env-scrub interaction. On Linux
-arm64 inside a privileged container: 69 s, with the one sandbox-caused failure
-being nested `bwrap` unable to mount `/proc`. `go build`, `go vet` and single
-package tests all succeed.
+Post-remediation, with the sandbox on:
+
+- **macOS arm64:** `go test ./...` passes in 87-91 s inside the sandbox against
+  86 s outside, with **zero failures**. `go build`, `go vet` and single-package
+  tests succeed.
+- **Linux arm64 (privileged container):** `go test ./...` has **zero
+  sandbox-caused failures**. The two failures in that container also fail with
+  the sandbox off, so they are container artifacts, not isolation.
+
+PR #437 recorded 12 failures in 5 packages. Reaching zero took two fixes and two
+classifications:
+
+- **Fixed:** the macOS profile now allows AF_UNIX `bind` for socket paths under a
+  writable dir, so a sandboxed build can create its own test listener. Outbound
+  AF_UNIX and non-loopback IP access stay denied.
+  **This is a profile change and needs its own authorization (see §8).**
+- **Fixed:** the controller-config tests no longer read the operator's ambient
+  `SOP_CONTROLLER_*` environment, which a scrub could split into an invalid pair.
+- **Classified unsupported:** nested OS sandboxing. Seatbelt cannot nest, and
+  nested bubblewrap cannot mount `/proc` under `--unshare-all`. The affected
+  `evaltarget` and `dqharness` tests skip with an explicit reason; production
+  stays fail-closed and never inherits the parent boundary.
+- **Classified unsupported:** the handoff portability fixture needs the process
+  table, which a sandbox refuses (setuid `ps`). It skips when the table is
+  unreadable rather than weakening its liveness check.
+
+Two operational limits remain: a full suite takes about 91 s against the 120 s
+default `CommandTimeout`, and the `$HOME` socket scan refuses a home with more
+than 20 000 entries.
 
 ### The override is not a model-reachable bypass
 
@@ -77,11 +112,14 @@ control.
 1. **Default on where a backend exists** (Darwin and Linux).
 2. **Explicit operator override**: `SOP_AGENT_RUN_COMMAND_ISOLATION=off`
    (also `0`, `false`, `no`), printed once at startup.
-3. **Unsupported platforms** (currently Windows): sub-choice for the operator —
-   **B1** deny `run_command` uniformly, or **B2** keep today's policy-only
-   behavior with a startup notice. B2 is recommended because
-   `PLAN-Phase-5.6-Windows-Distribution.md` ships a Windows agent and B1 removes
-   a documented capability there; B1 is the stricter reading of default-deny.
+3. **Unsupported platforms** (currently Windows): **B1 — deny `run_command`
+   uniformly.** Selected by the operator: a host with no backend fails closed.
+   The compatibility impact, acknowledged with the decision: on Windows every
+   `run_command` is refused with `run_command isolation unavailable`, so the
+   agent's build/test loop and any validation that relies on shelling out are
+   unavailable there until a Windows backend exists. Operators cannot work around
+   it except by running the command outside SOP. The rejected alternative was B2
+   (policy-only on Windows with a startup notice).
 
 Option A is rejected: without an escape hatch, one unavailable backend turns a
 security improvement into an availability outage. Option C is rejected as the
@@ -89,55 +127,78 @@ primary answer because the exposure stays live by default and documentation is
 not mitigation — but it remains the correct answer if the operator declines to
 change the default, in which case R3 is a recorded accepted residual.
 
-## 4. Exact change required (not implemented)
+## 4. Exact change implemented
 
 **`internal/toolharness/isolation.go`**
 
 ```go
-// IsolationDefaultOn is the platform default when the override is unset. A
-// backend only exists on darwin and linux.
-func IsolationDefaultOn() bool {
-	return runtime.GOOS == "darwin" || runtime.GOOS == "linux"
+func isolationOverrideOff() (bool, string) {
+	raw := strings.TrimSpace(os.Getenv(IsolationEnv))
+	switch strings.ToLower(raw) {
+	case "0", "false", "no", "off":
+		return true, raw
+	}
+	return false, raw
 }
 
 func (h *Harness) isolationRequested() bool {
 	if h.cfg.IsolateCommands {
 		return true
 	}
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(IsolationEnv))) {
-	case "1", "true", "yes", "on":
-		return true
-	case "0", "false", "no", "off":
+	if off, _ := isolationOverrideOff(); off {
 		return false
 	}
-	return IsolationDefaultOn()
+	return true
 }
 ```
 
+The default is `true` on **every** platform. With no override, Windows reaches
+`sandboxArgv`, which returns `errIsolationUnavailable`, and nothing executes.
+However, PR #441 merged with an unresolved P2: the approved `off` override is
+platform-agnostic, so on Windows it makes `isolationRequested` false and bypasses
+`sandboxArgv` entirely. That configuration runs through the policy-only path and
+does not satisfy B1. The fix must restrict the override to supported backends and
+add an override-set Windows regression test.
+
 Do **not** probe for the backend here with `exec.LookPath`: a missing `bwrap`
-must produce `errIsolationUnavailable` (fail closed), not "off".
+must produce `errIsolationUnavailable` (fail closed), not "off". An unrecognized
+override value also leaves the default in place.
 
 **Precedence:** an explicit `Config.IsolateCommands=true` still wins, so a
 programmatic opt-in cannot be turned off by the environment. The override only
 applies to callers that leave the bool false, which today is the production
 `ollamaagent` tool harness.
 
-**`internal/cli`**: one startup notice when the resolved value is off on a
-platform with a backend, and one on an unsupported platform under B2.
+**`internal/cli`**: `sop run` and `sop prompt` print
+`toolharness.IsolationPolicyNotice()` once at startup when the environment
+disables isolation, so a stale or inherited value cannot remove the control
+silently. On an unsupported platform the refusal itself is the diagnostic
+(`run_command isolation unavailable: no sandbox backend on windows`); B1 has no
+fallback notice because there is no policy-only mode to announce.
 
 **No audit-field change.** `TestRunCommandIsolationOffKeepsExecCapturedPath`
 asserts an empty audit detail when isolation is off; adding a detail would change
 the audit contract. The notice covers visibility.
 
-**Test migration** (required, and the bulk of the work):
+**Test migration** (done with the change):
 
-- Tests that mean "off" must set `IsolationEnv=off` rather than unset it, e.g.
-  `TestRunCommandIsolationOffKeepsExecCapturedPath`.
-- Tests that exercise `run_command` through `DefaultConfig()` on Darwin/Linux
-  will now sandbox; each needs an explicit `IsolateCommands` decision.
-- The 12 in-sandbox incompatibilities are a separate decision: migrate the test,
-  accept the failure, or change policy (for example allowing AF_UNIX `bind`,
-  which is a policy change and is **not** proposed here).
+- Tests that mean "off" set `IsolationEnv=off` rather than unset it, e.g.
+  `TestRunCommandIsolationOffKeepsExecCapturedPath` and
+  `TestSubprocessStateWriteIsOutsideFileToolBoundary`.
+- `internal/toolharness` and `internal/ollamaagent` set the override in
+  `TestMain`, so their command-policy and agent-loop tests keep their coverage on
+  hosts without a backend (CI has no `bwrap`) instead of turning every command
+  into a denial.
+- `TestRunCommandIsolationIsOnByDefault` and
+  `TestRunCommandIsolationDefaultsToFailClosed` clear the override and pin the
+  default and the B1 refusal respectively.
+- `TestSubprocessStateWriteIsDeniedByDefault` pins that a SAFE command can no
+  longer write `.agent-sdlc` under the default.
+- The in-sandbox incompatibilities are settled separately: the macOS profile now
+  allows AF_UNIX `bind` under a writable dir (a profile change, item 6 in §8), the
+  nested-sandbox and process-table tests are classified unsupported and skip with
+  a reason, and the controller-config tests no longer read ambient
+  `SOP_CONTROLLER_*`.
 
 ## 5. Acceptance criteria
 
@@ -151,8 +212,8 @@ the audit contract. The notice covers visibility.
 4. The chosen unsupported-platform behavior is observable and documented.
 5. `TestDarwinIsolationSAFECommandCredentialRead` and
    `TestLinuxIsolationSAFECommandCredentialRead` pass.
-6. `make check` passes outside the sandbox; inside it reports only the documented
-   incompatibility list, or those tests are migrated.
+6. `make check` passes outside the sandbox, and the suite passes inside it with
+   only the documented unsupported-workflow skips.
 7. `gofmt`, `go vet ./...`, `go build ./...` clean.
 
 ## 6. Residual exposure that default-on does not close
@@ -171,6 +232,11 @@ the audit contract. The notice covers visibility.
 - **Every other execution path** — validation commands, scanners, git/gh — stays
   unsandboxed.
 - **Windows** has no sandbox at all.
+- **Host-to-sandbox sockets.** Allowing AF_UNIX `bind` lets a same-user host
+  process dial a socket a sandboxed command created, so the sandbox is no longer
+  a purely one-way listener boundary in that direction. The model cannot create a
+  cooperating host process, and the socket can only exist under a writable dir,
+  but this is a new capability and is recorded rather than claimed as closed.
 
 ## 7. Migration and rollback
 
@@ -181,20 +247,48 @@ start will see `run_command` denials with an explicit diagnostic and can opt out
 Rollback: revert `isolationRequested`/`IsolationDefaultOn` and the notice; one
 release note. No state, schema, or artifact change.
 
-## 8. Authorization requested
+## 8. Decision recorded
 
-The operator is asked to approve exactly this:
+The operator's authorization, quoted verbatim:
 
-1. Default `run_command` isolation **on** for Darwin and Linux, off elsewhere.
-2. `SOP_AGENT_RUN_COMMAND_ISOLATION` gains `on`/`off` spellings, and `off` is a
-   supported operator override with a startup notice.
-3. Unsupported-platform behavior: **B2** (policy-only plus notice) or **B1**
-   (deny) — pick one.
-4. Approval to migrate the repository's own tests for default-on, without
-   changing any other execution path.
-5. Whether to record the remaining residual exposure in §6 as accepted, in
-   particular the macOS hardlink alias (Option D is Linux-scoped) and the macOS
-   parent-environment read (R4).
+> Default-on policy: Approve macOS/Linux default-on isolation with an
+> operator-controlled override, subject to documented compatibility constraints.
+> Select Windows B1 (fail closed), with its compatibility impact explicitly
+> acknowledged.
 
-Until 1–5 are recorded, this proposal stays `NEEDS_HUMAN` and the default stays
-opt-in.
+What that settles, and what it does not:
+
+| Item | Status |
+| --- | --- |
+| 1. Default `run_command` isolation on | **Approved; implemented** as required-by-default on every platform. |
+| 2. `SOP_AGENT_RUN_COMMAND_ISOLATION=off` override with a startup notice | **Approved; implemented** (`off`, `0`, `false`, `no`; `sop run` and `sop prompt` print one notice). |
+| 3. Unsupported-platform behavior | **B1 selected but not fully enforced**: default execution refuses without a backend, while the `off` override currently bypasses refusal on Windows (unresolved PR #441 P2). |
+| 4. Migrating the repository's own tests | **Approved; completed** without changing any other execution path. |
+| 5. Accepting the §6 residuals | **Not decided.** The decision covers the policy, not the residual risks. R4 and the Option-D hardlink alias stay open, and the host-to-sandbox socket direction stays recorded. |
+| 6. The Seatbelt `network-bind` profile rule | **Submitted for approval with the change**; the operator merged it. It remains the scoped rule described in §6's final bullet. |
+
+### Windows B1 compatibility impact (acknowledged)
+
+On Windows, `run_command` is refused with `run_command isolation unavailable:
+no sandbox backend on windows` only when the `off` override is absent. With
+`SOP_AGENT_RUN_COMMAND_ISOLATION=off` (or `0`/`false`/`no`), the current code
+executes through the policy-only path. This is an unresolved defect against the
+selected B1 policy. Intended consequences after the fix:
+
+- The agent's build/test loop is unavailable: `go test`, `go build` and `go vet`
+  cannot run through `run_command`.
+- Any SOP workflow that shells out for validation is unavailable there.
+- The only way to run such a command is outside SOP. There is no policy-only mode
+  and no automatic fallback.
+- Read-only and mutating file tools are unaffected; only subprocess execution is.
+
+This is the fail-closed trade the decision selects. It is reversible in one line
+(`isolationRequested`) if a Windows backend is added or B2 is preferred later.
+
+### Remaining operator actions
+
+- Dispose of R4 (macOS `kern.procargs2` parent-environment read) and the Option-D
+  hardlink alias, plus the host-to-sandbox socket direction.
+- Record this decision in decision memory if a durable ledger entry is wanted;
+  this document is the in-repository record, and no decision-memory entry is
+  created by the implementing change.

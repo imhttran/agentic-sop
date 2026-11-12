@@ -61,7 +61,7 @@ func sandboxedOutput(t *testing.T, root, script string) (string, error) {
 }
 
 func TestRunCommandIsolationOffKeepsExecCapturedPath(t *testing.T) {
-	t.Setenv(IsolationEnv, "")
+	t.Setenv(IsolationEnv, "off")
 	log := NewAuditLog(0)
 	h := New(t.TempDir(), DefaultConfig(), log)
 	if _, err := h.Run(context.Background(), ToolRunCommand, map[string]any{"command": "go list ./..."}); err != nil {
@@ -69,6 +69,60 @@ func TestRunCommandIsolationOffKeepsExecCapturedPath(t *testing.T) {
 	}
 	if d := log.Records()[0].Detail; d != "" {
 		t.Fatalf("isolation off: audit detail = %q, want empty", d)
+	}
+}
+
+// The startup notice exists so an operator can see that the environment removed
+// the control. An unrecognized value must not disable isolation.
+func TestIsolationPolicyNotice(t *testing.T) {
+	t.Setenv(IsolationEnv, "")
+	if got := IsolationPolicyNotice(); got != "" {
+		t.Fatalf("notice with the default in place = %q, want empty", got)
+	}
+	for _, v := range []string{"off", "0", "false", "no", "OFF"} {
+		t.Setenv(IsolationEnv, v)
+		got := IsolationPolicyNotice()
+		if !strings.Contains(got, IsolationEnv) || !strings.Contains(got, "policy checks only") {
+			t.Fatalf("notice for %q = %q, want it to name the variable and the effect", v, got)
+		}
+	}
+	for _, v := range []string{"bogus", "maybe", "2"} {
+		t.Setenv(IsolationEnv, v)
+		if got := IsolationPolicyNotice(); got != "" {
+			t.Fatalf("an unrecognized value %q produced a notice: %q", v, got)
+		}
+	}
+}
+
+// Isolation is required by default: with no configuration and no override, a
+// command runs inside the backend the platform provides.
+func TestRunCommandIsolationIsOnByDefault(t *testing.T) {
+	t.Setenv(IsolationEnv, "")
+	needSandbox(t)
+	log := NewAuditLog(0)
+	h := New(t.TempDir(), DefaultConfig(), log)
+	out, err := h.Run(context.Background(), ToolRunCommand, map[string]any{"command": "go list ./..."})
+	if err != nil {
+		t.Fatalf("the default run_command did not execute: %v (%s)", err, out)
+	}
+	if d := log.Records()[0].Detail; !strings.Contains(d, "isolate=") {
+		t.Fatalf("the default run was not sandboxed: audit detail = %q", d)
+	}
+}
+
+// Windows B1: a platform with no backend denies the command instead of running it
+// unsandboxed. The empty PATH reproduces the unsupported-platform case on any host.
+func TestRunCommandIsolationDefaultsToFailClosed(t *testing.T) {
+	t.Setenv(IsolationEnv, "")
+	t.Setenv("PATH", t.TempDir()) // no sandbox backend
+	log := NewAuditLog(0)
+	h := New(t.TempDir(), DefaultConfig(), log)
+	_, err := h.Run(context.Background(), ToolRunCommand, map[string]any{"command": "go list ./..."})
+	if !errors.Is(err, errIsolationUnavailable) {
+		t.Fatalf("err = %v, want errIsolationUnavailable", err)
+	}
+	if r := log.Records()[0]; r.Action != ActionDeny {
+		t.Fatalf("audit action = %s, want deny", r.Action)
 	}
 }
 

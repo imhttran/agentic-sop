@@ -34,9 +34,7 @@ func probeEndpointDetail() string { return "tcp 127.0.0.1:11434" }
 // command can write inside its case root but cannot write to the ordinary
 // workspace or read its SOP state.
 func TestDarwinIsolationBlocksOrdinaryWorkspace(t *testing.T) {
-	if !IsolationAvailable() {
-		t.Skip("sandbox-exec is not available")
-	}
+	requireSandbox(t)
 	sh, err := exec.LookPath("sh")
 	if err != nil {
 		t.Skip("sh is not available")
@@ -92,9 +90,7 @@ func TestDarwinIsolationBlocksOrdinaryWorkspace(t *testing.T) {
 // TestDarwinIsolationBlocksNetwork proves the sandbox cannot open a network
 // connection to a listener that the unsandboxed process can reach.
 func TestDarwinIsolationBlocksNetwork(t *testing.T) {
-	if !IsolationAvailable() {
-		t.Skip("sandbox-exec is not available")
-	}
+	requireSandbox(t)
 	nc, err := exec.LookPath("nc")
 	if err != nil {
 		t.Skip("nc is not available")
@@ -126,9 +122,7 @@ func TestDarwinIsolationBlocksNetwork(t *testing.T) {
 // TestDarwinIsolationStripsSecrets proves a production secret in the parent
 // environment is not visible to the sandboxed child.
 func TestDarwinIsolationStripsSecrets(t *testing.T) {
-	if !IsolationAvailable() {
-		t.Skip("sandbox-exec is not available")
-	}
+	requireSandbox(t)
 	sh, err := exec.LookPath("sh")
 	if err != nil {
 		t.Skip("sh is not available")

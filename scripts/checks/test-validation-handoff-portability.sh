@@ -238,7 +238,14 @@ sleep 60 &
 CANARY_PID=$!
 disown "$CANARY_PID" 2>/dev/null || true
 sleep 0.2
-CANARY_CMD="$(ps -p "$CANARY_PID" -o command= | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
+# The manifest records the command we just launched. A process-table read is
+# avoided on purpose: /bin/ps is setuid and an OS sandbox rightly refuses to
+# execute setuid binaries, so this script also runs unchanged when it is invoked
+# from inside a sandbox.
+if ! kill -0 "$CANARY_PID" 2>/dev/null; then
+  fail "candidate process did not start"
+fi
+CANARY_CMD="sleep 60"
 write_manifest candidate-running "$CANARY_PID" "$CANARY_CMD"
 
 if run_handoff --format json --agent claude --capabilities filesystem,process_execution \

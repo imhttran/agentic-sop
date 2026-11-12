@@ -108,10 +108,14 @@ is covered by the dqharness test above.
 Implements [PROPOSAL-RUN-COMMAND-ISOLATION](../../plans/PROPOSAL-RUN-COMMAND-ISOLATION.md)
 for macOS. `SOP_AGENT_RUN_COMMAND_ISOLATION=1` (or `Config.IsolateCommands`)
 makes `toolharness` wrap each `run_command` in `sandbox-exec` after the command
-policy check. Off by default.
+policy check. Required by default since the gap 13 decision; the operator override
+is `SOP_AGENT_RUN_COMMAND_ISOLATION=off`.
 
 - **Profile** (`internal/toolharness/isolation.go`): allow-default; `deny network*`
-  except loopback bind/inbound and loopback remote (host Unix sockets are denied); `deny file-write*` except the
+  except loopback bind/inbound and loopback remote (host Unix sockets are denied);
+  `network-bind` is additionally allowed for socket paths under the writable dirs,
+  so a sandboxed build can create its own Unix socket while outbound AF_UNIX stays
+  denied (added after PR #437); `deny file-write*` except the
   canonical root, TMPDIR, `/private/tmp`, `/private/var/folders`, and `/dev/null`
   (each run's `GOCACHE` is a fresh temp dir; the module cache is read-only); a final
   `deny file-write*` on `<root>/.agent-sdlc` (a later deny overrides the root allow).
