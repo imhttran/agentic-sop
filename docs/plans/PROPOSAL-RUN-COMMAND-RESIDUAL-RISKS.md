@@ -9,7 +9,22 @@ evidence for each.
   2026-11-12. It is *not* accepted, and no separate control is authorized.
 - **R4** has a recorded disposition: known limit for the opt-in sandbox (gap 6,
   PR #447). It is *not* accepted, and none of the measured options is implemented.
-- **H2S** has no recorded decision.
+- **H2S** has no recorded decision and needs one.
+
+## Tracking matrix
+
+Owner is the accountable party: the operator holds risk decisions; the repository
+owns the controls. "Recorded, not accepted" means the exposure is written down as
+a bounded limit; it is **not** a risk acceptance.
+
+| ID | Exposure | Owner | Status | Decision record | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| **R2** | Pre-existing hardlink alias to a credential | Operator (risk); `internal/toolharness/identity.go` (control) | `RECORDED` — bounded residual, not accepted | Gap 5 option 1, 2026-11-12; Option D `RISK_ACCEPTED — SUBPROCESS HARDLINK ALIAS (BOUNDED)` for the Linux subprocess case | `TestLinuxIsolationPreExistingCredentialHardlink`, `TestDarwinIsolationSAFECommandCredentialRead`, `TestRunCommandIsolationDeniesCredentialHardlink` |
+| **R4** | macOS parent launch-time environment (`kern.procargs2`) | Operator (risk); `internal/toolharness/isolation.go` (control) | `RECORDED` — known limit, not accepted | Gap 6, PR #447 | `seatbelt-evidence.md` launch-chain options; measurement report |
+| **H2S** | Host-to-sandbox Unix socket connectivity | Operator (decision pending); `internal/toolharness/isolation.go` profile rule | `OPEN` — awaiting operator decision | none | Measured on both backends; reverse direction pinned by `TestRunCommandIsolationAllowsOwnUnixSocketOnly` |
+| **OVR** | Authorized operator `off` override restores policy-only execution on macOS/Linux | Operator (explicit action) | `AUTHORIZED BY POLICY` — exposure tracked here so it is never read as enforced isolation | Default-on approval, PR #441 §8 | `TestIsolationPolicyNotice`, `TestRunCommandIsolationOffKeepsExecCapturedPath`; `sop run` / `sop prompt` notice |
+| **VC** | Verification coverage gaps | SOP maintainers | `PARTIAL` — Linux host and Linux `amd64` are `NOT_RUN` | none needed (evidence gap, not a risk decision) | Platform table below |
+| **OPS** | Operational limits: 120 s default `CommandTimeout` against a ~90 s in-sandbox suite; 20 000-entry `$HOME` scan bound that refuses the command | SOP maintainers | `DOCUMENTED` — not a risk decision | none | Measurement report |
 
 Related:
 [PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md](PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md)
@@ -162,13 +177,56 @@ such a process: it can only run sandboxed commands. A same-UID host process is
 already inside the operator's trust boundary for that account. There is therefore
 no practical new credential-disclosure path, and no model-reachable effect path.
 
-**Recommended disposition.** Record as a bounded architectural property of the
-`network-bind` rule, not a credential-disclosure risk. No mitigation is proposed;
-reverting the rule would restore the socket incompatibility recorded in PR #437.
+**Options.**
 
-**Operator decision.** Confirm the property is recorded as bounded (no action), or
-authorize reverting the `network-bind` rule and accepting the two socket-scan
-tests as skips.
+- **Option A - retain the scoped `network-bind` rule.** Record host-to-sandbox
+  connectivity as a bounded architectural property. This does **not** accept a
+  new credential-disclosure risk; it notes that the direction exists because a
+  sandboxed build must be able to listen, which Linux already allows.
+- **Option B - remove the `(allow network-bind (subpath "<writable dir>"))` rule.**
+  Restores the pre-#437 behaviour, in which macOS denies AF_UNIX bind entirely.
+  Legitimate workflows that would stop working: any sandboxed test or build that
+  binds its own Unix socket - the repository's own `TestHomeSocketsAreMasked` and
+  `TestHomeSymlinkToDirectoryIsFollowed`, local caches and dev servers that use a
+  Unix socket, and the unix-socket cases in `dqharness`/`evaltarget` boundary
+  suites. Those tests would have to become documented skips, and users on macOS
+  would lose a capability Linux keeps.
+
+**Recommendation: Option A.** The exposure is not model-reachable (a model can only
+run sandboxed commands and cannot create a same-UID host process), the socket can
+only exist where the sandbox may already write, and Option B trades that for a
+documented coverage loss on real workflows while making macOS stricter than Linux
+for no security gain in the credential-disclosure direction. Option A should be
+recorded as a bounded property, not as an accepted risk.
+
+**Operational consequences.**
+
+- *Option A:* no behaviour change; macOS and Linux keep parity for build/test
+  workflows; the property is written down and stays visible.
+- *Option B:* two toolharness tests and the unix-socket boundary cases become
+  documented skips; macOS sandboxed builds that bind a Unix socket fail; the
+  profile diverges from Linux.
+
+**Exact approval wording (Option A).**
+
+> I approve Option A for the H2S residual: retain the scoped `(allow network-bind
+> (subpath "<writable dir>"))` rule and record host-to-sandbox Unix-socket
+> connectivity as a bounded architectural property of the `run_command` sandbox.
+> This is not a risk acceptance. Outbound AF_UNIX and non-loopback IP access stay
+> denied, and sandbox-to-host socket access stays denied.
+
+**Supported recording command.** The operator runs this; it is not run by the
+documentation change:
+
+```bash
+sop memory add --scope architecture \
+  --source "operator:h2s-option-a-2026-11-12" \
+  --decision "Retain the scoped AF_UNIX network-bind rule; record host-to-sandbox Unix-socket connectivity as a bounded architectural property, not a risk acceptance." \
+  --reason "The direction is not model-reachable, the socket can only exist under a writable dir, and outbound AF_UNIX and non-loopback IP stay denied. Removing the rule would break legitimate sandboxed builds and diverge from Linux." \
+  --evidence "docs/plans/PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md#h2s---host-to-sandbox-unix-socket-direction"
+```
+
+For Option B, substitute the decision text and note the skips in the evidence.
 
 ## Platform coverage behind these assessments
 
