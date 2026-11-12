@@ -1,6 +1,8 @@
 # LLM02 operator decision packet (OWASP gap 8)
 
-**As of:** `main` `ca748cf3` (2026-11-12). **Status:** decision packet. This
+**As of:** `main` `a26290c2` (2026-11-12; LLM02 evidence reconciled at
+`ca748cf3`, and the branch includes PR #434's LLM09/RAG documentation).
+**Status:** decision packet. This
 document records no acceptance, waiver, risk decision, memory entry, or
 configuration change. Every decision below remains the designated approver's.
 

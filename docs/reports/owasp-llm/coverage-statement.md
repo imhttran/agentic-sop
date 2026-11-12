@@ -1,8 +1,8 @@
 # OWASP LLM Top 10 — coverage statement
 
-**As of:** `main` at `ca748cf3` (2026-11-12, through PRs #432 and #433, which
-record the macOS Option C Phase 1 verification and the gap 11 chunk-hash
-reconciliation).
+**As of:** `main` at `a26290c2` (2026-11-12, through PR #434, which records the
+live RAG producer run; the LLM02 evidence was reconciled at `ca748cf3` through
+PRs #432 and #433).
 
 This statement answers one question for each of the ten OWASP LLM risks: what
 SOP covers, where the evidence is, and what it does not cover, with the reason.
