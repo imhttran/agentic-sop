@@ -56,8 +56,10 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   [llm02-disclosure.md](llm02-disclosure.md) and
   [llm02-acceptance-request.md](llm02-acceptance-request.md).
 - **Not covered, and why:**
-  - The live campaigns predate the task-input fix; that fix is verified
-    deterministically only and was not re-run live.
+  - The task-input fix has one live re-run: macOS, `qwen3.5:4b`, one run
+    ([llm02-disclosure.md](llm02-disclosure.md#live-task-input-re-run-2026-11-11)).
+    The Linux live campaign still predates the fix, and six git-dependent cases
+    are `NOT_RUN` on macOS because git cannot run inside the live profile.
   - Other model-input routes are inventoried in
     [llm08-hidden-context.md](llm08-hidden-context.md#model-input-route-inventory-owasp-gap-4).
     The Ollama system prompt carries no caller text. The decision transports
