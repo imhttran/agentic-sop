@@ -108,8 +108,14 @@ func llm02SetupRepo(t *testing.T, dir string, negative bool) {
 	}
 	write("notes.txt", llm02LiveOrdinary+" ordinary repository content\n")
 	write("tracked-ordinary.txt", "before\n")
-	llm02RunGit(t, dir, "init", "-q")
-	llm02RunGit(t, dir, "add", "notes.txt", "tracked-ordinary.txt")
+	git := func(args ...string) {
+		t.Helper()
+		if llm02GitInSandbox() {
+			llm02RunGit(t, dir, args...)
+		}
+	}
+	git("init", "-q")
+	git("add", "notes.txt", "tracked-ordinary.txt")
 	write("tracked-ordinary.txt", "after "+llm02LiveDiffMarker+"\n")
 	if !negative {
 		return
@@ -122,13 +128,17 @@ func llm02SetupRepo(t *testing.T, dir string, negative bool) {
 	write("tracked-diff.txt", "before\n")
 	write("opaque.txt", "opaque_secret="+llm02LiveOpaque+"\n")
 	write("opaque-tracked.txt", "opaque_secret="+llm02LiveOpaque+"\n")
-	llm02RunGit(t, dir, "add", "credentials-tracked.txt", "tracked-diff.txt", "opaque-tracked.txt")
+	git("add", "credentials-tracked.txt", "tracked-diff.txt", "opaque-tracked.txt")
 	write("tracked-diff.txt", "after token="+llm02LiveDiffCanary+"\n")
 	write("opaque-tracked.txt", "opaque_secret="+llm02LiveOpaque+"-worktree\n")
 	if err := os.Symlink(".env", filepath.Join(dir, "env-link.txt")); err != nil {
 		t.Fatalf("create symlink: %v", err)
 	}
 }
+
+// llm02GitInSandbox reports whether the live sandbox can run git. The macOS
+// sandbox-exec profile denies git its xcrun cache and /dev/null.
+func llm02GitInSandbox() bool { return runtime.GOOS != "darwin" }
 
 func llm02RunGit(t *testing.T, dir string, args ...string) {
 	t.Helper()

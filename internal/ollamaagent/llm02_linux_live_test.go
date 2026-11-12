@@ -145,10 +145,20 @@ func runLLM02LiveDriver(t *testing.T) {
 	if len(art.Cases) != len(specs) {
 		t.Errorf("campaign recorded %d cases, want %d", len(art.Cases), len(specs))
 	}
+	skipped := 0
 	for _, spec := range specs {
 		got, ok := byID[spec.ID]
 		if !ok {
 			t.Errorf("campaign did not record case %s", spec.ID)
+			continue
+		}
+		if llm02GitCaseNotRun(spec) {
+			// Incomplete coverage by design on this platform; never a pass.
+			skipped++
+			if got.Status != "not_run" || got.Outcome != "not_run" {
+				t.Errorf("case %s must be recorded not_run on %s, got status=%q outcome=%q", spec.ID, runtime.GOOS, got.Status, got.Outcome)
+			}
+			t.Logf("case %s NOT_RUN: %s", spec.ID, got.Detail)
 			continue
 		}
 		if got.Status != "observed" {
@@ -199,8 +209,8 @@ func runLLM02LiveDriver(t *testing.T) {
 			}
 		}
 	}
-	if art.RequestCount != len(specs) {
-		t.Errorf("campaign request count = %d, want %d (one request per case, no retry)", art.RequestCount, len(specs))
+	if art.RequestCount != len(specs)-skipped {
+		t.Errorf("campaign request count = %d, want %d (one request per run case, no retry)", art.RequestCount, len(specs)-skipped)
 	}
 	t.Logf("campaign artifact: %s", repoArtifact)
 }
@@ -268,6 +278,13 @@ func runLLM02LiveChild(t *testing.T) {
 				t.Fatalf("create hardlink for the alias case: %v", err)
 			}
 		}
+		if llm02GitCaseNotRun(c) {
+			art.Cases = append(art.Cases, llm02LiveResult{
+				ID: c.ID, Path: c.Path, Expect: c.Expect, Tool: c.Tool,
+				Status: "not_run", Outcome: "not_run", Detail: llm02NoGitDetail,
+			})
+			continue
+		}
 		var out, message string
 		var err error
 		if c.Task != nil {
@@ -320,11 +337,11 @@ func runLLM02LiveChild(t *testing.T) {
 		art.Cases = append(art.Cases, res)
 		art.RequestCount++
 	}
-	art.Probes = append(art.Probes, llm02LiveProbe{
-		Name:   "endpoint_via_socket",
-		OK:     observed,
-		Detail: "at least one real model request completed through the Unix-socket bridge",
-	})
+	reached := llm02LiveProbe{Name: "endpoint_via_socket", OK: observed, Detail: "at least one real model request completed through the Unix-socket bridge"}
+	if runtime.GOOS == "darwin" {
+		reached = llm02LiveProbe{Name: "endpoint_via_localhost", OK: observed, Detail: "at least one real model request completed over localhost:11434"}
+	}
+	art.Probes = append(art.Probes, reached)
 	art.FinishedAt = time.Now().UTC().Format(time.RFC3339)
 	data, err := json.MarshalIndent(art, "", "  ")
 	if err != nil {
@@ -474,4 +491,17 @@ func llm02ArtifactName() string {
 		return "llm02-campaign-darwin-task-input.json"
 	}
 	return "llm02-linux-campaign.json"
+}
+
+// llm02NoGitDetail is the recorded blocker for git-dependent cases on macOS.
+const llm02NoGitDetail = "NOT_RUN on macOS: git cannot run inside the sandbox-exec live profile (xcrun cache write and /dev/null are denied); running it needs a profile change, which was not made"
+
+// llm02GitCaseNotRun reports whether a case needs git inside the sandbox on a
+// platform whose live profile cannot run it.
+func llm02GitCaseNotRun(c llm02LiveCase) bool {
+	if llm02GitInSandbox() {
+		return false
+	}
+	command, _ := c.Args["command"].(string)
+	return c.Tool == toolharness.ToolGitDiff || strings.HasPrefix(command, "git ")
 }
