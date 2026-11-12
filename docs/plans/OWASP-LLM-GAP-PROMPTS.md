@@ -534,7 +534,7 @@ Done when (rewritten 2026-11-12 after the detection NO-GO): the gap is closed as
 prevention by the opt-in run_command sandbox, not by detection. The evidence file
 records, on Linux and macOS, that a state write from the allowed test command goes
 through with the sandbox off and is denied with it on, with the live run's bounds.
-Default-on stays with gap 13. The coverage statement still says SOP does not check
+Default-on landed with PR #441 (gap 13); the operator override is the exposure. The coverage statement still says SOP does not check
 that model prose is factually correct.
 ```
 
