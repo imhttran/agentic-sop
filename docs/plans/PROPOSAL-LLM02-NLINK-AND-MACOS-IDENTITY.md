@@ -69,6 +69,10 @@ is a valid `PASS`. No product code change was needed.
    bounded residual limits, or authorize a separate control for them. This proposal does
    not record either disposition.
 
+**Disposition (2026-11-12, operator):** option 1. Option B is complete on macOS, and
+Option A is not approved. The outside-workspace origin, late external credential, external
+removal, and Windows cases are recorded as bounded residual exposures. No separate control
+is authorized.
 ## Option B: first macOS run (not passed)
 
 Artifact: `docs/reports/owasp-llm/llm02-option-c-phase1-macos-campaign.json` (PR #405),
