@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/budget"
+	"github.com/imhttran/agentic-sop/internal/toolharness"
 )
 
 // TestMain makes the package's tests hermetic with respect to the optional
@@ -21,5 +22,11 @@ func TestMain(m *testing.M) {
 	for _, k := range []string{budget.EnvImplementIterations, budget.EnvFixIterations, budget.EnvStaleIterations, budget.EnvToolCalls} {
 		_ = os.Unsetenv(k)
 	}
+	// run_command isolation is on by default in production. These tests exercise
+	// the agent loop, and the tool harness tests own the isolation contract, so the
+	// suite is pinned to policy-only here: that keeps it meaningful on hosts without
+	// a sandbox backend (CI has no bwrap). A test that needs the sandbox sets
+	// toolharness.Config.IsolateCommands, which wins over this override.
+	_ = os.Setenv(toolharness.IsolationEnv, "off")
 	os.Exit(m.Run())
 }

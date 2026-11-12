@@ -108,7 +108,8 @@ is covered by the dqharness test above.
 Implements [PROPOSAL-RUN-COMMAND-ISOLATION](../../plans/PROPOSAL-RUN-COMMAND-ISOLATION.md)
 for macOS. `SOP_AGENT_RUN_COMMAND_ISOLATION=1` (or `Config.IsolateCommands`)
 makes `toolharness` wrap each `run_command` in `sandbox-exec` after the command
-policy check. Off by default.
+policy check. Required by default since the gap 13 decision; the operator override
+is `SOP_AGENT_RUN_COMMAND_ISOLATION=off`.
 
 - **Profile** (`internal/toolharness/isolation.go`): allow-default; `deny network*`
   except loopback bind/inbound and loopback remote (host Unix sockets are denied);

@@ -77,10 +77,12 @@ and Bubblewrap backends (`internal/evaltarget`, `internal/dqharness`) are the
 starting point. Normal agent execution is not OS-sandboxed today (row 1 of
 [../security-shift-left/execution-path-matrix.md](../security-shift-left/execution-path-matrix.md)).
 
-**Update (LLM03):** the opt-in `run_command` sandbox now implements this on
-macOS: with `SOP_AGENT_RUN_COMMAND_ISOLATION=1` a subprocess write under
-`.agent-sdlc/` is denied by Seatbelt (`TestRunCommandIsolationDeniesStateDirWrite`).
-The Linux bubblewrap backend mounts `.agent-sdlc/` read-only for the same purpose. With the flag off, the residual risk below still applies.
+**Update (LLM03):** the `run_command` sandbox implements this on macOS: a
+subprocess write under `.agent-sdlc/` is denied by Seatbelt
+(`TestRunCommandIsolationDeniesStateDirWrite`). The Linux bubblewrap backend
+mounts `.agent-sdlc/` read-only for the same purpose. Isolation is now the
+default (`TestSubprocessStateWriteIsDeniedByDefault`); under the operator
+override `SOP_AGENT_RUN_COMMAND_ISOLATION=off` the residual risk below applies.
 
 ## 5. Decision record
 

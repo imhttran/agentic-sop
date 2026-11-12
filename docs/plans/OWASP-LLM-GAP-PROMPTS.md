@@ -29,9 +29,9 @@ To use one: start a fresh agent session in this repository and paste the
 | 10  | LLM04        | No production reader verifies repository index rows                       | Code            | Done                | PR #411 (merged): guard test; digests recorded as latent                                                                                                                                              |
 | 11  | LLM04        | RAG producer does not emit `chunk_hash`                                   | Cross-repo code | Done                | rag-template-rust PR #7 (emits chunk_hash, merged); agentic-sop PR #431 (shared vector, merged); policy: flag, not reject; no live deployment run |
 | 12  | LLM05        | Slack rendering and channel binding unobserved                            | Evidence        | Waiting on operator | PR #412 (merged); escaped-markup probe undecided                                                                                                                                                      |
-| 13  | LLM06        | Sandbox off by default; Linux host sockets outside `/tmp`, `/run`         | Code, gated     | Waiting on operator | PR #421 (Linux socket masked and verified in a container); default-on measured on macOS arm64 and Linux arm64 (`docs/reports/owasp-llm/llm06-sandbox-default-measurements.md`) and awaiting the operator decision in `docs/plans/PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md` |
+| 13  | LLM06        | Sandbox off by default; Linux host sockets outside `/tmp`, `/run`         | Code, gated     | Done                | PR #421 (Linux socket masked and verified in a container); default-on approved and implemented with the operator override and Windows B1 (`docs/plans/PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md`); compatibility measured in `docs/reports/owasp-llm/llm06-sandbox-default-measurements.md` |
 | 14  | LLM08        | Live RAG with PostgreSQL and embeddings `NOT_RUN`                         | Evidence        | Done        | One live run with `rag-template-rust` (retrieval-only entrypoint): isolation, scope, controls, poisoned chunk observed; TIMEOUT and cancellation not observed live |
-| 15  | LLM09        | Subprocess can write SOP state with the sandbox off; live `NOT_RUN`       | Code + evidence | Waiting on operator | fingerprint check was NO-GO (2026-11-09); the sandbox that denies .agent-sdlc writes is opt-in; default-on waits on gap 13                                                                            |
+| 15  | LLM09        | Subprocess can write SOP state with the sandbox off; live `NOT_RUN`       | Code + evidence | Done                | fingerprint check was NO-GO (2026-11-09); the `.agent-sdlc` write deny now applies by default with gap 13, pinned by `TestSubprocessStateWriteIsDeniedByDefault`; the exposure returns only through the operator override |
 | 16  | LLM10        | Five subprocess paths without process-group termination                   | Code            | Done                | PR #398 (merged)                                                                                                                                                                                      |
 | 17  | LLM10        | Token budget is off by default and is not a dollar cap                    | Code, optional  | Done                | PR #417 (merged): option A, token budget only                                                                                                                                                         |
 | 18  | All          | Coverage statement and evidence matrix lag current merged evidence        | Docs            | Done                | PR #425 (merged); refreshed through PR #427                                                                                                                                                           |
@@ -445,7 +445,10 @@ a pre-existing hardlink alias and the macOS parent-environment read
 [llm06-sandbox-default-measurements.md](../reports/owasp-llm/llm06-sandbox-default-measurements.md).
 The decision-ready proposal is
 [PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md](PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md).
-The default is **unchanged**; this gap stays `Waiting on operator`.
+The operator approved default-on isolation with the operator override and
+selected Windows B1 (fail closed); it is implemented and verified. The gap is
+`Done` on the compatibility and default questions; the residual exposures listed
+in the proposal's section 6 are still open decisions.
 
 ```text
 Gap: the run_command sandbox (SOP_AGENT_RUN_COMMAND_ISOLATION=1) is off by default, so
@@ -500,6 +503,13 @@ inside an authorized repository is still listed as not prevented.
 ```
 
 ## 15. LLM09 — subprocess can write SOP state with the sandbox off; live `NOT_RUN`
+
+**Current state (2026-11-12).** Gap 13's default-on decision closes the sandbox-off
+case for normal execution: with isolation on by default a SAFE command's
+subprocess cannot write `.agent-sdlc`, pinned by
+`TestSubprocessStateWriteIsDeniedByDefault`. The exposure returns only through the
+operator override, so the detection follow-up below remains a bounded option
+rather than a required control.
 
 ```text
 Gap: a run_command subprocess can write SOP state unless the opt-in sandbox is on.

@@ -16,21 +16,52 @@ import (
 	"github.com/imhttran/agentic-sop/internal/sensitivepath"
 )
 
-// IsolationEnv opts run_command into the OS sandbox (LLM03,
-// PROPOSAL-RUN-COMMAND-ISOLATION). Off by default; Config.IsolateCommands is
-// the programmatic equivalent.
+// IsolationEnv selects run_command isolation (LLM03,
+// PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON). Isolation is required by default on
+// every platform: where no backend exists the command is refused, never run
+// unsandboxed. The operator override is "off" (also 0/false/no).
+// Config.IsolateCommands is the programmatic equivalent of "on" and wins.
 const IsolationEnv = "SOP_AGENT_RUN_COMMAND_ISOLATION"
 
-// errIsolationUnavailable is a policy denial: isolation was requested but no
+// errIsolationUnavailable is a policy denial: isolation is required but no
 // backend can enforce it, so the command never runs unsandboxed.
 var errIsolationUnavailable = errors.New("run_command isolation unavailable")
 
+// isolationOverrideOff reports whether the environment explicitly disables
+// isolation, and the raw value, so the caller can echo what the operator set.
+// An unrecognized value leaves the default in place rather than silently
+// disabling the sandbox.
+func isolationOverrideOff() (bool, string) {
+	raw := strings.TrimSpace(os.Getenv(IsolationEnv))
+	switch strings.ToLower(raw) {
+	case "0", "false", "no", "off":
+		return true, raw
+	}
+	return false, raw
+}
+
+// IsolationPolicyNotice is the one-line notice `sop` prints at startup when the
+// environment disables run_command isolation, so a stale or inherited value
+// cannot remove the control silently. It returns "" when isolation is in effect.
+// A missing backend is not a notice: that path refuses the command instead.
+func IsolationPolicyNotice() string {
+	off, raw := isolationOverrideOff()
+	if !off {
+		return ""
+	}
+	return fmt.Sprintf("[config] %s=%q disables run_command isolation; commands run with policy checks only", IsolationEnv, raw)
+}
+
+// isolationRequested reports whether the command must run inside the OS sandbox.
+// The default is on for every platform, so an unsupported platform fails closed.
 func (h *Harness) isolationRequested() bool {
 	if h.cfg.IsolateCommands {
 		return true
 	}
-	v := strings.ToLower(strings.TrimSpace(os.Getenv(IsolationEnv)))
-	return v == "1" || v == "true" || v == "yes"
+	if off, _ := isolationOverrideOff(); off {
+		return false
+	}
+	return true
 }
 
 // isolate wraps argv in the platform sandbox: Seatbelt on macOS, bubblewrap
