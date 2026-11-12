@@ -546,8 +546,9 @@ unaccepted except the bounded Option D decision already recorded.
 
 1. **Plan 03:** **DONE (2026-11-12).** The 13 manual decisions and 3 check
    runs are recorded; `sop verify` reports `accepted: 16/16`. Do not re-record.
-2. **C1:** keep C1 opt-in (recommended), or explicitly choose default
-   enablement with the prerequisites in B.6.
+2. **C1:** **DECIDED — keep C1 opt-in** (operator chat, 2026-11-12). The tracked
+   configuration is unchanged; default enablement under B.6 is not authorized. No
+   decision-memory entry is recorded for this choice.
 3. **R1:** accept the context-free unknown-format residual, or keep it open and
    require a separate control.
 4. **R2:** record the outside-workspace, late-credential, external-removal, and
