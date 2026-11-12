@@ -115,6 +115,10 @@ func runSecurityGate(ctx context.Context, cfg config.Config, dir string, spec *t
 		scan.Diagnostics = append(append([]string(nil), baselineDiagnostics...), scan.Diagnostics...)
 	}
 	scan.Diagnostics = append(selection.Diagnostics, scan.Diagnostics...)
+	// Advisory only: an entry whose fingerprint no longer matches suppresses
+	// nothing, so a reviewed exception can go inert when an unrelated edit moves
+	// a line or column. This never changes the verdict.
+	scan.Diagnostics = append(scan.Diagnostics, baseline.UnmatchedDiagnostics(scan.Findings, time.Now().UTC())...)
 	if _, err := security.WriteArtifacts(rn.Dir(), *scan); err != nil {
 		return nil, fmt.Errorf("write security artifacts: %w", err)
 	}
