@@ -1,7 +1,7 @@
 # OWASP LLM Top 10 — coverage statement
 
-**As of:** `main` at `8e983373` (2026-11-12, through PR #428), plus the Linux
-notification-sink run recorded with this change.
+**As of:** `main` at `4993cdb9` (2026-11-12, through PR #429, which merged the
+Linux notification-sink run).
 
 This statement answers one question for each of the ten OWASP LLM risks: what
 SOP covers, where the evidence is, and what it does not cover, with the reason.
@@ -140,8 +140,10 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     known-format pass now also runs on those transports, which previously had none.
     No live campaign covers them yet. The repository
     configuration remains disabled, so the pre-C1 residual remains until an
-    operator enables it, and retrieval/notification sinks
-    remain `NOT_RUN`.
+    operator enables it. The Linux live retrieval sink remains `NOT_RUN`; the
+    notification sink has one Linux run
+    ([llm02-disclosure.md](llm02-disclosure.md#linux-notification-sink-run-2026-11-12))
+    that does not cover Slack rendering or channel binding.
 
 ### LLM03 Supply Chain — partial
 
@@ -291,8 +293,9 @@ These cannot be closed by code in this repository:
    ([llm02-acceptance-request.md](llm02-acceptance-request.md)).
 2. Whether to add a one-shot Slack probe for escaped markup and mention-shaped
    strings; plain rendering and channel binding are already observed in PR #412.
-3. Linux live retrieval/notification sinks and a live RAG deployment with
-   PostgreSQL and embeddings.
+3. The Linux live retrieval sink, the macOS notification-sink case, and a live
+   RAG deployment with PostgreSQL and embeddings. The Linux notification sink
+   has one run; it covers a local receiver only.
 
 ## Code follow-ups worth doing
 

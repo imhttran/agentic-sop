@@ -24,7 +24,7 @@ To use one: start a fresh agent session in this repository and paste the
 | 5   | LLM02        | Hardlink alias: no `Nlink > 1` check; macOS not covered             | Code, gated     | Waiting on operator | macOS: two runs, protected aliases denied, positive control misses (#405, attempt 2) |
 | 6   | LLM02        | macOS sandbox: parent environment readable via `kern.procargs2`     | Investigation   | Waiting on operator | PR #406 |
 | 7   | LLM02        | Model-output artifacts persisted verbatim                           | Investigation   | In progress | PR #408 (option C); option A pending, proposal PR #407 |
-| 8   | LLM02        | Operator decisions: Plan 03 acceptance, C1 default, residuals       | Decision packet | Waiting on operator | PR #409 |
+| 8   | LLM02        | Operator decisions: Plan 03 acceptance, C1 default, residuals       | Decision packet | Waiting on operator | PR #409; packet refreshed in PR #430 |
 | 9   | LLM03        | Scanner integrity: hash-then-exec race, pins, signatures            | Code, gated     | In progress | PR #410 (race closed); policy proposal in docs/plans |
 | 10  | LLM04        | No production reader verifies repository index rows                 | Code            | Done        | PR #411 (merged): guard test; digests recorded as latent |
 | 11  | LLM04        | RAG producer does not emit `chunk_hash`                             | Cross-repo code | Open        |                  |
