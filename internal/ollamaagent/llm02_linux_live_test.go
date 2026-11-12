@@ -78,7 +78,7 @@ func runLLM02LiveDriver(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
-	env := evaltarget.IsolateEnv(append(os.Environ(),
+	env := append(os.Environ(),
 		"SOP_LIVE_CHILD=1",
 		"SOP_EVAL_LIVE_MODEL="+model,
 		"SOP_LIVE_ARTIFACT="+artifactPath,
@@ -86,7 +86,13 @@ func runLLM02LiveDriver(t *testing.T) {
 		"SOP_LIVE_REVISION="+revision,
 		"SOP_LIVE_DIRTY="+strconv.FormatBool(dirty),
 		"OPENAI_API_KEY=sk-canary-must-be-scrubbed",
-	), "")
+	)
+	if runtime.GOOS == "darwin" {
+		// The sandbox denies the xcode-select shim its /var/select read, so git in the
+		// child must be pointed at the Command Line Tools directly.
+		env = append(env, "DEVELOPER_DIR=/Library/Developer/CommandLineTools")
+	}
+	env = evaltarget.IsolateEnv(env, "")
 	cmd, err := evaltarget.IsolateLiveCommand(ctx, root, []string{sandboxExe, "-test.run", "^TestLiveLLM02LinuxToolPaths$", "-test.v"}, env, root)
 	if err != nil {
 		t.Fatalf("build live isolation command: %v", err)
