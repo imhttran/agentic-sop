@@ -218,9 +218,11 @@ and the platform record in
   2026-11-12), implemented in PR #461. Gitleaks and OSV-Scanner are pinned on
   linux/darwin; the baseline ran. See
   [llm03-scanner-binary-pins.md](../reports/owasp-llm/llm03-scanner-binary-pins.md).
-- **D2 (publisher signatures): not decided.** No signature dependency is added.
-- **D4 (enforcement): not decided.** The baseline findings are recorded and not
-  triaged; the choice of required categories is still open.
+- **D2 (publisher signatures): option A, deferred** (operator, chat, 2026-11-12).
+  No signature dependency is added; a digest is not authenticity.
+- **D4 (enforcement): not decided.** The baseline is triaged in
+  `llm03-baseline-triage.md` (PR #464);
+  the choice of required categories is still open.
 - **D3 and D5:** no decision recorded; the current rules source and CI version
   remain.
 - **Original recommendation (2026-11-09, retained):** do the binary pins next;
