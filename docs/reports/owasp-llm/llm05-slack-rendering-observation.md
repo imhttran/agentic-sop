@@ -121,6 +121,16 @@ mention and notifies the channel. The encoder escapes `&`, `<` and `>` only, so 
 and `@channel` pass through unchanged. The expectation above that a bare `@here` would
 not notify was wrong.
 
-**Open.** Neutralizing `@here` and `@channel` in the Slack encoder is a code change and
-needs a decision. Until then, model or caller text that reaches a Slack payload can
-notify the channel.
+**Decision (operator, chat, 2026-11-12): document, do not change the encoder.**
+The residual is recorded here and in the coverage statement.
+
+**Residual.** Text that reaches a Slack payload can contain `@here` or `@channel`, and
+each one pings everyone in the bound channel. Reason, next-action and outcome text can
+include model and tool output, so a failure message that quotes such text pings the
+channel. Impact is channel noise and urgency pressure. It does not expose secrets or
+grant access: redaction still applies, and the webhook posts only to its bound channel.
+Likelihood is low in normal use and higher if untrusted content reaches the model or a
+tool. Operators who mute the channel should treat a ping from SOP as unverified.
+
+**Not in place.** Escaping `@` in the encoder, which would remove the ping. Adding it
+later is a small change in `internal/notify/slack.go`.
