@@ -1,7 +1,8 @@
 # OWASP LLM Top 10 — coverage statement
 
-**As of:** `main` at `4993cdb9` (2026-11-12, through PR #429, which merged the
-Linux notification-sink run).
+**As of:** `main` at `a26290c2` (2026-11-12, through PR #434, which records the
+live RAG producer run; the LLM02 evidence was reconciled at `ca748cf3` through
+PRs #432 and #433).
 
 This statement answers one question for each of the ten OWASP LLM risks: what
 SOP covers, where the evidence is, and what it does not cover, with the reason.
@@ -18,7 +19,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 | OWASP 2025 | Repo plan / label | Risk                                                  | Coverage                                                                                                                                                                                                                                                                                                                                                          | Main remaining gap                                                                                                                                                                                                                                                               |
 | ---------- | ----------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | LLM01      | Plan 02 / LLM01   | Prompt Injection                                      | Covered (controls + bounded live campaigns)                                                                                                                                                                                                                                                                                                                       | Two models on macOS, one on Linux, one run per case; no universal claim                                                                                                                                                                                                          |
-| LLM02      | Plan 03 / LLM02   | Sensitive Information Disclosure                      | Covered for the user prompt and tool results (trace + macOS/Linux live campaigns); bounded evidence acceptance `RECORDED`; C1 unknown-format redaction `IMPLEMENTED` opt-in (PRs #361/#362/#364) with bounded Linux live `PASS`; focused C1 hardlink verification `PASS` for 4 scoped cases; Option C Phase 1 hardlink-alias denial `VERIFIED` on Linux and macOS | Not general DLP; four pre-C1 Linux residual exposures; hardlink aliases outside the identity registry (outside-workspace origins, Windows) with one pre-Option-C unlisted-value residual; full Plan 03 acceptance `NEEDS_HUMAN`; C1 disabled by default; broader coverage `OPEN` |
+| LLM02      | Plan 03 / LLM02   | Sensitive Information Disclosure                      | Covered for the user prompt and tool results (trace + macOS/Linux live campaigns); bounded evidence acceptance `RECORDED`; C1 unknown-format redaction `IMPLEMENTED` opt-in (PRs #361/#362/#364) with bounded Linux live `PASS`; focused C1 hardlink verification `PASS` for 4 scoped cases; Option C Phase 1 hardlink-alias denial `VERIFIED` on Linux and macOS | Not general DLP; four pre-C1 Linux residual exposures; hardlink aliases outside the identity registry (outside-workspace origins, Windows) with one pre-Option-C unlisted-value residual; Plan 03 acceptance `RECORDED` 16/16 (2026-11-12); C1 disabled by default; broader coverage `OPEN` |
 | LLM03      | Plan 04 / LLM04   | Supply Chain                                          | Partial                                                                                                                                                                                                                                                                                                                                                           | Model provenance and publisher signatures out of SOP's control                                                                                                                                                                                                                   |
 | LLM04      | Plan 05 / LLM05   | Data and Model Poisoning                              | Partial                                                                                                                                                                                                                                                                                                                                                           | Integrity proves bytes, not benign content; provider training external                                                                                                                                                                                                           |
 | LLM05      | Plan 10 / LLM10   | Improper Output Handling                              | Covered for SOP's sinks                                                                                                                                                                                                                                                                                                                                           | Third-party rendering (terminal, IDE, Slack) external                                                                                                                                                                                                                            |
@@ -108,6 +109,11 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     by Option C Phase 1 (macOS attempt 3 `PASS`). A SAFE command can still read an
     alias to a credential outside the workspace, and Windows is `UNVERIFIED`. This
     is a separate, unaccepted residual; the `Nlink > 1` check is not implemented.
+    The SAFE-command vector itself is now measured on both platforms: with isolation
+    on, `TestDarwinIsolationSAFECommandCredentialRead` (new) and
+    `TestLinuxIsolationSAFECommandCredentialRead` deny the read at the process
+    level, and the macOS test also pins that the isolation-off default exposes the
+    canary and that a pre-existing hardlink alias stays readable inside the sandbox.
   - The Linux live retrieval sink is `NOT_RUN`. The Linux live notification
     sink has one run with a local receiver
     ([llm02-disclosure.md](llm02-disclosure.md#linux-notification-sink-run-2026-11-12));
@@ -117,9 +123,10 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   - Bounded evidence acceptance is `RECORDED` in repository decision memory ID
     `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`; it is a
     separate scoped decision, not Plan 03 per-criterion acceptance.
-  - The designated approver has not recorded Plan 03 per-criterion acceptance;
-    the final closeout matrix marks it `NEEDS_HUMAN`. Historicalized `COMPLETE`
-    is not acceptance, and broader LLM02 coverage remains `OPEN`.
+  - Plan 03 per-criterion acceptance was recorded on 2026-11-12: 13 manual
+    criteria accepted and 3 check-mapped criteria check-passed (16/16). This is
+    separate from the bounded evidence acceptance and does not close the
+    residual risks in this section. Broader LLM02 coverage remains `OPEN`.
   - The six-item residual-risk decision matrix records that the PR #376 review
     did not approve Option C as proposed, that the operator later approved
     Option C Phase 1 (PR #381, Linux `VERIFIED`; macOS `VERIFIED` in attempt 3),
@@ -223,16 +230,34 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   [seatbelt-evidence.md](../security-shift-left/seatbelt-evidence.md#run_command-opt-in-sandbox-llm03).
 
 - **Not covered, and why:**
-  - The sandbox is off by default.
+  - The sandbox is off by default, so normal agent execution is policy-only and
+    the LLM02 R3 credential read is live. Default-on feasibility is measured and
+    the decision is `NEEDS_HUMAN`:
+    [PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md](../../plans/PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md),
+    [llm06-sandbox-default-measurements.md](llm06-sandbox-default-measurements.md).
+  - The sandbox wraps `run_command` only. Validation commands
+    (`internal/testrunner`, `sh -c`), security scanners, and the `git`/`gh` sinks
+    are not sandboxed and this row makes no claim about them.
+  - With the sandbox on, the repository's own suite still fails on macOS (12
+    tests in 5 packages: AF_UNIX `bind` denied, Seatbelt cannot nest, setuid `ps`
+    refused, and one env-scrub interaction) and on Linux (a nested sandbox cannot
+    mount `/proc`). On macOS the in-sandbox suite takes 87-93 s against 86 s
+    unsandboxed; the Linux container run took 69 s.
   - On Linux the sandbox uses its own network namespace, so a test cannot
     reach a server on the host's loopback; one it starts itself works. Host
     Unix sockets under `/tmp` and `/run` are hidden. PR #421 also masks sockets
     found under the Linux home directory with a bounded, fail-closed scan.
     Sockets outside those masked roots remain connectable.
+  - Turning the sandbox on does not close everything. A pre-existing hardlink
+    alias to a `$HOME` credential stays readable on macOS and Linux (measured),
+    and on macOS the parent process's launch-time environment is readable through
+    `kern.procargs2` (measured), so a credential in SOP's own environment is still
+    reachable from a sandboxed command.
   - The agent process itself runs outside SOP.
-  - Every sandboxed build starts with a cold build cache (about 10 s for three
-    of this repository's packages), and a module missing from the module cache
-    cannot be downloaded inside the sandbox; run `go mod download` first.
+  - Every sandboxed build starts with a cold build cache (the measured overhead
+    for the full suite is 1-6 s, not the earlier ~10 s for three packages), and a
+    module missing from the module cache cannot be downloaded inside the sandbox;
+    run `go mod download` first.
 
 ### LLM07 System Prompt Leakage — partial, by design
 
@@ -308,13 +333,18 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 
 These cannot be closed by code in this repository:
 
-1. Plan 03 per-criterion acceptance and the remaining LLM02 risk decisions
-   ([llm02-acceptance-request.md](llm02-acceptance-request.md)).
+1. The remaining LLM02 risk decisions. Plan 03 per-criterion acceptance is
+   recorded (16/16, 2026-11-12); see
+   [llm02-decision-packet.md](llm02-decision-packet.md).
 2. Whether to add a one-shot Slack probe for escaped markup and mention-shaped
    strings; plain rendering and channel binding are already observed in PR #412.
 3. The Linux live retrieval sink, the macOS notification-sink case, and a live
    RAG deployment with PostgreSQL and embeddings. The Linux notification sink
    has one run; it covers a local receiver only.
+4. Whether to enable the `run_command` sandbox by default on macOS and Linux
+   (OWASP gap 13), the unsupported-platform behavior, and whether to accept the
+   macOS hardlink-alias and parent-environment residuals. Proposal:
+   [PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md](../../plans/PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md).
 
 ## Code follow-ups worth doing
 

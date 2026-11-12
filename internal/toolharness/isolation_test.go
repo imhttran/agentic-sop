@@ -86,6 +86,48 @@ func TestRunCommandIsolationOnFailsClosedWithoutBackend(t *testing.T) {
 	}
 }
 
+func TestRunCommandIsolationDoesNotFallBackWhenBackendFails(t *testing.T) {
+	// A backend that exists but cannot start (a broken profile, a kernel that
+	// denies unprivileged namespaces, AppArmor on Ubuntu 24.04) must fail the
+	// command, never fall back to the unsandboxed path. The fake backend is first
+	// on PATH; the real command is still resolvable, so a fallback would visibly
+	// print its output.
+	fake := t.TempDir()
+	name := "sandbox-exec"
+	switch runtime.GOOS {
+	case "darwin":
+	case "linux":
+		name = "bwrap"
+	default:
+		t.Skipf("no sandbox backend on %s", runtime.GOOS)
+	}
+	script := "#!/bin/sh\necho fake-sandbox-refused >&2\nexit 71\n"
+	if err := os.WriteFile(filepath.Join(fake, name), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", fake+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// A fake HOME keeps the Linux home-socket scan off the developer's real tree.
+	t.Setenv("HOME", t.TempDir())
+
+	cfg := DefaultConfig()
+	cfg.IsolateCommands = true
+	log := NewAuditLog(0)
+	root := t.TempDir()
+	writeRepoFile(t, root, "go.mod", "module fallbackprobe\n\ngo 1.21\n")
+	writeRepoFile(t, root, "cred/cred.go", "package cred\n")
+	h := New(root, cfg, log)
+	out, err := h.Run(context.Background(), ToolRunCommand, map[string]any{"command": "go list ./cred"})
+	if err != nil {
+		t.Fatalf("the run_command tool returned an error instead of the backend failure: %v (%s)", err, out)
+	}
+	if strings.Contains(out, "fallbackprobe/cred") {
+		t.Fatalf("the command ran unsandboxed after the backend failed: %q", out)
+	}
+	if !strings.Contains(out, "fake-sandbox-refused") {
+		t.Fatalf("the backend failure was not surfaced: %q", out)
+	}
+}
+
 func TestRunCommandIsolationOnWrapsArgvWithSandboxExec(t *testing.T) {
 	needSandbox(t)
 	log := NewAuditLog(0)

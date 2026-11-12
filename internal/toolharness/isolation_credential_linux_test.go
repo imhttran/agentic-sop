@@ -140,38 +140,7 @@ func TestLinuxIsolationSAFECommandCredentialRead(t *testing.T) {
 		t.Skipf("hardlink is not supported here: %v", err)
 	}
 	writeRepoFile(t, root, "go.mod", "module cred\n\ngo 1.27\n")
-	writeRepoFile(t, root, "cred/cred_test.go", `package cred
-
-import (
-	"os"
-	"path/filepath"
-	"testing"
-)
-
-func TestCredentialRead(t *testing.T) {
-	b, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), ".ssh", "probe"))
-	if err != nil {
-		t.Fatalf("read credential: %v", err)
-	}
-	t.Logf("credential=%s", string(b))
-}
-
-func TestOrdinaryRead(t *testing.T) {
-	b, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), "notes.txt"))
-	if err != nil {
-		t.Fatalf("read ordinary: %v", err)
-	}
-	t.Logf("ordinary=%s", string(b))
-}
-
-func TestHardlinkRead(t *testing.T) {
-	b, err := os.ReadFile(filepath.Join(os.Getenv("HOME"), "alias.txt"))
-	if err != nil {
-		t.Fatalf("read hardlink: %v", err)
-	}
-	t.Logf("hardlink=%s", string(b))
-}
-`)
+	writeRepoFile(t, root, "cred/cred_test.go", safeCommandCredentialFixture)
 	t.Setenv("HOME", home)
 	t.Setenv("TMPDIR", "/tmp")
 
