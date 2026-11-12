@@ -152,7 +152,7 @@ func runLLM02LiveDriver(t *testing.T) {
 			t.Errorf("campaign did not record case %s", spec.ID)
 			continue
 		}
-		if llm02GitCaseNotRun(spec) {
+		if llm02PlatformBlocker(spec) != "" {
 			// Incomplete coverage by design on this platform; never a pass.
 			skipped++
 			if got.Status != "not_run" || got.Outcome != "not_run" {
@@ -191,6 +191,13 @@ func runLLM02LiveDriver(t *testing.T) {
 			case "LLM02-LIVE-DIFF":
 				if !llm02LiveHas(got.RawCanaries, llm02LiveDiffCanary) {
 					t.Errorf("git_diff did not return the raw diff canary; the A-side case is incomplete")
+				}
+			case "LLM02-LIVE-NOTIFY-SINK":
+				if len(got.SinkCanaries) != 0 {
+					t.Errorf("notification receiver got canaries: %v", got.SinkCanaries)
+				}
+				if len(got.SinkPayloads) != 2 {
+					t.Errorf("notification receiver got %d payloads, want 2 (native and slack)", len(got.SinkPayloads))
 				}
 			case "LLM02-LIVE-COMMAND":
 				if !llm02LiveHas(got.RawCanaries, llm02LiveCommandCanary) {
@@ -278,11 +285,18 @@ func runLLM02LiveChild(t *testing.T) {
 				t.Fatalf("create hardlink for the alias case: %v", err)
 			}
 		}
-		if llm02GitCaseNotRun(c) {
+		if blocker := llm02PlatformBlocker(c); blocker != "" {
 			art.Cases = append(art.Cases, llm02LiveResult{
 				ID: c.ID, Path: c.Path, Expect: c.Expect, Tool: c.Tool,
-				Status: "not_run", Outcome: "not_run", Detail: llm02NoGitDetail,
+				Status: "not_run", Outcome: "not_run", Detail: blocker,
 			})
+			continue
+		}
+		if c.Notify {
+			res := llm02RunNotifyCase(c, model, socket)
+			observed = observed || res.Status == "observed"
+			art.Cases = append(art.Cases, res)
+			art.RequestCount++
 			continue
 		}
 		var out, message string
@@ -463,6 +477,11 @@ func llm02LiveCaseSpecs() []llm02LiveCase {
 			},
 			Note: "caller-supplied task text must be redacted before it reaches the model request",
 		},
+		{
+			ID: "LLM02-LIVE-NOTIFY-SINK", Path: "live model output through notify.NewEvent and the webhook channel to a loopback receiver", Expect: "protected",
+			Canaries: []string{llm02NotifyShapeCanary, llm02NotifyOpaqueCanary}, Notify: true,
+			Note: "model output that repeats a credential must be redacted before a notification leaves the process",
+		},
 	}
 }
 
@@ -496,12 +515,21 @@ func llm02ArtifactName() string {
 // llm02NoGitDetail is the recorded blocker for git-dependent cases on macOS.
 const llm02NoGitDetail = "NOT_RUN on macOS: git cannot run inside the sandbox-exec live profile (xcrun cache write and /dev/null are denied); running it needs a profile change, which was not made"
 
-// llm02GitCaseNotRun reports whether a case needs git inside the sandbox on a
-// platform whose live profile cannot run it.
-func llm02GitCaseNotRun(c llm02LiveCase) bool {
-	if llm02GitInSandbox() {
-		return false
+// llm02NoNotifyDetail is the recorded blocker for the notification-sink case on macOS.
+const llm02NoNotifyDetail = "NOT_RUN on macOS: the sandbox-exec live profile allows outbound localhost:11434 only, so a loopback receiver on another port is unreachable; the profile was not changed"
+
+// llm02PlatformBlocker returns why a case cannot run inside this platform's live
+// profile, or "" when it can.
+func llm02PlatformBlocker(c llm02LiveCase) string {
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
+	if c.Notify {
+		return llm02NoNotifyDetail
 	}
 	command, _ := c.Args["command"].(string)
-	return c.Tool == toolharness.ToolGitDiff || strings.HasPrefix(command, "git ")
+	if c.Tool == toolharness.ToolGitDiff || strings.HasPrefix(command, "git ") {
+		return llm02NoGitDetail
+	}
+	return ""
 }
