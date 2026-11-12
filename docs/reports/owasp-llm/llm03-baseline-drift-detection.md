@@ -1,8 +1,11 @@
 # Baseline drift detection — stale reviewed entries
 
-**Status:** investigation plus one **policy-neutral** implementation. The drift signal is
-advisory: it is added to the scan diagnostics and **cannot change a verdict**. No entry is
-added, removed, or rewritten, and no enforcement setting is touched.
+**Status:** investigation plus one **policy-neutral** implementation, with a known
+correctness defect. The drift signal is advisory and cannot change a verdict, but PR #472
+merged with an unresolved P2: changed-files scans and failed or disabled adapters do not
+cover the full baseline, so valid entries outside the observed finding set can be reported
+as unmatched. No entry is added, removed, or rewritten, and no enforcement setting is
+touched.
 
 **Context:** the D4 reconciliation found that **16 of 56 committed baseline entries match no
 current finding**. They name the 13 production exec sites under fingerprints recorded on
@@ -58,11 +61,12 @@ One method, one call site per scanner entry point:
 - `internal/cli/security.go` and `internal/cli/security_gate.go` — called **once**, after the
   scan, with the complete finding set.
 
-Calling it once matters: `Baseline.Apply` runs per adapter
-(`internal/security/runner.go:240`), so an entry from one adapter looks unmatched while
-another adapter's findings are absent. Drift detection over the full set avoids that false
-positive. The method skips invalid entries (already reported by `Apply`) and expired entries
-(never suppress, and already carry a hard deadline).
+Calling it once avoids one class of false positive because `Baseline.Apply` runs per
+adapter. It does **not** prove that the finding set covers the full baseline. Under
+`--scope changed-files`, unchanged files are absent by design; failed or disabled adapters
+also leave their entries absent. The current implementation can therefore report valid
+entries as drifted in those cases. The diagnostic must be restricted to successful
+full-workspace scans, or receive explicit scope and adapter-coverage information.
 
 ## 4. Why it is policy-neutral
 
@@ -108,6 +112,9 @@ Suites run: `go test ./internal/security/... ./internal/quality/...` pass;
 ## 6. Limits, stated plainly
 
 - It **warns**; it does not remove the entry and does not force a review.
+- The warning is reliable only for a successful full-workspace scan covering the relevant
+  adapter. Changed-files scans and failed or disabled adapters can produce false drift
+  warnings until the unresolved PR #472 P2 is fixed.
 - An entry that is **both** expired and unmatched still produces no diagnostic: `Apply`
   reports expiry only when a finding matches. The expiry date remains the control there.
 - It reports at most 5 names per scan; the count is always complete.
