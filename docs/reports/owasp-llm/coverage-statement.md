@@ -109,6 +109,11 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     by Option C Phase 1 (macOS attempt 3 `PASS`). A SAFE command can still read an
     alias to a credential outside the workspace, and Windows is `UNVERIFIED`. This
     is a separate, unaccepted residual; the `Nlink > 1` check is not implemented.
+    The SAFE-command vector itself is now measured on both platforms: with isolation
+    on, `TestDarwinIsolationSAFECommandCredentialRead` (new) and
+    `TestLinuxIsolationSAFECommandCredentialRead` deny the read at the process
+    level, and the macOS test also pins that the isolation-off default exposes the
+    canary and that a pre-existing hardlink alias stays readable inside the sandbox.
   - The Linux live retrieval sink is `NOT_RUN`. The Linux live notification
     sink has one run with a local receiver
     ([llm02-disclosure.md](llm02-disclosure.md#linux-notification-sink-run-2026-11-12));
@@ -225,16 +230,34 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   [seatbelt-evidence.md](../security-shift-left/seatbelt-evidence.md#run_command-opt-in-sandbox-llm03).
 
 - **Not covered, and why:**
-  - The sandbox is off by default.
+  - The sandbox is off by default, so normal agent execution is policy-only and
+    the LLM02 R3 credential read is live. Default-on feasibility is measured and
+    the decision is `NEEDS_HUMAN`:
+    [PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md](../../plans/PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md),
+    [llm06-sandbox-default-measurements.md](llm06-sandbox-default-measurements.md).
+  - The sandbox wraps `run_command` only. Validation commands
+    (`internal/testrunner`, `sh -c`), security scanners, and the `git`/`gh` sinks
+    are not sandboxed and this row makes no claim about them.
+  - With the sandbox on, the repository's own suite still fails on macOS (12
+    tests in 5 packages: AF_UNIX `bind` denied, Seatbelt cannot nest, setuid `ps`
+    refused, and one env-scrub interaction) and on Linux (a nested sandbox cannot
+    mount `/proc`). On macOS the in-sandbox suite takes 87-93 s against 86 s
+    unsandboxed; the Linux container run took 69 s.
   - On Linux the sandbox uses its own network namespace, so a test cannot
     reach a server on the host's loopback; one it starts itself works. Host
     Unix sockets under `/tmp` and `/run` are hidden. PR #421 also masks sockets
     found under the Linux home directory with a bounded, fail-closed scan.
     Sockets outside those masked roots remain connectable.
+  - Turning the sandbox on does not close everything. A pre-existing hardlink
+    alias to a `$HOME` credential stays readable on macOS and Linux (measured),
+    and on macOS the parent process's launch-time environment is readable through
+    `kern.procargs2` (measured), so a credential in SOP's own environment is still
+    reachable from a sandboxed command.
   - The agent process itself runs outside SOP.
-  - Every sandboxed build starts with a cold build cache (about 10 s for three
-    of this repository's packages), and a module missing from the module cache
-    cannot be downloaded inside the sandbox; run `go mod download` first.
+  - Every sandboxed build starts with a cold build cache (the measured overhead
+    for the full suite is 1-6 s, not the earlier ~10 s for three packages), and a
+    module missing from the module cache cannot be downloaded inside the sandbox;
+    run `go mod download` first.
 
 ### LLM07 System Prompt Leakage — partial, by design
 
@@ -318,6 +341,10 @@ These cannot be closed by code in this repository:
 3. The Linux live retrieval sink, the macOS notification-sink case, and a live
    RAG deployment with PostgreSQL and embeddings. The Linux notification sink
    has one run; it covers a local receiver only.
+4. Whether to enable the `run_command` sandbox by default on macOS and Linux
+   (OWASP gap 13), the unsupported-platform behavior, and whether to accept the
+   macOS hardlink-alias and parent-environment residuals. Proposal:
+   [PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md](../../plans/PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md).
 
 ## Code follow-ups worth doing
 
