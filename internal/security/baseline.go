@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -136,6 +137,71 @@ func baselineEntryMatches(entry BaselineEntry, finding Finding) bool {
 		}
 	}
 	return true
+}
+
+// maxUnmatchedListed bounds the entries one drift diagnostic names, so a large
+// stale baseline stays readable.
+const maxUnmatchedListed = 5
+
+// UnmatchedDiagnostics reports reviewed, unexpired entries that matched no
+// finding in the scan. Suppression identity is the exact fingerprint, which
+// includes the line and column, so ordinary edits move a fingerprint: the entry
+// then suppresses nothing while still looking like a live review. A corrected
+// finding produces the same state. Either way the entry should be re-reviewed
+// and removed.
+//
+// The result is advisory. It never suppresses, blocks, or changes a verdict, so
+// it cannot make a scan pass or fail. It reports only entries whose fingerprint
+// matched nothing: an entry that matched a finding is silent, and invalid or
+// expired entries keep the diagnostics Apply already produces. Call it once with
+// the complete finding set, not per adapter, so an entry is not reported as
+// unmatched because another adapter's findings were absent from the call.
+func (b Baseline) UnmatchedDiagnostics(findings []Finding, now time.Time) []string {
+	present := make(map[string]bool, len(findings))
+	for _, f := range findings {
+		present[f.Fingerprint] = true
+	}
+	var labels []string
+	seen := make(map[string]bool, len(b.Entries))
+	for _, entry := range b.Entries {
+		fingerprint := strings.TrimSpace(entry.Fingerprint)
+		if fingerprint == "" || strings.TrimSpace(entry.Reason) == "" ||
+			strings.TrimSpace(entry.Owner) == "" || entry.ExpiresAt.IsZero() {
+			continue // Apply reports invalid entries
+		}
+		if !entry.ExpiresAt.After(now) {
+			continue // expired entries never suppress
+		}
+		if present[fingerprint] || seen[fingerprint] {
+			continue
+		}
+		seen[fingerprint] = true
+		label := strings.TrimSpace(entry.Path)
+		if label == "" {
+			label = fingerprint
+		}
+		if rule := strings.TrimSpace(entry.RuleID); rule != "" {
+			label += " (" + rule + ")"
+		}
+		labels = append(labels, label)
+	}
+	if len(labels) == 0 {
+		return nil
+	}
+	sort.Strings(labels)
+	listed := labels
+	suffix := ""
+	if len(listed) > maxUnmatchedListed {
+		suffix = fmt.Sprintf("; and %d more", len(listed)-maxUnmatchedListed)
+		listed = listed[:maxUnmatchedListed]
+	}
+	noun := "entries"
+	if len(labels) == 1 {
+		noun = "entry"
+	}
+	return []string{fmt.Sprintf(
+		"baseline: %d reviewed %s matched no finding at the recorded fingerprint (drifted line/column or a corrected finding); review and remove: %s%s",
+		len(labels), noun, strings.Join(listed, ", "), suffix)}
 }
 
 // Identity returns a deterministic policy identity that includes the baseline

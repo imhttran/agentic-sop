@@ -1010,6 +1010,82 @@ func TestBaselineSuppressionAndExpiry(t *testing.T) {
 	}
 }
 
+func TestBaselineUnmatchedDiagnostics(t *testing.T) {
+	now := time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC)
+	active := now.Add(24 * time.Hour)
+	entry := func(fp, path, reason string, expires time.Time) BaselineEntry {
+		return BaselineEntry{Fingerprint: fp, RuleID: "dangerous-exec-command", Path: path, Reason: reason, Owner: "team", ExpiresAt: expires}
+	}
+	baseline := Baseline{Version: 1, Entries: []BaselineEntry{
+		entry("semgrep:matched", "a.go", "reviewed", active),
+		entry("semgrep:drifted", "b.go", "reviewed", active),
+		entry("semgrep:expired", "c.go", "reviewed", now.Add(-time.Hour)),
+		entry("semgrep:invalid", "d.go", "", active),
+	}}
+	// b.go reports the same path and rule at a new line, so its fingerprint
+	// moved: the reviewed entry suppresses nothing.
+	findings := []Finding{
+		{Fingerprint: "semgrep:matched", RuleID: "dangerous-exec-command", Path: "a.go"},
+		{Fingerprint: "semgrep:moved", RuleID: "dangerous-exec-command", Path: "b.go"},
+	}
+
+	got := baseline.UnmatchedDiagnostics(findings, now)
+	if len(got) != 1 {
+		t.Fatalf("diagnostics = %v, want one aggregated drift diagnostic", got)
+	}
+	if !strings.Contains(got[0], "1 reviewed entry") || !strings.Contains(got[0], "b.go") {
+		t.Errorf("diagnostic = %q, want the drifted entry named", got[0])
+	}
+	for _, absent := range []string{"a.go", "c.go", "d.go"} {
+		if strings.Contains(got[0], absent) {
+			t.Errorf("diagnostic = %q, must not name %s (matched, expired, or invalid)", got[0], absent)
+		}
+	}
+
+	// All entries matching means silence.
+	if all := baseline.UnmatchedDiagnostics([]Finding{
+		{Fingerprint: "semgrep:matched"}, {Fingerprint: "semgrep:drifted"},
+	}, now); all != nil {
+		t.Errorf("diagnostics = %v, want none when every active entry matched", all)
+	}
+
+	// Drift detection is deterministic and leaves the findings untouched.
+	before := findings[0].Suppressed
+	again := baseline.UnmatchedDiagnostics(findings, now)
+	if len(again) != 1 || again[0] != got[0] {
+		t.Errorf("repeat diagnostics = %v, want stable %v", again, got)
+	}
+	if findings[0].Suppressed != before || findings[1].Suppressed {
+		t.Error("UnmatchedDiagnostics must not mutate suppression state")
+	}
+}
+
+func TestBaselineUnmatchedDiagnosticsCapsTheList(t *testing.T) {
+	now := time.Date(2026, 11, 12, 0, 0, 0, 0, time.UTC)
+	var b Baseline
+	b.Version = 1
+	for i := 0; i < 9; i++ {
+		b.Entries = append(b.Entries, BaselineEntry{
+			Fingerprint: "semgrep:" + string(rune('a'+i)),
+			RuleID:      "dangerous-exec-command",
+			Path:        filepath.Join("pkg", string(rune('a'+i))+".go"),
+			Reason:      "reviewed",
+			Owner:       "team",
+			ExpiresAt:   now.Add(time.Hour),
+		})
+	}
+	got := b.UnmatchedDiagnostics(nil, now)
+	if len(got) != 1 {
+		t.Fatalf("diagnostics = %v, want one aggregated diagnostic", got)
+	}
+	if !strings.Contains(got[0], "9 reviewed entries") {
+		t.Errorf("diagnostic = %q, want the full count", got[0])
+	}
+	if !strings.Contains(got[0], "and 4 more") {
+		t.Errorf("diagnostic = %q, want the remaining count after the cap", got[0])
+	}
+}
+
 func TestLoadBaselineRejectsEscape(t *testing.T) {
 	root := t.TempDir()
 	if _, _, err := LoadBaseline(root, "../outside.json"); err == nil {
