@@ -132,39 +132,54 @@ change the default, in which case R3 is a recorded accepted residual.
 **`internal/toolharness/isolation.go`**
 
 ```go
-func isolationOverrideOff() (bool, string) {
-	raw := strings.TrimSpace(os.Getenv(IsolationEnv))
-	switch strings.ToLower(raw) {
-	case "0", "false", "no", "off":
-		return true, raw
+// backendFor is the single platform table: name plus the binary to exec.
+func backendFor(goos string) (name, bin string) {
+	switch goos {
+	case "darwin":
+		return "seatbelt", "sandbox-exec"
+	case "linux":
+		return "bubblewrap", "bwrap"
 	}
-	return false, raw
+	return "", ""
+}
+
+func isOffValue(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "0", "false", "no", "off":
+		return true
+	}
+	return false
+}
+
+func isolationDecision(goos, override string, isolateCommands bool) bool {
+	if !hasBackend(goos) {
+		return true // refuse: the platform cannot enforce isolation
+	}
+	if isolateCommands {
+		return true
+	}
+	return !isOffValue(override)
 }
 
 func (h *Harness) isolationRequested() bool {
-	if h.cfg.IsolateCommands {
-		return true
-	}
-	if off, _ := isolationOverrideOff(); off {
-		return false
-	}
-	return true
+	return isolationDecision(runtime.GOOS, os.Getenv(IsolationEnv), h.cfg.IsolateCommands)
 }
 ```
 
-The default is `true` on **every** platform, which is what makes Windows B1 work:
-`run_command` reaches `sandboxArgv`, which returns `errIsolationUnavailable` when
-no backend exists, and nothing executes. There is no `IsolationDefaultOn` platform
-list to drift out of sync with the backend table.
+`isolationDecision` returns true whenever the platform has no backend, **before**
+either input is read. `true` sends `run_command` into `sandboxArgv`, which uses
+the same `backendFor` table and returns `errIsolationUnavailable` for an empty
+name, so nothing executes. The platform table therefore exists once, and a
+backend-less host cannot be talked out of the refusal.
 
-Do **not** probe for the backend here with `exec.LookPath`: a missing `bwrap`
-must produce `errIsolationUnavailable` (fail closed), not "off". An unrecognized
-override value also leaves the default in place.
+Do **not** probe for the backend here with `exec.LookPath`: a missing `bwrap` on
+macOS/Linux must produce `errIsolationUnavailable` (fail closed), not "off". An
+unrecognized override value also leaves the default in place.
 
-**Precedence:** an explicit `Config.IsolateCommands=true` still wins, so a
-programmatic opt-in cannot be turned off by the environment. The override only
-applies to callers that leave the bool false, which today is the production
-`ollamaagent` tool harness.
+**Precedence:** an explicit `Config.IsolateCommands=true` wins over the override,
+so a programmatic opt-in cannot be turned off by the environment. The override
+only applies to a caller that leaves the bool false; no production caller sets
+it, so in practice the environment decides.
 
 **`internal/cli`**: `sop run` and `sop prompt` print
 `toolharness.IsolationPolicyNotice()` once at startup when the environment
@@ -186,9 +201,11 @@ the audit contract. The notice covers visibility.
   `TestMain`, so their command-policy and agent-loop tests keep their coverage on
   hosts without a backend (CI has no `bwrap`) instead of turning every command
   into a denial.
-- `TestRunCommandIsolationIsOnByDefault` and
-  `TestRunCommandIsolationDefaultsToFailClosed` clear the override and pin the
-  default and the B1 refusal respectively.
+- `TestRunCommandIsolationIsOnByDefault` clears the override and pins the
+  default; `TestRunCommandIsolationDefaultsToFailClosed` simulates a backend-less
+  host with a stripped `PATH`; `TestIsolationDecisionUnsupportedPlatforms` covers
+  the full Windows matrix; `TestRunCommandIsolationOnWindowsRefuses` proves the
+  runtime refusal in the Windows CI job.
 - `TestSubprocessStateWriteIsDeniedByDefault` pins that a SAFE command can no
   longer write `.agent-sdlc` under the default.
 - The in-sandbox incompatibilities are settled separately: the macOS profile now
@@ -259,10 +276,39 @@ What that settles, and what it does not:
 | --- | --- |
 | 1. Default `run_command` isolation on | **Approved; implemented** as required-by-default on every platform. |
 | 2. `SOP_AGENT_RUN_COMMAND_ISOLATION=off` override with a startup notice | **Approved; implemented** (`off`, `0`, `false`, `no`; `sop run` and `sop prompt` print one notice). |
-| 3. Unsupported-platform behavior | **B1 selected**: a host with no backend refuses `run_command`. Compatibility impact acknowledged below. |
+| 3. Unsupported-platform behavior | **B1 selected and enforced by platform**: on a platform with no backend (Windows) `run_command` is refused, and no override or `Config` value can change that. On macOS/Linux a missing backend binary under the override still runs policy-only, and the startup notice makes that visible. Compatibility impact acknowledged below. |
 | 4. Migrating the repository's own tests | **Approved; completed** without changing any other execution path. |
 | 5. Accepting the §6 residuals | **Not decided.** The decision covers the policy, not the residual risks. R4 and the Option-D hardlink alias stay open, and the host-to-sandbox socket direction stays recorded. |
 | 6. The Seatbelt `network-bind` profile rule | **Submitted for approval with the change**; the operator merged it. It remains the scoped rule described in §6's final bullet. |
+
+### Correction: the override could bypass B1 (fixed)
+
+The first implementation of this decision honoured the operator override before
+consulting the platform, so `SOP_AGENT_RUN_COMMAND_ISOLATION=off` (and the other
+off spellings) skipped the sandbox decision entirely and allowed policy-only
+execution on Windows. That is a B1 violation, not an authorized use of the
+override: the operator approved the override as a way to accept weaker execution
+*where a sandbox exists*, and approved B1 as an unconditional refusal where none
+does.
+
+The correction moves the platform check ahead of the override in a pure decision
+(`isolationDecision`), and both it and `sandboxArgv` read the same `backendFor`
+table, so the two cannot disagree:
+
+| Platform | Override | `Config.IsolateCommands` | Result |
+| --- | --- | --- | --- |
+| no backend (Windows) | any value, unset, or unknown | `false` or `true` | **refuse** |
+| `darwin`/`linux` | unset, `on`, `1`, `true`, unknown | any | sandbox |
+| `darwin`/`linux` | `off`, `0`, `false`, `no` | `false` | policy-only (authorized) |
+| `darwin`/`linux` | `off` | `true` | sandbox (`Config` wins) |
+
+`IsolationPolicyNotice` is suppressed where no backend exists, so an operator is
+not told the override took effect when it did not. Regression coverage:
+`TestIsolationDecisionUnsupportedPlatforms`,
+`TestIsolationDecisionSupportedPlatforms`,
+`TestRunCommandIsolationRefusesBeforeExecution`, and the Windows runtime test
+`TestRunCommandIsolationOnWindowsRefuses` executed by the `windows (install.ps1)`
+CI job.
 
 ### Windows B1 compatibility impact (acknowledged)
 
@@ -274,7 +320,8 @@ unavailable: no sandbox backend on windows`. Consequences:
 - Any SOP workflow that shells out for validation is unavailable there.
 - The only way to run such a command is outside SOP. There is no policy-only mode
   and no automatic fallback.
-- Read-only and mutating file tools are unaffected; only subprocess execution is.
+- Read-only and mutating file tools, and the fixed `git status`/`git diff` helper, are
+  unaffected; only `run_command` subprocess execution is.
 
 This is the fail-closed trade the decision selects. It is reversible in one line
 (`isolationRequested`) if a Windows backend is added or B2 is preferred later.

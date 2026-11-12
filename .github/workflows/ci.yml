@@ -182,6 +182,12 @@ jobs:
         run: go vet ./...
       - name: adapter connector + process-tree tests (Windows)
         run: go test -count=1 -v ./internal/decision/commandprofile/
+      # Windows B1 is runtime behaviour, not a build property: this host has no
+      # sandbox backend, so run_command must refuse every override and never
+      # execute the command. The selected tests are self-contained; the full suite
+      # stays on Linux because several lifecycle tests need POSIX commands.
+      - name: run_command isolation refuses on Windows (B1)
+        run: go test -count=1 -v -run 'TestIsolationDecision|TestIsolationPolicyNotice|TestRunCommandIsolationDefaultsToFailClosed|TestRunCommandIsolationIsOnByDefault|TestRunCommandIsolationOnWindowsRefuses' ./internal/toolharness/
       - name: install.ps1 parses (PowerShell language parser)
         shell: powershell
         run: |

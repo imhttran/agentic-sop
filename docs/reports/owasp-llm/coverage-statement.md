@@ -226,14 +226,19 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     it fails closed when no sandbox is available. Each run gets its own throwaway
     build cache and the shared module cache is read-only, so one run cannot poison
     a later run's Go caches.
-  - The operator override `SOP_AGENT_RUN_COMMAND_ISOLATION=off` (also `0`, `false`,
-    `no`) is the only way to run commands with policy checks alone; `sop run` and
-    `sop prompt` print a startup notice when it is set. The override is
-    operator-scoped: a model cannot set its own parent's environment.
+  - Where a backend exists (macOS, Linux), the operator override
+    `SOP_AGENT_RUN_COMMAND_ISOLATION=off` (also `0`, `false`, `no`) is the only way
+    to run commands with policy checks alone, and `sop run` and `sop prompt` print
+    a startup notice when it is set. The override is operator-scoped: a model
+    cannot set its own parent's environment.
   - A host with no backend refuses `run_command` rather than running it
-    unsandboxed (Windows B1, selected by the operator). This is `VERIFIED` by
-    `TestRunCommandIsolationDefaultsToFailClosed` and
-    `TestRunCommandIsolationIsOnByDefault`.
+    unsandboxed (Windows B1, selected by the operator). The refusal is
+    unconditional on that platform: no override value and no
+    `Config.IsolateCommands` value can turn it into policy-only execution, and
+    the startup notice is suppressed there because the override does nothing. This is `VERIFIED` by
+    `TestIsolationDecisionUnsupportedPlatforms`,
+    `TestRunCommandIsolationRefusesBeforeExecution` and, at runtime on Windows,
+    `TestRunCommandIsolationOnWindowsRefuses`.
 
   Evidence: [llm03-agency.md](llm03-agency.md),
   [seatbelt-evidence.md](../security-shift-left/seatbelt-evidence.md#run_command-opt-in-sandbox-llm03).

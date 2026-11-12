@@ -446,7 +446,9 @@ a pre-existing hardlink alias and the macOS parent-environment read
 The decision-ready proposal is
 [PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md](PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md).
 The operator approved default-on isolation with the operator override and
-selected Windows B1 (fail closed); it is implemented and verified. The gap is
+selected Windows B1 (fail closed); it is implemented and verified. B1 is
+unconditional on that platform: the override is ignored on Windows, and a
+Windows runtime test in CI pins that the command is refused before execution. The gap is
 `Done` on the compatibility and default questions; the residual exposures listed
 in the proposal's section 6 are still open decisions.
 
