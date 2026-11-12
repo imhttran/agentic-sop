@@ -79,6 +79,15 @@ The rules tree was then re-fetched and the manifest digest matched again. This i
 report-only observation on a dirty worktree; it is not a clean-gate baseline and it
 says nothing about the 45 unsuppressed findings the dirty scan reported.
 
+## Local compatibility observation (macOS arm64, 2026-11-12)
+
+With the per-platform pins from PR #461, the tracked configuration fails the
+Gitleaks adapter closed on this host: the Homebrew executable's digest
+(`f414bc2f…`) is not the committed `darwin/arm64` release pin (`ba52fb1b…`).
+Semgrep has no binary pin and completed normally with the staged rules.
+Report-only mode records the failure without blocking; a developer who needs a
+completed secrets adapter must provision the pinned release binary.
+
 ## Platform record
 
 | Platform                              | Command                                                                                                                                                                                           | Result  | Notes                                                                                                                        |

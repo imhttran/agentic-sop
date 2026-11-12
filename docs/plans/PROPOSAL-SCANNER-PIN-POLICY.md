@@ -172,7 +172,11 @@ per-platform pin mechanism now exists (PR #461), but Semgrep's CI/local version
 drift remains.
 
 **Operational and maintenance cost.** Coordinating version bumps; adding platform
-matrix legs; documenting the `noexec` temp behavior when a staged copy cannot run.
+matrix legs; provisioning the pinned release binaries locally instead of
+distribution builds; documenting the `noexec` temp behavior when a staged copy
+cannot run. On macOS arm64, the Homebrew Gitleaks binary (`sha256 f414bc2f…`)
+differs from the committed `darwin/arm64` pin (`sha256 ba52fb1b…`), so the adapter
+reports `FAILED`; that is the pin working as intended, not a regression.
 
 **Recommended disposition.** Align the CI Semgrep version with the tracked config
 and add a platform matrix now that binary pins are committed. Document that a
