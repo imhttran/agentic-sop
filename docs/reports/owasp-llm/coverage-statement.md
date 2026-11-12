@@ -89,7 +89,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     and one unlisted opaque value reached the model. **Path authorization and
     model-input redaction are separate controls.** Outside-workspace origins,
     credentials created outside the model tools after the registry snapshot,
-    external removal before the first build, and Windows remain outside the control; they are recorded as bounded residual exposures (gap 5 option 1) and are not accepted. `Nlink > 1`
+    external removal before the first build, and Windows remain outside the control; they are accepted as bounded limits (LLM02 decision packet C.4, 2026-11-12; gap 5 option 1). `Nlink > 1`
     is not implemented and is not approved. The unlisted-value residual is unchanged
     and remains open: Option C denies aliases to protected workspace credentials, but
     an unlisted value in an ordinary file is still outside C1 and outside identity.
@@ -113,7 +113,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     alias to a credential outside the workspace, and Windows is `UNVERIFIED`. This
     is a bounded residual exposure, recorded by operator decision on 2026-11-12
     (gap 5, option 1). The `Nlink > 1` check is not implemented and not approved;
-    Windows and outside-workspace origins are not covered and not accepted.
+    Windows and outside-workspace origins are outside the control and are accepted as bounded limits (LLM02 decision packet C.4, 2026-11-12).
     The SAFE-command vector itself is now measured on both platforms: with isolation
     on, `TestDarwinIsolationSAFECommandCredentialRead` (new) and
     `TestLinuxIsolationSAFECommandCredentialRead` deny the read at the process
