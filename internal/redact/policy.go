@@ -44,19 +44,34 @@ func ModelInputWithPolicy(content string, env []string, policy Policy) string {
 	return c1Redact(content, Fixed("[redacted]"))
 }
 
-// ApplyPolicy adds the enabled C1 rules to content that the caller has already
-// reduced with the baseline (shape and known-value) redaction, using the caller's
-// marker. Exact inventory values are removed first, then the contextual and
-// known-format rules run. A disabled policy returns content unchanged.
-func ApplyPolicy(content string, policy Policy, m Marker) string {
-	if !policy.Enabled {
-		return content
+// Scrub redacts secret text in one pass over the original string. Exact secret
+// values (the caller's, plus the policy's inventory when enabled) and credential
+// shape matches are collected as spans of the same text, and overlapping spans
+// merge into one marker. A pass per detector in sequence cannot do this: shape
+// first leaves the tail of an inventory value that extends past a token shape,
+// and exact values first leaves the tail of a token that an inventory value only
+// prefixes. When the policy is enabled, its rules replace the default assignment
+// rule, and the contextual and known-format passes run on the merged result.
+func Scrub(s string, secrets []string, policy Policy, m Marker) string {
+	if s == "" {
+		return s
 	}
-	content = Values(content, policy.Values, m)
-	return c1Redact(content, m)
+	ruleSet := rules
+	if policy.Enabled {
+		secrets = append(append([]string(nil), secrets...), policy.Values...)
+		ruleSet = modelInputRules()
+	}
+	hits := exactHits(s, secrets)
+	hits = append(hits, findHitsWithRules(s, ruleSet)...)
+	out := renderSpans(s, hits, m)
+	if policy.Enabled {
+		out = contextualValues(out, m)
+		out = knownFormats(out, m)
+	}
+	return out
 }
 
-// c1Redact is the C1 tail shared by ModelInputWithPolicy and ApplyPolicy. The C1
+// c1Redact is the C1 tail used by ModelInputWithPolicy. The C1
 // path uses a precise assignment rule: the default detector's broad suffix also
 // redacts ordinary words such as "secretary", which the approved false-positive
 // corpus requires to survive. The default ModelInput path is untouched.
