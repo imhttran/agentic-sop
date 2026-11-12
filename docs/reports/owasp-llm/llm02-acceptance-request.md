@@ -34,6 +34,16 @@ Related: [llm02-disclosure.md](llm02-disclosure.md) §Live extraction,
 > They are preserved for audit; the current state and final criterion matrix are in
 > §Final closeout (2026-11-10).
 
+**Evidence refresh (`main` `4993cdb9`, after PR #429).** The Linux notification
+sink now has one recorded live run (`llm02-campaign-linux-notify-sink.json`,
+`protected` for shape and known-value canaries with a local receiver). Dated
+sections below that say live notification evidence is `NOT_RUN` describe the
+state when they were written. The Linux live retrieval sink remains `NOT_RUN`,
+and no Plan 03 per-criterion acceptance is recorded: `sop verify --plan …`
+reports `accepted: 0`, 13 manual criteria `decision-eligible`, and 3 check-mapped
+criteria `check-unverified`. The refreshed decision packet is
+[llm02-decision-packet.md](llm02-decision-packet.md).
+
 ## What is missing
 
 PR #300 merged the bounded live campaign as **evidence**, not approval. The report

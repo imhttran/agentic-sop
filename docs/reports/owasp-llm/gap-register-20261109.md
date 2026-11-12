@@ -122,8 +122,10 @@ acceptance criteria were accepted; no acceptance decision exists.
    `Nlink > 1` check — is a separate control; the read-deny rule is implemented
    opt-in (macOS `VERIFIED`, Linux `amd64` `VERIFIED` in PR #384) and `Nlink > 1` is not. It does not
    replace Phase 1. The bounded subprocess hardlink alias is accepted under
-   Option D (item 3); no other residual risk is recorded as accepted. Linux live
-   retrieval/notification remain `NOT_RUN`. The unknown-format residual
+   Option D (item 3); no other residual risk is recorded as accepted. The Linux
+   live retrieval sink remains `NOT_RUN`; the notification sink has one Linux run
+   (`llm02-campaign-linux-notify-sink.json`, PR #429) that does not cover Slack
+   rendering or channel binding. The unknown-format residual
    assessment is
    [PROPOSAL-LLM02-UNKNOWN-FORMAT-RESIDUAL.md](../../plans/PROPOSAL-LLM02-UNKNOWN-FORMAT-RESIDUAL.md)
    (status `NOT_APPROVED`; recommends `ACCEPT_PROPOSED` for context-free values;

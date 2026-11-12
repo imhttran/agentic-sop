@@ -10,10 +10,17 @@ command or change that would record it. The
 Commands below were checked against the source in `internal/cli/historical_acceptance.go`
 (`historicalOutcomeUsage`, `historicalVerifyUsage`) and `internal/config/redaction.go`.
 
-## 1. Plan 03 per-criterion acceptance (criteria 1–4 and 6)
+**Refreshed:** `main` at `4993cdb9` (merge of PR #429). This refresh corrects
+merged-PR references, adds the check-mapped `--run-check` commands, and records
+the Linux notification-sink evidence. It still records no decision, acceptance,
+waiver, memory entry, or configuration change.
 
-- **Evidence:** [llm02-acceptance-request.md](llm02-acceptance-request.md); the
-  Plan 03 closeout matrix; the bounded campaign artifacts
+## 1. Plan 03 per-criterion acceptance (all 16 criteria)
+
+- **Evidence:** [llm02-acceptance-request.md](llm02-acceptance-request.md) —
+  §Plan 03 acceptance matrix and §Decision packet (2026-11-10; corrected) hold the
+  per-criterion evidence, bounds, and proposed scope; the Plan 03 closeout matrix;
+  the bounded campaign artifacts
   (`llm02-campaign.json`, `llm02-linux-campaign.json`, `llm02-c1-linux-campaign.json`,
   `llm02-c1-hardlink-campaign.json`).
 - **Current state:** bounded evidence acceptance is recorded (decision memory
@@ -21,13 +28,26 @@ Commands below were checked against the source in `internal/cli/historical_accep
   acceptance is not recorded, so full acceptance stays `NEEDS_HUMAN`.
 - **Recommendation:** review the evidence, then accept or reject each criterion
   individually. Do not treat the historicalized `COMPLETE` as acceptance.
-- **Command (designated approver only):**
+- **Current verified state:** `sop verify --plan … --archive … --json` reports
+  `accepted: 0`, `mapped: 16`, `manual: 13`, `check: 3`, `check_passed: 0`,
+  `unverified: 3`. The 13 manual criteria are `decision-eligible`; the three
+  check-mapped criteria (`DISCLOSE-002.1`, `002.2`, `002.3`) are
+  `check-unverified`. No `acceptance_decisions.jsonl` exists for the plan.
+- **Commands (designated approver only):**
   ```bash
   sop verify --plan docs/plans/PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.md --archive .agent-sdlc/archive/worktree-evidence/plan-03-sop-llm02-sensitive-information-disclosure
   sop outcome --plan docs/plans/PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.md --archive <archive-dir> --accept <criterion-id> --evidence "<text>" --evidence-ref "path=<file>,sha256=<digest>" --by <name>
+  sop outcome --plan docs/plans/PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.md --archive <archive-dir> --run-check <criterion-id> [--tested-revision <commit>] --by <name>
   ```
-  Use `--reject` or `--annotate` instead of `--accept` where that fits. `--reason` is
-  required with `--annotate`.
+  Use `--reject` instead of `--accept` to record a rejection, or
+  `--annotate <criterion-id> --reviewed-evidence "<text>" --reason "<text>"` to record
+  a manual-evidence annotation; `--reason` is required with `--annotate`.
+- **Check-mapped criteria:** `DISCLOSE-002.1`, `DISCLOSE-002.2`, and `DISCLOSE-002.3`
+  have archived check commands. `--accept`, `--reject`, and `--annotate` are refused
+  for them (`criterion … is check-mapped; manual acceptance is not allowed`). Use
+  `--run-check`; it requires a clean tree, records the tested revision, exit status,
+  and log digest, and refuses to accept if the source changes during execution. A
+  passing check is evidence for the tested revision, not human acceptance.
 
 ## 2. Enable C1 in repository configuration
 
@@ -37,9 +57,26 @@ Commands below were checked against the source in `internal/cli/historical_accep
   unit-tested only.
 - **Current state:** `redaction.enabled` is `false`. Enabling it needs an external
   inventory file, which must be outside the repository and not a symlink.
-- **Recommendation:** enable it only after a campaign that goes through
-  `config.RedactionPolicy` on this repository, and only with an inventory the operator
-  owns. C1 is not general DLP.
+- **Protected routes (verified in source):** the Ollama native tool harness redacts
+  `userPrompt` (task, caller input, output requirements) and every tool result and
+  error in `toolResultMessage`. Since PR #400, the baseline pass and an enabled C1
+  policy also run on every CLI-built chat transport through `agent.Redacted` — the
+  OpenAI-compatible provider and the Ollama chat path — for `Task`, `Input`, and
+  `OutputRequirements` (`TestRedactedBeforeChatTransports`, C1 on and off). The system
+  prompt and non-native tool results are outside this boundary, and no live campaign
+  exercises the chat transports.
+- **A committed default would break other machines:** `config.validateRedaction`
+  requires `inventory_path` whenever `enabled` is true, and `config.RedactionPolicy`
+  fails closed when the policy loads if the file is missing, malformed, a symlink,
+  not a regular file, inside the repository, or not `0600`; `LoadInventory` also
+  refuses Windows. The tracked `.agent-sdlc/config.yaml` cannot name a path that
+  exists on every clone, so a committed `enabled: true` would fail agent creation
+  elsewhere. Keep C1 opt-in and enable it in a local, uncommitted configuration
+  with an operator-owned external inventory.
+- **Recommendation (preferred):** keep C1 opt-in and do not commit
+  `enabled: true`; enable it locally, with an operator-owned external inventory,
+  only after a campaign that goes through `config.RedactionPolicy` on the target
+  repository. C1 is not general DLP.
 - **Change (after the decision):**
   ```yaml
   redaction:
@@ -71,12 +108,12 @@ Commands below were checked against the source in `internal/cli/historical_accep
 
 | Item | Recommended disposition | Evidence | Note |
 | --- | --- | --- | --- |
-| Model-output artifacts | `INVESTIGATE` (gap 7) | `PROPOSAL-LLM02-MODEL-OUTPUT-ARTIFACTS.md` (PR #407, not yet merged); option C implemented in PR #408 | Option A (redact the reply files) still needs a decision |
-| Notification prose | `MITIGATE` | Gap register, notification row | Not yet tracked as a separate item |
-| Retrieval and handoff inputs | `INVESTIGATE` / `ACCEPT_PROPOSED` | Gap register | Retrieval sinks are `NOT_RUN` on Linux |
+| Model-output artifacts | `INVESTIGATE` (gap 7) | `PROPOSAL-LLM02-MODEL-OUTPUT-ARTIFACTS.md` (PR #407, merged); option C implemented in PR #408 (merged; run artifacts are now `0600`) | Option A (redact the reply files) still needs a decision; the proposal records no measured echo campaign |
+| Notification prose | `MITIGATE` | Gap register row 6; Linux notification-sink run `llm02-campaign-linux-notify-sink.json` (PR #429) | One Linux run is `protected` for shape and known-value canaries with a local receiver; Slack rendering and channel binding remain gap 12 |
+| Retrieval and handoff inputs | `INVESTIGATE` / `ACCEPT_PROPOSED` | Gap register | The Linux live retrieval sink is `NOT_RUN`; the notification sink now has one Linux run (PR #429) |
 | Provider retention | `TRANSFER_PROPOSED` | Gap register | Outside SOP's control |
 | Parent-environment read on macOS (`kern.procargs2`) | Accept as known limit, or design a sysctl allow-list | [seatbelt-evidence.md](../security-shift-left/seatbelt-evidence.md) (PR #406) | Narrow denies do not work; a full sysctl deny breaks the Go runtime |
-| Hardlink alias to protected credentials, macOS | Verify the existing registry on macOS (option B) | [PROPOSAL-LLM02-NLINK-AND-MACOS-IDENTITY.md](../../plans/PROPOSAL-LLM02-NLINK-AND-MACOS-IDENTITY.md) (PR #404) | First macOS run is recorded as not passed; a rerun or a prompt change needs a decision |
+| Hardlink alias to protected credentials, macOS | Verify the existing registry on macOS (option B) | [PROPOSAL-LLM02-NLINK-AND-MACOS-IDENTITY.md](../../plans/PROPOSAL-LLM02-NLINK-AND-MACOS-IDENTITY.md) (PR #404; runs #405 and #419) | Both macOS runs denied all five protected aliases but missed the positive control in the model reply; a rerun or a prompt change needs a decision |
 
 ## 5. Already decided (no action needed)
 
