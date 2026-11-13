@@ -175,7 +175,7 @@ waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-ga
 
 ## Status
 
-### Current delivery notes (2026-11-12)
+### Current delivery notes (2026-11-13)
 
 - All ten OWASP LLM workstreams have merged implementation or evidence, but the
   [evidence matrix](docs/reports/owasp-llm/README.md) is not a compliance
@@ -202,6 +202,9 @@ waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-ga
   failed, disabled, and changed-files scans stay silent, and the five Gitleaks
   fixtures that the decision documents introduced were redacted rather than
   baselined.
+- D4-5 remains open. PR #484 documents a measured default-path execution bypass
+  through repository-configured Git helpers. Its proposed mitigation is not yet
+  approved or merged, and review has an unresolved P1 for Git clean filters.
 - Every `exec.CommandContext` subprocess path binds process-group termination,
   enforced by an architecture guard. Token budgeting remains opt-in and is not a
   monetary cap.
