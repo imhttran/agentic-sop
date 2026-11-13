@@ -1,11 +1,10 @@
 # Baseline drift detection — stale reviewed entries
 
-**Status:** investigation plus one **policy-neutral** implementation, with a known
-correctness defect. The drift signal is advisory and cannot change a verdict, but PR #472
-merged with an unresolved P2: changed-files scans and failed or disabled adapters do not
-cover the full baseline, so valid entries outside the observed finding set can be reported
-as unmatched. No entry is added, removed, or rewritten, and no enforcement setting is
-touched.
+**Status:** investigation plus one **policy-neutral** implementation. **The P2 recorded
+against PR #472 is fixed:** the warning is now emitted only when a full-workspace scan
+observed every adapter the baseline relies on, so changed-files, partial, failed, disabled
+and no-op scans stay silent. The defect is preserved below as the reason for the gate. No
+entry is added, removed, or rewritten, and no enforcement setting is touched.
 
 **Context:** the D4 reconciliation found that **16 of 56 committed baseline entries match no
 current finding**. They name the 13 production exec sites under fingerprints recorded on
@@ -62,11 +61,17 @@ One method, one call site per scanner entry point:
   scan, with the complete finding set.
 
 Calling it once avoids one class of false positive because `Baseline.Apply` runs per
-adapter. It does **not** prove that the finding set covers the full baseline. Under
-`--scope changed-files`, unchanged files are absent by design; failed or disabled adapters
-also leave their entries absent. The current implementation can therefore report valid
-entries as drifted in those cases. The diagnostic must be restricted to successful
-full-workspace scans, or receive explicit scope and adapter-coverage information.
+adapter. It does **not** prove that the finding set covers the full baseline: under
+`--scope changed-files` unchanged files are absent by design, and failed or disabled adapters
+leave their entries absent. The first implementation ignored that and could report valid
+entries as drifted; a changed-files scan with no changes reported all 56 entries as
+unmatched.
+
+The fix is a gate at the call site: `security.BaselineDriftDiagnostics` returns the warning
+only when the scope is `workspace` and every adapter the baseline holds entries for
+completed with complete coverage and real content. The adapter set comes from the
+fingerprint prefix, which `StableFingerprint` namespaces with the same identifier the scan
+reports as `AdapterID`.
 
 ## 4. Why it is policy-neutral
 
@@ -112,9 +117,9 @@ Suites run: `go test ./internal/security/... ./internal/quality/...` pass;
 ## 6. Limits, stated plainly
 
 - It **warns**; it does not remove the entry and does not force a review.
-- The warning is reliable only for a successful full-workspace scan covering the relevant
-  adapter. Changed-files scans and failed or disabled adapters can produce false drift
-  warnings until the unresolved PR #472 P2 is fixed.
+- The warning is emitted only for a complete workspace scan that covered the relevant
+  adapters. Nothing is reported for changed-files, partial, failed, disabled or no-op scans,
+  so a real drift in one adapter stays quiet while another relevant adapter is unavailable.
 - An entry that is **both** expired and unmatched still produces no diagnostic: `Apply`
   reports expiry only when a finding matches. The expiry date remains the control there.
 - It reports at most 5 names per scan; the count is always complete.

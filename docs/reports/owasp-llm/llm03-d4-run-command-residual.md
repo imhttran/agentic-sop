@@ -1,4 +1,4 @@
-# `run_command` residual analysis — `internal/toolharness/harness.go:920`
+# `run_command` residual analysis — `internal/toolharness/harness.go:926`
 
 **Status:** investigation, read-only. **The residual is not accepted, and no code or
 configuration is changed by this report.** It answers the operator question behind D4-5: do
@@ -8,6 +8,11 @@ constrain model-controlled execution?
 **Evidence base:** clean `origin/main` at `bd2e0d45`, darwin arm64, Go 1.27.1, Gitleaks
 8.30.1, Semgrep 1.183.0. The isolation test suite in `internal/toolharness` was run on this
 host; all 18 tests pass (§5).
+
+> **Revision (2026-11-13).** This analysis was written against `harness.go:920`. M1 later
+> added the environment scrub above `execCaptured`, so the call site and finding are now at
+> `harness.go:926`; the analysis is otherwise unchanged. The current fingerprint is
+> `semgrep:3076a05322acb6e35b02c87144da3b8a6dfbe8eac96a7679614c4d5402973771`.
 
 **Answer in one line.** The model cannot name an arbitrary *program*, but it can run
 arbitrary *code*, because `go test` and `go build` are `SAFE` and execute source the model
@@ -104,7 +109,7 @@ not silent. It does not reduce the impact.
 | No backend (Windows) | refused | refused | — | — | — | Fail-closed. |
 
 The command policy and the sandbox **do** constrain model execution, but not to zero, and the
-constraint depends entirely on the sandbox being in effect. The finding at `harness.go:920`
+constraint depends entirely on the sandbox being in effect. The finding at `harness.go:926`
 is a true capability, not a false positive; the mitigations recorded in the D4 packet are
 real; and the residual is narrower and sharper than "the operator can turn it off". It is:
 with isolation off, `go test` is model-controlled code execution with the provider's

@@ -192,10 +192,12 @@ waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-ga
 - Slack rendering was observed. A plain `@here` can notify the bound channel;
   the operator chose to document this as a residual rather than change the encoder.
 - LLM03 scanner-integrity code and per-platform pins are merged. D4 enforcement
-  remains report-only: the reproduced baseline is 101 findings, 40 suppressed,
-  and 45 blocking. PRs #471/#472 provide the approval packet and investigations.
-  The new stale-baseline diagnostic has an unresolved P2: partial or failed scans
-  can falsely report valid entries as unmatched.
+  remains report-only: the reproduced full-workspace baseline is 106 findings,
+  40 suppressed, and 50 blocking. PRs #471–#474 provide the approval packet, the
+  investigations, the M1/M3 hardening, and the Semgrep 1.183.0 alignment. The
+  stale-baseline diagnostic now reports only after a complete workspace scan, so
+  partial, failed, disabled, and changed-files scans stay silent. Five Gitleaks
+  fixtures introduced by the decision documents await a redact-or-baseline choice.
 - Every `exec.CommandContext` subprocess path binds process-group termination,
   enforced by an architecture guard. Token budgeting remains opt-in and is not a
   monetary cap.

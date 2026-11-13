@@ -2,7 +2,7 @@
 
 **Status:** approval packet, read-only. **Nothing here is approved, accepted, or applied.**
 `security.mode` is still `report-only`, `required_categories` is still empty, no baseline
-entry is added, and the `internal/toolharness/harness.go:920` residual is **not accepted**.
+entry is added, and the `internal/toolharness/harness.go:926` residual is **not accepted**.
 The operator decides each numbered item independently.
 
 **Supersedes:** the approval framing in
@@ -15,6 +15,16 @@ independently reproduced the baseline at `origin/main` `bd2e0d45` and reconciled
 blocking findings. Every fingerprint in the matrix matched the scan and recomputed from
 `(provider, rule, path, line, column)`.
 
+> **Revision (2026-11-13, verified at `main` `986b9132`).** The residual moved from
+> `harness.go:920` to `:926` when M1 added the environment scrub above `execCaptured`, so
+> its fingerprint is now `semgrep:3076a05322acb6e35b02c87144da3b8a6dfbe8eac96a7679614c4d5402973771`
+> (was `semgrep:2e3c98676c0b89b137c13339ae43b6a5928dae9e7ff2fcf893de77038f473847`, preserved
+> here as historical evidence). The other 73 Semgrep fingerprints are unchanged. The
+> full-workspace report-only baseline is now **106 findings, 40 suppressed, 66
+> unsuppressed, 50 blocking**: the residual's move did not change the count, and the five
+> additional Gitleaks fixture findings are the decision documents' own quoted placeholders,
+> pending disposition. Only the current fingerprint may be used for a new approval.
+
 **Approval integrity.** Each group is approved as a _set digest_: SHA-256 over the group's
 fingerprints, sorted, newline-joined. Approving "group C at digest X" is exact and immune to
 a later edit that silently changes a member.
@@ -24,7 +34,7 @@ a later edit that silently changes a member.
 | A — Gitleaks fixtures          | 1–27             | 27    | `4596c8ccc60f4d1b58d8ce3e9195d1455089dd320fdb4b5fe00ebdbf9fab1ef9` |
 | B — test-only Semgrep HIGH     | 33, 42–45        | 5     | `ec2380e348324bfa253015f29d2f51d213119cb6dfc318cbd4a176257308a0dc` |
 | C — production Semgrep         | 28–32, 34–40     | 12    | `b61b105f2838651008a731a2e89ef3902e76b6ea1c579fc245ec069776d094bc` |
-| D — residual                   | 41               | 1     | `cdef4f346dce21db022b5d0076d6a40d96ebcedfff0b8397ba533508fcc67017` |
+| D — residual                   | 41               | 1     | `8a665937345d8e191e18691e55e4e4a02c6df9d3a5962ea0402d9faf1113b8ee` |
 | E — non-blocking MEDIUM (§3.4) | —                | 16    | `55268654137e2e2d65c7c06ecc101990f5157b07970fcf08543ecf6fb160fdce` |
 | A+B+C together                 | —                | 44    | `ed4bd241f1e68f28489d0219f784bd6fc5014a3b5a816deca36f88c92e4a3f6a` |
 
@@ -133,7 +143,7 @@ would not cover because the fingerprint is exact.
 per-site revalidation trigger.
 
 **Exact scope.** Rows 28–32 and 34–40, digest `b61b105f…`: the 12 production exec sites
-other than `internal/toolharness/harness.go:920`. The six `sh -c` sites are
+other than `internal/toolharness/harness.go:926`. The six `sh -c` sites are
 `internal/agent/command.go:104`,
 `internal/handoff/caveman/caveman.go:90`, `internal/hipcompare/command.go:402`,
 `internal/hipcompare/command.go:430`, `internal/review/ocr.go:57`,
@@ -162,7 +172,7 @@ so it is not applied here. If chosen, this group is 11 entries, not 12.
 **Implementation impact.** 12 entries (or 11 with the deletion) plus the 16 stale entries
 retired in the same change, so the file does not accumulate inert entries.
 
-## D4-5 — residual at `internal/toolharness/harness.go:920` (group D)
+## D4-5 — residual at `internal/toolharness/harness.go:926` (group D)
 
 **Recommended: R1 (accept the bounded residual) with a baseline entry expiring 2027-03-31 —
 and therefore Option C. If R1 is not acceptable, choose Option A (R2); do not choose B.**
@@ -175,8 +185,8 @@ and therefore Option C. If R1 is not acceptable, choose Option A (R2); do not ch
 | **R4** | Authorize a code change to the exec mechanism or policy                                                      | Outside this gap's authorization; needs its own proposal.                                   |
 
 **Exact scope.** One entry, fingerprint
-`semgrep:2e3c98676c0b89b137c13339ae43b6a5928dae9e7ff2fcf893de77038f473847`, digest
-`cdef4f34…`.
+`semgrep:3076a05322acb6e35b02c87144da3b8a6dfbe8eac96a7679614c4d5402973771`, digest
+`8a665937…`.
 
 **Supporting evidence.** This is the only blocking finding that is a true model-controlled
 exec capability, and it is not a false positive. Current controls, verified by reading the
@@ -226,6 +236,25 @@ policy changes or the report noise becomes a problem.
 
 **Implementation impact.** None. Approving them instead would add 16 entries that must be
 revalidated twice a year for no enforcement gain.
+
+## Pending disposition — five Gitleaks fixtures in these documents
+
+These five findings are **not** part of the original 45. They were introduced by the decision
+documents themselves, which quote placeholder token shapes while explaining the fixture
+category, and Gitleaks flags the quoted shape. They are synthetic, not credentials. No entry
+is recorded and no decision is taken here; they are recorded so the operator can choose
+between redacting the quoted shapes (no baseline entry needed) and baselining them.
+
+| File | Line | Rule | Fingerprint |
+| --- | --- | --- | --- |
+| `docs/plans/PROPOSAL-LLM03-D4-OPERATOR-APPROVAL-PACKET.md` | 93 | `gitlab-pat` | `gitleaks:6587d88d04eb1d2edf7e2b3a5ab45ef82b2047ffe67e193a472b0f1cc9041696` |
+| `docs/plans/PROPOSAL-LLM03-D4-OPERATOR-APPROVAL-PACKET.md` | 93 | `stripe-access-token` | `gitleaks:b3e345cb9b393167840c14eadd487e8f8f036126c27cf366c02621310b42194a` |
+| `docs/reports/owasp-llm/llm03-d4-reconciliation.md` | 92 | `gitlab-pat` | `gitleaks:0e2afa016d2557ba5de881491a7eccbb564afa5d8981ba8af353e29031e9698a` |
+| `docs/reports/owasp-llm/llm03-d4-reconciliation.md` | 93 | `stripe-access-token` | `gitleaks:a6ff52319833977476e1139483cbe6e591aeceeaea73c32d0156e61ae7fe860b` |
+| `docs/reports/owasp-llm/llm03-d4-reconciliation.md` | 94 | `aws-access-token` | `gitleaks:d471a42320ffce3d911758ab7ac28c73de0fdbd653e873092da1d58c742e573a` |
+
+Fingerprints are line- and column-based, so editing the surrounding prose moves them; the
+values above were read from the verified workspace scan at `main` `986b9132`.
 
 ## Operational consequences
 

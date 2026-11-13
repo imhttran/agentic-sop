@@ -199,12 +199,17 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     blocking gate is an operator decision
     ([PROPOSAL-SCANNER-PIN-POLICY.md](../../plans/PROPOSAL-SCANNER-PIN-POLICY.md)).
 
-> **Current scanner-enforcement status (PRs #471/#472):** required categories
-> remain disabled. The reproduced report-only scan has 101 findings, 40 suppressed
-> and 45 blocking. The advisory unmatched-baseline diagnostic is verdict-neutral,
-> but its first implementation compares the full baseline against partial or failed
-> scan output and can emit false drift warnings. Treat those warnings as unreliable
-> outside a successful full-workspace scan until the unresolved P2 is fixed.
+> **Current scanner-enforcement status (PRs #471–#474):** required categories
+> remain disabled; the scan is report-only. The reproduced full-workspace baseline is
+> **106 findings, 40 suppressed and 50 blocking** — the original 45 blocking findings
+> (with the residual now at `internal/toolharness/harness.go:926`,
+> `semgrep:3076a05322acb6e35b02c87144da3b8a6dfbe8eac96a7679614c4d5402973771`), plus
+> five Gitleaks fixture findings that the decision documents introduced themselves.
+> Those five are synthetic and await a redact-or-baseline decision; they are listed in
+> the [operator packet](../../plans/PROPOSAL-LLM03-D4-OPERATOR-APPROVAL-PACKET.md).
+> The advisory unmatched-baseline diagnostic is verdict-neutral and now reports only
+> when a full-workspace scan observed every adapter the baseline relies on, so
+> changed-files, partial, failed, disabled and indeterminate scans stay silent.
 
 ### LLM04 Data and Model Poisoning — partial
 

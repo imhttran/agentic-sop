@@ -184,10 +184,11 @@ func runSecurityScan(args []string, stdout, stderr io.Writer, d deps) int {
 	}
 	scan.Diagnostics = append(append([]string(nil), baselineDiagnostics...), scan.Diagnostics...)
 	scan.Diagnostics = append(selection.Diagnostics, scan.Diagnostics...)
-	// Advisory only: an entry whose fingerprint no longer matches suppresses
-	// nothing, so a reviewed exception can go inert when an unrelated edit moves
-	// a line or column. This never changes the verdict.
-	scan.Diagnostics = append(scan.Diagnostics, baseline.UnmatchedDiagnostics(scan.Findings, time.Now().UTC())...)
+	// Advisory only, and only when this scan could actually observe the whole
+	// baseline: a changed-files, partial, failed, or disabled scan omits findings by
+	// design, so unmatched entries there would be a false warning. Never changes the
+	// verdict.
+	scan.Diagnostics = append(scan.Diagnostics, security.BaselineDriftDiagnostics(baseline, scan, time.Now().UTC())...)
 
 	refs, err := security.WriteArtifacts(rn.Dir(), scan)
 	if err != nil {
