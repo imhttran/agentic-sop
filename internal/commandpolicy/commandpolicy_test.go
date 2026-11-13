@@ -79,6 +79,8 @@ func TestClassifyGitConfigOverride(t *testing.T) {
 		{"read-only subcommand hidden behind an unknown option", []string{"git", "--attr-source", "log", "-c", "core.pager=id", "diff"}, RequiresApproval},
 		{"no-pager push still needs approval", []string{"git", "--no-pager", "push", "origin", "main"}, RequiresApproval},
 		{"no-pager status is still safe", []string{"git", "--no-pager", "status"}, Safe},
+		{"exec-path directory runs external programs", []string{"git", "--exec-path=./evil", "status"}, RequiresApproval},
+		{"exec-path directory under push is denied", []string{"git", "--exec-path=./evil", "push", "origin", "main"}, Denied},
 		{"bundled -fu denied", []string{"git", "push", "-fu", "origin", "main"}, Denied},
 		{"unambiguous --force-with prefix denied", []string{"git", "push", "--force-with", "origin", "main"}, Denied},
 		{"--force-if-includes denied", []string{"git", "push", "--force-if-includes", "origin", "main"}, Denied},

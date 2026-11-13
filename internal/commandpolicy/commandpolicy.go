@@ -197,9 +197,10 @@ func knownGitGlobals(args []string) bool {
 		switch {
 		case gitGlobalWithValue[a]:
 			i++ // consumes the following argument
-		case pushPrefixInert[a], a == "--exec-path",
-			strings.HasPrefix(a, "--exec-path="), strings.HasPrefix(a, "-c"),
-			strings.HasPrefix(a, "--config-env"):
+		case pushPrefixInert[a], a == "--exec-path":
+			// bare --exec-path prints the path and exits. --exec-path=<dir> points
+			// command lookup at a directory the model can write, so it is unknown.
+		case strings.HasPrefix(a, "-c"), strings.HasPrefix(a, "--config-env"):
 			// config forms are judged by gitConfigOverride
 		default:
 			return false
