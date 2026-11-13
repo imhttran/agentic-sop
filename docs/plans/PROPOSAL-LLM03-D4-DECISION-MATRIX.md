@@ -21,10 +21,11 @@ unsuppressed, 45 blocking**; all three adapters `COMPLETED` / `COMPLETE`; verdic
 > `harness.go:920` to `:926` when M1 added the environment scrub above `execCaptured`, so
 > its fingerprint is now `semgrep:3076a05322acb6e35b02c87144da3b8a6dfbe8eac96a7679614c4d5402973771` (was `semgrep:2e3c98676c0b89b137c13339ae43b6a5928dae9e7ff2fcf893de77038f473847`, preserved here as historical
 > evidence). The other 73 Semgrep fingerprints are unchanged. The full-workspace
-> report-only baseline is now **106 findings, 40 suppressed, 66 unsuppressed, 50
-> blocking**: the residual's move did not change the count, and the five additional
-> Gitleaks fixture findings are the decision documents' own quoted placeholders, pending
-> disposition. Only the current fingerprint may be used for a new approval.
+> report-only baseline is **101 findings, 40 suppressed, 61 unsuppressed, 45
+> blocking**. The residual's move did not change the count; the five additional Gitleaks
+> findings that the decision documents introduced were later redacted (see "Resolved" in the
+> operator packet), which removed them without a baseline entry. Only the current
+> fingerprint may be used for a new approval.
 
 
 ## Decision legend
@@ -88,7 +89,7 @@ All 45 are unsuppressed findings at `critical`/`high` under the current
 | 42 | semgrep | `dangerous-exec-command` | `internal/toolharness/isolation_credential_linux_test.go:113` | `semgrep:fab835e9941bb1ad0ab32bf7e51f0a1f30944f2d500ba43cf844b247c4c35718` | **B** | 2027-06-30 |
 | 43 | semgrep | `dangerous-exec-command` | `internal/toolharness/isolation_test.go:32` | `semgrep:11ef53417d1b9eedc8e24e1593bdfa38b6d8df035e3265fce7c61bff2aa3e5c2` | **B** | 2027-06-30 |
 | 44 | semgrep | `dangerous-exec-command` | `internal/toolharness/isolation_test.go:60` | `semgrep:fbedd5f6a2ed946cd639a20ce584f6ab65c3788767ea09cbb60e2c08294313b2` | **B** | 2027-06-30 |
-| 45 | semgrep | `dangerous-exec-command` | `internal/toolharness/isolation_test.go:677` | `semgrep:b54aa7e631411a44e21ab9b190aac37cfd4148fde1f562bd8938897974cb88a5` | **B** | 2027-06-30 |
+| 45 | semgrep | `dangerous-exec-command` | `internal/toolharness/isolation_test.go:766` | `semgrep:765bec591c74b4bc0a7bfbee12daaeb711a7123391832670c4d7d8d2a99d9f28` | **B** | 2027-06-30 |
 
 **Summary:** 44 proposed fingerprint entries (**B**) — 27 Gitleaks, 5 test-only
 Semgrep HIGH, and 12 production Semgrep — and one residual decision (**R**,
@@ -177,7 +178,7 @@ added to the same report or test file. Use the exact fingerprints.
 | `internal/toolharness/isolation_credential_linux_test.go` | 113 | `dangerous-exec-command` | `semgrep:fab835e9941bb1ad0ab32bf7e51f0a1f30944f2d500ba43cf844b247c4c35718` | 2027-06-30 |
 | `internal/toolharness/isolation_test.go` | 32 | `dangerous-exec-command` | `semgrep:11ef53417d1b9eedc8e24e1593bdfa38b6d8df035e3265fce7c61bff2aa3e5c2` | 2027-06-30 |
 | `internal/toolharness/isolation_test.go` | 60 | `dangerous-exec-command` | `semgrep:fbedd5f6a2ed946cd639a20ce584f6ab65c3788767ea09cbb60e2c08294313b2` | 2027-06-30 |
-| `internal/toolharness/isolation_test.go` | 677 | `dangerous-exec-command` | `semgrep:b54aa7e631411a44e21ab9b190aac37cfd4148fde1f562bd8938897974cb88a5` | 2027-06-30 |
+| `internal/toolharness/isolation_test.go` | 766 | `dangerous-exec-command` | `semgrep:765bec591c74b4bc0a7bfbee12daaeb711a7123391832670c4d7d8d2a99d9f28` | 2027-06-30 |
 
 **Why expected / evidence.** All are `_test.go` helpers that start a sandbox or probe
 isolation; they cannot run in production. **Revalidation.** On test-file or
