@@ -52,7 +52,7 @@ var safeGo = map[string]bool{
 // the subcommand can still be located after them.
 var gitGlobalWithValue = map[string]bool{
 	"-C": true, "-c": true, "--git-dir": true, "--work-tree": true,
-	"--exec-path": true, "--namespace": true,
+	"--namespace": true,
 }
 
 // Classify applies the default policy to a structured command (program plus
@@ -83,11 +83,13 @@ func classifyGit(args []string) Class {
 	// unrecognised value-taking global option (--attr-source HEAD) would otherwise
 	// hide it. Fail closed: a configuration override on a push can force the update
 	// (remote.*.push, push.*), so it is denied rather than approved.
-	if containsToken(args, "push") {
-		if gitConfigOverride(args) {
-			return Denied
-		}
-		return classifyPush(args)
+	if idx := indexToken(args, "push"); idx >= 0 {
+		return classifyPushInvocation(args[:idx], args[idx:])
+	}
+	// An unknown leading global option may take a value, so the subcommand cannot
+	// be located reliably. Fail closed to approval rather than guess.
+	if !knownGitGlobals(args) {
+		return RequiresApproval
 	}
 	if gitConfigOverride(args) {
 		// A global configuration override can make even a read-only subcommand
@@ -157,14 +159,53 @@ func gitSubcommand(args []string) string {
 	return ""
 }
 
-// containsToken reports whether token appears exactly in args.
-func containsToken(args []string, token string) bool {
-	for _, a := range args {
+// indexToken returns the first index of token in args, or -1.
+func indexToken(args []string, token string) int {
+	for i, a := range args {
 		if a == token {
-			return true
+			return i
 		}
 	}
-	return false
+	return -1
+}
+
+// pushPrefixInert are the global options that cannot configure, redirect, or
+// reinterpret a push. Any other token before the push subcommand denies it.
+var pushPrefixInert = map[string]bool{
+	"--no-pager": true, "--no-optional-locks": true,
+	"--literal-pathspecs": true, "--no-replace-objects": true,
+}
+
+// classifyPushInvocation applies to any command whose tokens contain 'push'.
+// The tokens before it are global options the parser may misread (a -c, a -C, an
+// unknown value-taking option, or a word that is really the subcommand), so any
+// token outside pushPrefixInert denies the invocation.
+func classifyPushInvocation(prefix, push []string) Class {
+	for _, a := range prefix {
+		if !pushPrefixInert[a] {
+			return Denied
+		}
+	}
+	return classifyPush(push)
+}
+
+// knownGitGlobals reports whether every leading global option is one this parser
+// understands, so the subcommand is located correctly.
+func knownGitGlobals(args []string) bool {
+	for i := 0; i < len(args) && strings.HasPrefix(args[i], "-"); i++ {
+		a := args[i]
+		switch {
+		case gitGlobalWithValue[a]:
+			i++ // consumes the following argument
+		case pushPrefixInert[a], a == "--exec-path",
+			strings.HasPrefix(a, "--exec-path="), strings.HasPrefix(a, "-c"),
+			strings.HasPrefix(a, "--config-env"):
+			// config forms are judged by gitConfigOverride
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // pushSafeFlags are the push options that do not change which refs move.
