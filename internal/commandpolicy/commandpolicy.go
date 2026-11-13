@@ -79,9 +79,14 @@ func Classify(argv []string) (Class, error) {
 }
 
 func classifyGit(args []string) Class {
-	// A push is classified before the configuration check, and it fails closed:
-	// the override check below would otherwise hide a force push behind an approval.
-	if gitSubcommand(args) == "push" {
+	// A push is recognised by any 'push' token, not by the subcommand guess: an
+	// unrecognised value-taking global option (--attr-source HEAD) would otherwise
+	// hide it. Fail closed: a configuration override on a push can force the update
+	// (remote.*.push, push.*), so it is denied rather than approved.
+	if containsToken(args, "push") {
+		if gitConfigOverride(args) {
+			return Denied
+		}
 		return classifyPush(args)
 	}
 	if gitConfigOverride(args) {
@@ -150,6 +155,16 @@ func gitSubcommand(args []string) string {
 		return a
 	}
 	return ""
+}
+
+// containsToken reports whether token appears exactly in args.
+func containsToken(args []string, token string) bool {
+	for _, a := range args {
+		if a == token {
+			return true
+		}
+	}
+	return false
 }
 
 // pushSafeFlags are the push options that do not change which refs move.
