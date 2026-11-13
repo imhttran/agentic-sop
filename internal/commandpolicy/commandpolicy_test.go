@@ -36,6 +36,50 @@ func TestClassify(t *testing.T) {
 	}
 }
 
+// Inline git configuration can name a program git later executes, so a read-only
+// subcommand is no longer read-only. It needs approval; it must never classify
+// SAFE. The global position is the only place git reads these options, so
+// subcommand flags such as `git log -c` and `git grep -c` stay SAFE.
+func TestClassifyGitConfigOverride(t *testing.T) {
+	cases := []struct {
+		name string
+		argv []string
+		want Class
+	}{
+		// Injected configuration: refused SAFE, routed to approval.
+		{"config via -c with diff driver", []string{"git", "-c", "diff.external=./evil.sh", "diff"}, RequiresApproval},
+		{"config via -c with fsmonitor", []string{"git", "-c", "core.fsmonitor=id", "status"}, RequiresApproval},
+		{"config via -c with pager", []string{"git", "-c", "core.pager=id", "log"}, RequiresApproval},
+		{"config via -c with alias", []string{"git", "-c", "alias.ci=!id", "ci"}, RequiresApproval},
+		{"config via attached -c", []string{"git", "-ccore.pager=id", "log"}, RequiresApproval},
+		{"config via --config-env", []string{"git", "--config-env=diff.external=EVIL", "diff"}, RequiresApproval},
+		{"config via --config-env with value", []string{"git", "--config-env", "diff.external=EVIL", "diff"}, RequiresApproval},
+		{"config after a global option", []string{"git", "-C", "repo", "-c", "core.pager=id", "log"}, RequiresApproval},
+		{"config after --no-pager", []string{"git", "--no-pager", "-c", "core.pager=id", "log"}, RequiresApproval},
+
+		// Legitimate Git workflows keep their classification.
+		{"plain status", []string{"git", "status", "--short"}, Safe},
+		{"plain diff", []string{"git", "diff"}, Safe},
+		{"log with combined flag", []string{"git", "log", "-c"}, Safe},
+		{"grep count flag", []string{"git", "grep", "-c", "needle"}, Safe},
+		{"read-only with global directory", []string{"git", "-C", "repo", "diff"}, Safe},
+		{"log oneline", []string{"git", "log", "--oneline"}, Safe},
+		{"push still needs approval", []string{"git", "push", "origin", "main"}, RequiresApproval},
+		{"force push still denied", []string{"git", "push", "--force"}, Denied},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := Classify(tc.argv)
+			if err != nil {
+				t.Fatalf("Classify(%v) error: %v", tc.argv, err)
+			}
+			if got != tc.want {
+				t.Errorf("Classify(%v) = %s, want %s", tc.argv, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestClassifyEmpty(t *testing.T) {
 	if _, err := Classify(nil); err == nil {
 		t.Error("expected an error for an empty command")

@@ -58,7 +58,7 @@ func IsolationPolicyNotice() string {
 	if !off {
 		return ""
 	}
-	return fmt.Sprintf("[config] %s=%q disables run_command isolation; commands run with policy checks only", IsolationEnv, raw)
+	return fmt.Sprintf("[config] %s=%q disables run_command isolation; commands run with policy checks only and a scrubbed credential environment", IsolationEnv, raw)
 }
 
 // backendFor maps a GOOS to the sandbox backend and the binary it needs. An empty
@@ -126,14 +126,20 @@ func isolate(root string, argv []string) (wrapped, env []string, detail string, 
 	return append(prefix, argv...), env, detail, func() { _ = os.RemoveAll(cache) }, nil
 }
 
-// sandboxEnv is the child environment: the inherited environment without any
-// credential-named variable or credential-shaped value, plus this run's
-// GOCACHE. IsSecretName and Shapes are the shared vocabulary; names match as
-// substrings and values by shape, so a few harmless entries are dropped too.
-// Isolation-off callers keep os.Environ().
-func sandboxEnv(cache string) (env []string, dropped int) {
+// scrubbedEnvironment is the inherited environment without any credential-named
+// variable or credential-shaped value. It is used for every run_command child,
+// sandboxed or not: under isolation the sandbox already denies network and
+// credential reads, and when the operator explicitly disables isolation the
+// child must still not inherit SOP's own credentials, because a model-authored
+// command would read them straight from the environment. IsSecretName and Shapes
+// are the shared vocabulary; names match as substrings and values by shape, so a
+// few harmless entries are dropped too. The result is never nil: a nil child
+// environment would mean "inherit everything", the opposite of this function.
+func scrubbedEnvironment() (env []string, dropped int) {
 	marker := redact.Fixed("[redacted]")
-	for _, kv := range os.Environ() {
+	inherited := os.Environ()
+	env = make([]string, 0, len(inherited))
+	for _, kv := range inherited {
 		name, value, _ := strings.Cut(kv, "=")
 		if redact.IsSecretName(name) || redact.Shapes(value, marker) != value {
 			dropped++
@@ -141,6 +147,13 @@ func sandboxEnv(cache string) (env []string, dropped int) {
 		}
 		env = append(env, kv)
 	}
+	return env, dropped
+}
+
+// sandboxEnv is the sandboxed child environment: the scrubbed environment plus
+// this run's throwaway GOCACHE, so one run cannot warm or poison the next.
+func sandboxEnv(cache string) (env []string, dropped int) {
+	env, dropped = scrubbedEnvironment()
 	return append(env, "GOCACHE="+cache), dropped
 }
 

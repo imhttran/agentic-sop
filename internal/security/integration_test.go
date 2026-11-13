@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	integrationSemgrepVersion  = "1.136.0"
+	integrationSemgrepVersion  = "1.183.0"
 	integrationGitleaksVersion = "8.30.1"
 )
 

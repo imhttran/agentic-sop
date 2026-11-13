@@ -739,3 +739,78 @@ func TestIsolateKeepsArgvVerbatim(t *testing.T) {
 		t.Fatal("GOCACHE must be set through the environment")
 	}
 }
+
+// Every run_command child gets a scrubbed environment, so the operator disabling
+// the sandbox does not also hand SOP's own credentials to a model-authored
+// command. An ordinary neighbour stays visible, which proves the filter is
+// specific rather than "drop everything".
+func TestRunCommandScrubsCredentialEnvironment(t *testing.T) {
+	fixture := `package fixture
+
+import (
+	"fmt"
+	"os"
+	"testing"
+)
+
+func TestPrintEnv(t *testing.T) {
+	fmt.Println("ordinary:" + os.Getenv("SOP_TEST_ORDINARY_VAR"))
+	fmt.Println("named:" + os.Getenv("SOP_TEST_API_KEY"))
+	fmt.Println("shaped:" + os.Getenv("SOP_TEST_NEUTRAL_NAME"))
+}
+`
+	for _, isolate := range []bool{true, false} {
+		name := "isolation_off"
+		if isolate {
+			name = "isolation_on"
+		}
+		t.Run(name, func(t *testing.T) {
+			if isolate {
+				needSandbox(t)
+				t.Setenv(IsolationEnv, "")
+			} else {
+				t.Setenv(IsolationEnv, "off")
+			}
+			root := t.TempDir()
+			writeRepoFile(t, root, "go.mod", "module fixture\n\ngo 1.21\n")
+			writeRepoFile(t, root, "env_test.go", fixture)
+			t.Setenv("SOP_TEST_ORDINARY_VAR", "ordinary-value")
+			t.Setenv("SOP_TEST_API_KEY", "canary-named-secret")
+			t.Setenv("SOP_TEST_NEUTRAL_NAME", "AKIAIOSFODNN7EXAMPLE") //gitleaks:allow: synthetic credential-shape fixture, not a credential
+
+			log := NewAuditLog(0)
+			h := New(root, DefaultConfig(), log)
+			out, err := h.Run(context.Background(), ToolRunCommand, map[string]any{
+				"command": "go test -run TestPrintEnv -v ./...",
+			})
+			if err != nil {
+				t.Fatalf("run failed: %v (%s)", err, out)
+			}
+			if !strings.Contains(out, "ordinary:ordinary-value") {
+				t.Errorf("ordinary variable was not inherited, so the scrub is too broad: %s", out)
+			}
+			if strings.Contains(out, "canary-named-secret") {
+				t.Errorf("credential-named variable reached the child: %s", out)
+			}
+			if strings.Contains(out, "AKIAIOSFODNN7EXAMPLE") {
+				t.Errorf("credential-shaped value reached the child: %s", out)
+			}
+			detail := log.Records()[0].Detail
+			if isolate && !strings.Contains(detail, "isolate=") {
+				t.Errorf("isolation on: audit detail = %q, want a sandboxed run", detail)
+			}
+			if !isolate && detail != "" {
+				t.Errorf("isolation off: audit detail = %q, want an unsandboxed run", detail)
+			}
+		})
+	}
+}
+
+// A nil environment means "inherit everything", so the scrub must never return
+// nil even when it drops nothing.
+func TestScrubbedEnvironmentIsNeverNil(t *testing.T) {
+	env, _ := scrubbedEnvironment()
+	if env == nil {
+		t.Fatal("scrubbedEnvironment returned nil, which would inherit the full environment")
+	}
+}

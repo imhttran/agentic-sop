@@ -79,6 +79,12 @@ func Classify(argv []string) (Class, error) {
 }
 
 func classifyGit(args []string) Class {
+	if gitConfigOverride(args) {
+		// A global configuration override can make even a read-only subcommand
+		// launch an external program: a pager, diff driver, fsmonitor, ssh command,
+		// hook path, alias, or filter. It needs a human, never SAFE.
+		return RequiresApproval
+	}
 	sub := gitSubcommand(args)
 	switch {
 	case sub == "":
@@ -93,6 +99,34 @@ func classifyGit(args []string) Class {
 	default:
 		return RequiresApproval
 	}
+}
+
+// gitConfigOverride reports whether git's global-option prefix sets configuration
+// inline: `-c key=value`, the attached `-ckey=value`, or `--config-env`. Those can
+// name a command git later executes, so a read-only subcommand is no longer a
+// read-only action.
+//
+// Only the global position is inspected, because that is the only place git reads
+// these options. After the subcommand `-c` belongs to the subcommand: `git log -c`
+// and `git grep -c` are ordinary read-only flags and stay SAFE.
+func gitConfigOverride(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if !strings.HasPrefix(a, "-") {
+			return false // the subcommand starts here; global options are done
+		}
+		switch {
+		case a == "-c", a == "--config-env":
+			return true
+		case strings.HasPrefix(a, "--config-env="):
+			return true
+		case strings.HasPrefix(a, "-c"):
+			return true // attached form: -ckey=value
+		case gitGlobalWithValue[a]:
+			i++ // this option consumes the following argument
+		}
+	}
+	return false
 }
 
 func classifyGo(args []string) Class {
