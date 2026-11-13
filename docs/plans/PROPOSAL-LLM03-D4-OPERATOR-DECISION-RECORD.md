@@ -1,9 +1,18 @@
 # D4 operator decision record — proposed (OWASP gap 9, LLM03)
 
-**Status: PROPOSED — NOT APPROVED.** Nothing in this document is recorded, applied, or
-enabled. It holds the exact text for the operator to approve or reject. Until that happens,
-`security.mode` stays `report-only`, the baseline stays at 56 entries, the residuals stay
-unaccepted, and decision memory is untouched.
+**Status: APPROVED and IMPLEMENTED (report-only).** The operator approved §7 on 2026-11-13,
+the decisions were recorded in local decision memory, and this change applies them. The
+proposal text below is preserved as written; the approval date is recorded here rather than
+rewritten into the earlier sections, so no prior evidence implies it was approved sooner.
+
+| Layer | State |
+| --- | --- |
+| Operator approval | **APPROVED 2026-11-13** — D4-1 A, D4-2 A, D4-3 B, D4-4 C, D4-5 R2, D4-6 omit, V-4 V-A, plus the stale-entry retirement and the memory record |
+| Decision memory | **RECORDED locally** 2026-11-13, scope `architecture`, source `operator:d4-2026-11-13`, record id `a9f010095c7a5fd269614f6df3ba15d4040f1ae843a5a70cf469f7b9f9273e84`; machine-local, not in git |
+| Committed implementation | **THIS CHANGE** — adds 44 entries, retires 16, leaves configuration untouched |
+| Merged implementation | **PENDING** merge of this change |
+| Residual risk | **NOT ACCEPTED** — R2; `harness.go:926` stays unbaselined and blocking |
+| Required-mode enforcement | **DEFERRED** — Option A; `security.mode` stays `report-only` |
 
 **Verified at:** `origin/main` `0d8bac72` (2026-11-13), darwin arm64, Go 1.27.1, pinned
 Gitleaks 8.30.1, Semgrep 1.183.0, OSV-Scanner 2.7.0.
@@ -74,7 +83,7 @@ Three checks, all against the real evaluator and configuration:
 **Therefore:** these approvals cannot be read as accepting the residual, and cannot enable the
 gate. A future D4-1 = C decision remains available and still requires its own authorization.
 
-## 4. Resulting scan shape if approved (predicted, not applied)
+## 4. Resulting scan shape (predicted before approval, measured after)
 
 | Measure | Now | After A+B+C |
 | --- | --- | --- |
@@ -87,6 +96,9 @@ gate. A future D4-1 = C decision remains available and still requires its own au
 The verdict deliberately stays `FAIL`: D is open under R2. On expiry the corresponding
 findings return as blocking — C first, on **2027-03-31**, then A and B on 2027-06-30. Because
 C expires first, the 12 production entries must be re-reviewed by then.
+
+**Measured after implementation:** 101 findings, 84 suppressed, 17 unsuppressed, **1
+blocking**, verdict `FAIL`, 0 drift warnings — the predicted shape exactly.
 
 ## 5. The 16 stale baseline entries — separable, and safe to retire
 
@@ -126,9 +138,11 @@ Recording is optional and local. It is **not** required for a decision to take e
 this document is the durable, reviewable record. If you want the memory entry, it needs its
 own authorization line, because it asserts an operator attribution.
 
-## 7. Exact operator authorization
+## 7. Operator authorization — approved 2026-11-13
 
-Approve, amend, or reject this block. It is the only text needed to authorize §2:
+The operator approved the block below on 2026-11-13, including both optional additions
+(stale-entry retirement and the decision-memory record). The text is preserved as sent; it
+authorized the decisions in §2 and nothing further.
 
 > I approve the following D4 decisions for OWASP LLM03 gap 9, verified at `main` `0d8bac72`:
 > **D4-1 = A** (retain report-only enforcement); **D4-2 = approve Group A**, 27 Gitleaks
@@ -156,7 +170,7 @@ Optional additions — each must be stated explicitly:
 > `operator:d4-<date>`, recording authorization and implementation only and no residual
 > acceptance.
 
-## 8. What happens after authorization (not started)
+## 8. What happened after authorization (completed 2026-11-13)
 
 1. Add the 44 entries to `.agent-sdlc/security-baseline.json` with the §2 reasons, owner, and
    the stated expiries.
@@ -166,6 +180,21 @@ Optional additions — each must be stated explicitly:
 4. Re-run `sop security scan --report-only` and record the expected shape from §4: 84
    suppressed, 1 blocking (the residual), verdict `FAIL`.
 5. If separately authorized, write the decision-memory entries.
+
+All five were completed on 2026-11-13; the record is in §9.
+
+## 9. Implementation record
+
+| Item | Result |
+| --- | --- |
+| Baseline entries | **84** = 40 retained + 44 added − 16 retired |
+| Groups added | A 27 (`2027-06-30`), B 5 (`2027-06-30`), C 12 (`2027-03-31`) |
+| Stale entries retired | 16; fingerprints and rationale preserved in git commit `1064b80f` and matrix §2 |
+| Configuration | unchanged — `security.mode: report-only`, `required_categories` empty |
+| Full-workspace scan | 101 findings, 84 suppressed, 17 unsuppressed, **1 blocking**, `FAIL`, 0 drift warnings |
+| Sole blocker | `internal/toolharness/harness.go:926`, `semgrep:3076a05322acb6e35b02c87144da3b8a6dfbe8eac96a7679614c4d5402973771` |
+| Decision memory | recorded locally 2026-11-13 (id `a9f01009…`); 32 earlier records untouched |
+| Regression tests | `internal/security/baseline_repo_test.go` — approved-set digests, retirement, Group D/E guards, new-finding blocking, expiry return, scanner-failure fail-closed |
 
 ## What this document does not do
 
