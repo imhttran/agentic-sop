@@ -180,24 +180,25 @@ waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-ga
 - All ten OWASP LLM workstreams have merged implementation or evidence, but the
   [evidence matrix](docs/reports/owasp-llm/README.md) is not a compliance
   certification and preserves each bounded or unverified claim.
-- LLM01 now has verdicts for every scoped campaign case. The merged evidence
-  covers two models on macOS and one on Linux; it is not a universal prompt-
-  injection-prevention claim.
-- Plan 03 historical acceptance is recorded 16/16 (13 manual decisions and 3
-  passing checks). This does not accept LLM02 residual risks. C1 remains opt-in.
-- The Linux notification and retrieval sinks have live evidence on current code.
-  A separate live RAG producer run used PostgreSQL 17, pgvector, and embeddings;
-  macOS sinks, live timeout, and live cancellation remain unobserved.
-- `run_command` isolation is required by default after PR #441, using Seatbelt
-  on macOS and bubblewrap on Linux. Direct credential reads and `.agent-sdlc`
-  writes are denied by default. On a platform with no backend (Windows) the
-  command is refused for every override value; the PR #441 P2 that let `off`
-  bypass that refusal (recorded in #442) is fixed.
-- Pre-existing hardlink aliases, macOS `kern.procargs2` parent-environment
-  access, and the host-to-sandbox Unix-socket direction remain open residuals.
+- Plan 03 historical acceptance is recorded 16/16. LLM02 residual dispositions
+  R1-R8 are recorded separately; C1 remains opt-in.
+- `run_command` isolation is required by default. Windows B1 is enforced for
+  every override value. R2 is accepted within bounded scopes, R4 is accepted as
+  a known limit, and host-to-sandbox socket access is recorded as an architectural
+  property rather than risk acceptance.
+- The Linux notification and retrieval sinks and a live PostgreSQL/pgvector RAG
+  producer have bounded evidence. Live timeout, cancellation, and macOS sink
+  coverage remain limited or unobserved.
+- Slack rendering was observed. A plain `@here` can notify the bound channel;
+  the operator chose to document this as a residual rather than change the encoder.
+- LLM03 scanner-integrity code and per-platform pins are merged. D4 enforcement
+  remains report-only: the reproduced baseline is 101 findings, 40 suppressed,
+  and 45 blocking. PRs #471/#472 provide the approval packet and investigations.
+  The new stale-baseline diagnostic has an unresolved P2: partial or failed scans
+  can falsely report valid entries as unmatched.
 - Every `exec.CommandContext` subprocess path binds process-group termination,
-  enforced by an architecture guard (PR #398). Token budgeting remains opt-in;
-  the operator selected token-budget-only option A in PR #417.
+  enforced by an architecture guard. Token budgeting remains opt-in and is not a
+  monetary cap.
 - These capabilities do not change governance authority: deterministic Go remains
   authoritative, and adapter availability does not authorize promotion or enablement.
 
