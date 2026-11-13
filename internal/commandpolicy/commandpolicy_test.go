@@ -66,6 +66,11 @@ func TestClassifyGitConfigOverride(t *testing.T) {
 		{"log oneline", []string{"git", "log", "--oneline"}, Safe},
 		{"push still needs approval", []string{"git", "push", "origin", "main"}, RequiresApproval},
 		{"force push still denied", []string{"git", "push", "--force"}, Denied},
+		{"force push denied under -c", []string{"git", "-c", "color.ui=false", "push", "--force", "origin", "main"}, Denied},
+		{"force-with-lease denied under -c", []string{"git", "-c", "color.ui=false", "push", "--force-with-lease", "origin", "main"}, Denied},
+		{"-f denied under attached -c", []string{"git", "-ccolor.ui=false", "push", "-f", "origin", "main"}, Denied},
+		{"force push denied after -C", []string{"git", "-C", "repo", "push", "--force"}, Denied},
+		{"plain push under -c still needs approval", []string{"git", "-c", "color.ui=false", "push", "origin", "main"}, RequiresApproval},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

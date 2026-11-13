@@ -79,6 +79,11 @@ func Classify(argv []string) (Class, error) {
 }
 
 func classifyGit(args []string) Class {
+	// A force push is refused whatever configuration precedes it. The override
+	// check below would otherwise downgrade it to an approval request.
+	if gitSubcommand(args) == "push" && hasForceFlag(args) {
+		return Denied
+	}
 	if gitConfigOverride(args) {
 		// A global configuration override can make even a read-only subcommand
 		// launch an external program: a pager, diff driver, fsmonitor, ssh command,
