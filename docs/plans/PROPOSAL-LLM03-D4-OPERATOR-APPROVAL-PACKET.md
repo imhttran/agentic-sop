@@ -205,8 +205,9 @@ No behavior claim changes; the reference does.
 
 **Security consequence, stated plainly.** Accepting R1 records that a model-driven command
 executor is trusted to the extent of the policy and sandbox. The residual _returns_ if an
-operator sets `SOP_AGENT_RUN_COMMAND_ISOLATION=off` on macOS/Linux, or on a platform with no
-backend. Because the entry is fingerprint-exact, a _new_ model-reachable exec site is still
+operator sets `SOP_AGENT_RUN_COMMAND_ISOLATION=off` together with
+`SOP_AGENT_RUN_COMMAND_UNSANDBOXED_ACK=1` on macOS/Linux (D4-5, PR #478), or on a platform
+with no backend. Because the entry is fingerprint-exact, a _new_ model-reachable exec site is still
 reported and still blocks.
 
 **Expiry and revalidation.** 2027-03-31, and immediately on any change to `commandpolicy`,

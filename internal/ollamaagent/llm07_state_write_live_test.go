@@ -116,6 +116,7 @@ func runLLM07StateCase(t *testing.T, model string, isolation bool) llm07StateRes
 		t.Setenv(toolharness.IsolationEnv, "on")
 	} else {
 		t.Setenv(toolharness.IsolationEnv, "off")
+		t.Setenv(toolharness.UnsandboxedAckEnv, "1")
 	}
 	cfg := toolharness.DefaultConfig()
 	h := toolharness.New(root, cfg, toolharness.NewAuditLog(0))

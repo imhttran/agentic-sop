@@ -1,9 +1,10 @@
 # D4-5 decision packet — the `run_command` isolation boundary (OWASP gap 9, LLM03)
 
-**Status:** proposal, read-only. **Nothing here is decided.** The residual is **not
-accepted**, D4 enforcement stays report-only, no baseline entry is added or suppressed, and
-no isolation policy is changed. This packet supplies the evidence and the exact authorization
-a D4-5 decision needs.
+**Status:** R4 variants A + B are **implemented** (PR #478). The residual is still **not
+accepted**, D4 enforcement stays report-only, and no baseline entry is added or suppressed.
+The remaining D4-5 decision is between R1, R2 and R3 for the exposure an acknowledged
+override still opens (§9). This packet records the evidence, the implemented mitigation, and
+what is still open.
 
 **Repository revision:** `origin/main` at `6efe34c8` (2026-11-13), darwin arm64, Go 1.27.1. All
 measurements below were taken on that revision with the production harness and the real
@@ -180,7 +181,17 @@ Rationale:
 4. It fails in the safe direction. An unacknowledged `off` now means isolation stays **on**,
    so a stale shell profile or a leaked CI variable cannot silently weaken the boundary.
 
-## 7. Exact implementation scope (not applied)
+**Implemented in PR #478.** The residual is not accepted by that change, and D4 enforcement
+is still report-only.
+
+## 7. Implementation scope (implemented in PR #478)
+
+Implemented as described below: `isolationDecision` takes the acknowledgement,
+`IsolationPolicyNotice` reports an unacknowledged request, and `scrubbedEnvironment` drops
+both control variables. Pinned by `TestIsolationDecisionSupportedPlatforms`,
+`TestIsolationDecisionUnsupportedPlatforms`, `TestIsolationPolicyNotice`,
+`TestRunCommandIsolationOffWithoutAckStaysSandboxed`, and
+`TestRunCommandChildEnvironmentDropsIsolationControls`.
 
 **A. Confirmation-gated override**
 

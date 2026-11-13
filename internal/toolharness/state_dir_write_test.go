@@ -67,7 +67,7 @@ func TestStateDirectoryAliasesAreRecognized(t *testing.T) {
 // the override must be set explicitly; TestSubprocessStateWriteIsDeniedByDefault
 // pins the default.
 func TestSubprocessStateWriteIsOutsideFileToolBoundary(t *testing.T) {
-	t.Setenv(IsolationEnv, "off")
+	unsandboxed(t)
 	root := t.TempDir()
 	writeRepoFile(t, root, "go.mod", "module example.com/stateprobe\n\ngo 1.27\n")
 	writeRepoFile(t, root, "probe_test.go", `package stateprobe

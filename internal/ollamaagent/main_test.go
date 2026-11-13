@@ -28,5 +28,6 @@ func TestMain(m *testing.M) {
 	// a sandbox backend (CI has no bwrap). A test that needs the sandbox sets
 	// toolharness.Config.IsolateCommands, which wins over this override.
 	_ = os.Setenv(toolharness.IsolationEnv, "off")
+	_ = os.Setenv(toolharness.UnsandboxedAckEnv, "1")
 	os.Exit(m.Run())
 }

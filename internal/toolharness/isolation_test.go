@@ -64,8 +64,16 @@ func sandboxedOutput(t *testing.T, root, script string) (string, error) {
 	return string(out), err
 }
 
-func TestRunCommandIsolationOffKeepsExecCapturedPath(t *testing.T) {
+// unsandboxed selects the operator's policy-only mode for a test. The override
+// alone is not enough since D4-5: the acknowledgement goes with it.
+func unsandboxed(t *testing.T) {
+	t.Helper()
 	t.Setenv(IsolationEnv, "off")
+	t.Setenv(UnsandboxedAckEnv, "1")
+}
+
+func TestRunCommandIsolationOffKeepsExecCapturedPath(t *testing.T) {
+	unsandboxed(t)
 	log := NewAuditLog(0)
 	h := New(t.TempDir(), DefaultConfig(), log)
 	if _, err := h.Run(context.Background(), ToolRunCommand, map[string]any{"command": "go list ./..."}); err != nil {
@@ -76,29 +84,110 @@ func TestRunCommandIsolationOffKeepsExecCapturedPath(t *testing.T) {
 	}
 }
 
-// The startup notice exists so an operator can see that the environment removed
-// the control. An unrecognized value must not disable isolation.
+// The override alone must not weaken the boundary: without the acknowledgement
+// the command still runs inside the sandbox.
+func TestRunCommandIsolationOffWithoutAckStaysSandboxed(t *testing.T) {
+	needSandbox(t)
+	t.Setenv(IsolationEnv, "off")
+	t.Setenv(UnsandboxedAckEnv, "")
+	log := NewAuditLog(0)
+	h := New(t.TempDir(), DefaultConfig(), log)
+	if _, err := h.Run(context.Background(), ToolRunCommand, map[string]any{"command": "go list ./..."}); err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	if d := log.Records()[0].Detail; !strings.Contains(d, "isolate=") {
+		t.Fatalf("unacknowledged override: audit detail = %q, want a sandboxed run", d)
+	}
+}
+
+// A model-controlled child must not see the control switches, so a nested SOP
+// process decides its own isolation instead of inheriting this one's.
+func TestRunCommandChildEnvironmentDropsIsolationControls(t *testing.T) {
+	fixture := `package fixture
+
+import (
+	"fmt"
+	"os"
+	"testing"
+)
+
+func TestPrintControls(t *testing.T) {
+	fmt.Println("iso:" + os.Getenv("SOP_AGENT_RUN_COMMAND_ISOLATION"))
+	fmt.Println("ack:" + os.Getenv("SOP_AGENT_RUN_COMMAND_UNSANDBOXED_ACK"))
+}
+`
+	for _, policyOnly := range []bool{false, true} {
+		name := "sandboxed"
+		if policyOnly {
+			name = "policy_only"
+		}
+		t.Run(name, func(t *testing.T) {
+			if policyOnly {
+				unsandboxed(t)
+			} else {
+				needSandbox(t)
+				t.Setenv(IsolationEnv, "")
+				t.Setenv(UnsandboxedAckEnv, "")
+			}
+			root := t.TempDir()
+			writeRepoFile(t, root, "go.mod", "module fixture\n\ngo 1.21\n")
+			writeRepoFile(t, root, "controls_test.go", fixture)
+			h := New(root, DefaultConfig(), NewAuditLog(0))
+			out, err := h.Run(context.Background(), ToolRunCommand, map[string]any{
+				"command": "go test -run TestPrintControls -v ./...",
+			})
+			if err != nil {
+				t.Fatalf("run failed: %v (%s)", err, out)
+			}
+			if strings.Contains(out, "iso:off") || strings.Contains(out, "iso:1") {
+				t.Errorf("the child saw the isolation override: %s", out)
+			}
+			if strings.Contains(out, "ack:1") || strings.Contains(out, "ack:true") {
+				t.Errorf("the child saw the acknowledgement: %s", out)
+			}
+			if !strings.Contains(out, "iso:") {
+				t.Errorf("the fixture did not report the variable state: %s", out)
+			}
+		})
+	}
+}
+
+// The startup notice exists so an operator can see what happened to the control.
+// An acknowledged override is reported as effective; an unacknowledged one is
+// reported as ignored, because isolation stayed on. An unrecognized value must
+// not disable isolation.
 func TestIsolationPolicyNotice(t *testing.T) {
 	t.Setenv(IsolationEnv, "")
+	t.Setenv(UnsandboxedAckEnv, "")
 	if got := IsolationPolicyNotice(); got != "" {
 		t.Fatalf("notice with the default in place = %q, want empty", got)
 	}
 	for _, v := range []string{"off", "0", "false", "no", "OFF"} {
-		t.Setenv(IsolationEnv, v)
-		got := IsolationPolicyNotice()
-		if !hasBackend(runtime.GOOS) {
-			// B1: the override has no effect where no backend exists.
-			if got != "" {
-				t.Fatalf("notice for %q on %s = %q, want none: the override cannot disable isolation here", v, runtime.GOOS, got)
+		t.Run(v, func(t *testing.T) {
+			t.Setenv(IsolationEnv, v)
+			if !hasBackend(runtime.GOOS) {
+				// B1: the override has no effect where no backend exists.
+				t.Setenv(UnsandboxedAckEnv, "1")
+				if got := IsolationPolicyNotice(); got != "" {
+					t.Fatalf("notice for %q on %s = %q, want none: the override cannot disable isolation here", v, runtime.GOOS, got)
+				}
+				return
 			}
-			continue
-		}
-		if !strings.Contains(got, IsolationEnv) || !strings.Contains(got, "policy checks only") {
-			t.Fatalf("notice for %q = %q, want it to name the variable and the effect", v, got)
-		}
+			t.Setenv(UnsandboxedAckEnv, "")
+			ignored := IsolationPolicyNotice()
+			if !strings.Contains(ignored, IsolationEnv) || !strings.Contains(ignored, UnsandboxedAckEnv) || !strings.Contains(ignored, "remains in effect") {
+				t.Fatalf("unacknowledged notice for %q = %q, want it to name both variables and say isolation remains", v, ignored)
+			}
+			t.Setenv(UnsandboxedAckEnv, "1")
+			honoured := IsolationPolicyNotice()
+			if !strings.Contains(honoured, IsolationEnv) || !strings.Contains(honoured, "policy checks only") {
+				t.Fatalf("acknowledged notice for %q = %q, want it to name the variable and the effect", v, honoured)
+			}
+		})
 	}
 	for _, v := range []string{"bogus", "maybe", "2"} {
 		t.Setenv(IsolationEnv, v)
+		t.Setenv(UnsandboxedAckEnv, "1")
 		if got := IsolationPolicyNotice(); got != "" {
 			t.Fatalf("an unrecognized value %q produced a notice: %q", v, got)
 		}
@@ -769,7 +858,7 @@ func TestPrintEnv(t *testing.T) {
 				needSandbox(t)
 				t.Setenv(IsolationEnv, "")
 			} else {
-				t.Setenv(IsolationEnv, "off")
+				unsandboxed(t)
 			}
 			root := t.TempDir()
 			writeRepoFile(t, root, "go.mod", "module fixture\n\ngo 1.21\n")
