@@ -52,7 +52,7 @@ var safeGo = map[string]bool{
 // the subcommand can still be located after them.
 var gitGlobalWithValue = map[string]bool{
 	"-C": true, "-c": true, "--git-dir": true, "--work-tree": true,
-	"--exec-path": true, "--namespace": true,
+	"--namespace": true,
 }
 
 // Classify applies the default policy to a structured command (program plus
@@ -79,6 +79,18 @@ func Classify(argv []string) (Class, error) {
 }
 
 func classifyGit(args []string) Class {
+	// A push is recognised by any 'push' token, not by the subcommand guess: an
+	// unrecognised value-taking global option (--attr-source HEAD) would otherwise
+	// hide it. Fail closed: a configuration override on a push can force the update
+	// (remote.*.push, push.*), so it is denied rather than approved.
+	if idx := indexToken(args, "push"); idx >= 0 {
+		return classifyPushInvocation(args[:idx], args[idx:])
+	}
+	// An unknown leading global option may take a value, so the subcommand cannot
+	// be located reliably. Fail closed to approval rather than guess.
+	if !knownGitGlobals(args) {
+		return RequiresApproval
+	}
 	if gitConfigOverride(args) {
 		// A global configuration override can make even a read-only subcommand
 		// launch an external program: a pager, diff driver, fsmonitor, ssh command,
@@ -88,11 +100,6 @@ func classifyGit(args []string) Class {
 	sub := gitSubcommand(args)
 	switch {
 	case sub == "":
-		return RequiresApproval
-	case sub == "push":
-		if hasForceFlag(args) {
-			return Denied
-		}
 		return RequiresApproval
 	case readOnlyGit[sub]:
 		return Safe
@@ -152,17 +159,84 @@ func gitSubcommand(args []string) string {
 	return ""
 }
 
-// hasForceFlag reports whether a git push would rewrite history.
-func hasForceFlag(args []string) bool {
-	for _, a := range args {
-		switch {
-		case a == "--force", a == "-f", a == "--force-with-lease":
-			return true
-		case strings.HasPrefix(a, "--force-with-lease="):
-			return true
+// indexToken returns the first index of token in args, or -1.
+func indexToken(args []string, token string) int {
+	for i, a := range args {
+		if a == token {
+			return i
 		}
 	}
-	return false
+	return -1
+}
+
+// pushPrefixInert are the global options that cannot configure, redirect, or
+// reinterpret a push. Any other token before the push subcommand denies it.
+var pushPrefixInert = map[string]bool{
+	"--no-pager": true, "--no-optional-locks": true,
+	"--literal-pathspecs": true, "--no-replace-objects": true,
+}
+
+// classifyPushInvocation applies to any command whose tokens contain 'push'.
+// The tokens before it are global options the parser may misread (a -c, a -C, an
+// unknown value-taking option, or a word that is really the subcommand), so any
+// token outside pushPrefixInert denies the invocation.
+func classifyPushInvocation(prefix, push []string) Class {
+	for _, a := range prefix {
+		if !pushPrefixInert[a] {
+			return Denied
+		}
+	}
+	return classifyPush(push)
+}
+
+// knownGitGlobals reports whether every leading global option is one this parser
+// understands, so the subcommand is located correctly.
+func knownGitGlobals(args []string) bool {
+	for i := 0; i < len(args) && strings.HasPrefix(args[i], "-"); i++ {
+		a := args[i]
+		switch {
+		case gitGlobalWithValue[a]:
+			i++ // consumes the following argument
+		case pushPrefixInert[a], a == "--exec-path":
+			// bare --exec-path prints the path and exits. --exec-path=<dir> points
+			// command lookup at a directory the model can write, so it is unknown.
+		case strings.HasPrefix(a, "-c"), strings.HasPrefix(a, "--config-env"):
+			// config forms are judged by gitConfigOverride
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// pushSafeFlags are the push options that do not change which refs move.
+var pushSafeFlags = map[string]bool{
+	"-u": true, "--set-upstream": true, "-v": true, "--verbose": true,
+	"-n": true, "--dry-run": true, "--": true,
+}
+
+// classifyPush fails closed. A plain push needs approval. A push that could
+// rewrite or delete a remote ref is denied: any option outside pushSafeFlags
+// (git accepts bundled short flags such as -fu, unambiguous long-option prefixes
+// such as --force-with, and --mirror or --delete), and any refspec with a leading
+// '+' (forced update) or ':' (deletion).
+func classifyPush(args []string) Class {
+	seen := false
+	for _, a := range args {
+		if !seen {
+			seen = a == "push"
+			continue
+		}
+		switch {
+		case strings.HasPrefix(a, "-"):
+			if !pushSafeFlags[a] {
+				return Denied
+			}
+		case strings.HasPrefix(a, "+"), strings.HasPrefix(a, ":"):
+			return Denied
+		}
+	}
+	return RequiresApproval
 }
 
 // Policy is project configuration that tightens the default classes. It can
