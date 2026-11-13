@@ -52,7 +52,7 @@ Pinned by `TestIsolationDecisionSupportedPlatforms`,
 | Production callers setting `IsolateCommands` | **None** | `IsolateCommands:` appears only in a test file; production harness construction passes `CommandTimeout`, `MaxOutputBytes`, `Roots`, `CargoAgentToolEnabled`, `EvidenceSink` |
 | Configuration file (`.agent-sdlc/config.yaml`) | No key exists | no `isolation` key in `internal/config` or the config file |
 | CLI flag or per-task/per-call argument | None | no flag or argument reads the decision |
-| Child-process environment | **It propagates.** The variable is not credential-named, so it survives `scrubbedEnvironment`, which runs only on the sandboxed path. With isolation off no scrub runs and the child inherits everything. Either way every child sees it | measured: the sandboxed/unsandboxed child printed `SOP_AGENT_RUN_COMMAND_ISOLATION=off` when set |
+| Child-process environment | **It propagates.** The variable is not credential-named, so it survives `scrubbedEnvironment`, which runs on both paths: under isolation it builds the sandboxed child environment, and without isolation it builds the unsandboxed one. Either way every child sees it | measured: the child printed `SOP_AGENT_RUN_COMMAND_ISOLATION=off` when set |
 | Platform with no backend (Windows) | No — the override is inert and the command is refused | `isolationDecision` returns `true`; `sandboxArgv` errors |
 
 Two consequences follow from 2.2:
