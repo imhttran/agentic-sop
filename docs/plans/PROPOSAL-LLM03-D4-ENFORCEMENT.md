@@ -22,10 +22,11 @@ Local evidence: `.agent-sdlc/runs/gap9-d4-baseline/security/scan.json` (not comm
 > `harness.go:920` to `:926` when M1 added the environment scrub above `execCaptured`, so
 > its fingerprint is now `semgrep:3076a05322acb6e35b02c87144da3b8a6dfbe8eac96a7679614c4d5402973771` (was `semgrep:2e3c98676c0b89b137c13339ae43b6a5928dae9e7ff2fcf893de77038f473847`, preserved here as historical
 > evidence). The other 73 Semgrep fingerprints are unchanged. The full-workspace
-> report-only baseline is now **106 findings, 40 suppressed, 66 unsuppressed, 50
-> blocking**: the residual's move did not change the count, and the five additional
-> Gitleaks fixture findings are the decision documents' own quoted placeholders, pending
-> disposition. Only the current fingerprint may be used for a new approval.
+> report-only baseline is **101 findings, 40 suppressed, 61 unsuppressed, 45
+> blocking**. The residual's move did not change the count; the five additional Gitleaks
+> findings that the decision documents introduced were later redacted (see "Resolved" in the
+> operator packet), which removed them without a baseline entry. Only the current
+> fingerprint may be used for a new approval.
 
 Related records: [llm03-baseline-triage.md](../reports/owasp-llm/llm03-baseline-triage.md),
 [llm03-scanner-binary-pins.md](../reports/owasp-llm/llm03-scanner-binary-pins.md),

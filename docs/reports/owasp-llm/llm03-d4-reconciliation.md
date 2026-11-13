@@ -9,10 +9,10 @@ stated as a finding for the operator, not applied as a change.
 > `bd2e0d45`. Later merged work moved the residual from `harness.go:920` to `:926`, so the
 > current blocking remainder is that line with fingerprint
 > `semgrep:3076a05322acb6e35b02c87144da3b8a6dfbe8eac96a7679614c4d5402973771`. The current
-> full-workspace report-only baseline is 106 findings, 40 suppressed and 50 blocking; the
-> five additional Gitleaks findings are the decision documents' own quoted placeholders,
-> pending disposition. Use the current values, not the `:920` references below, for any
-> approval.
+> full-workspace report-only baseline is 101 findings, 40 suppressed and 45 blocking. The
+> five additional Gitleaks findings that the decision documents introduced by quoting
+> placeholder shapes were redacted, so they no longer exist. Use the current values, not
+> the `:920` references below, for any approval.
 
 **Inputs reconciled:**
 
@@ -98,9 +98,11 @@ values were inspected and classified by value shape without reproducing any valu
   test files). It is a sequential placeholder, not a credential.
 - **One shared Stripe-shaped constant appears in 6 findings** (`sk_test_…`; the fixture is
   labelled `stripe-test`).
-- **Sequential placeholders:** `glpat-abcdefghijklmnopqrst` (3 findings),
-  `sk_live_abcdefghijklmnop` (1), and the four placeholders in the proposal's "Fixture"
-  column (`ASIAABCDEFGHIJKLMNOP`, `whsec_…`, `dckr_pat_…`, `AGE-SECRET-KEY-1…`).
+- **Sequential placeholders:** a GitLab-PAT shape (3 findings), a Stripe live-key shape
+  (1), and the four placeholders in the proposal's "Fixture" column (an AWS key shape, a
+  Stripe webhook shape, a Docker token shape, and an age key shape). The literal values are
+  not reproduced: the report describes the shape and points at the proposal, which is where
+  the reviewed fixtures live.
 - **Explicitly synthetic canaries:** `internal/notify/llm08_notification_secrets_test.go`
   and `internal/cli/llm08_notification_secrets_test.go`; the former's comment states the
   value "is not a real secret".
