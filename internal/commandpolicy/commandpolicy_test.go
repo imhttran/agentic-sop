@@ -71,6 +71,16 @@ func TestClassifyGitConfigOverride(t *testing.T) {
 		{"-f denied under attached -c", []string{"git", "-ccolor.ui=false", "push", "-f", "origin", "main"}, Denied},
 		{"force push denied after -C", []string{"git", "-C", "repo", "push", "--force"}, Denied},
 		{"plain push under -c still needs approval", []string{"git", "-c", "color.ui=false", "push", "origin", "main"}, RequiresApproval},
+		{"bundled -fu denied", []string{"git", "push", "-fu", "origin", "main"}, Denied},
+		{"unambiguous --force-with prefix denied", []string{"git", "push", "--force-with", "origin", "main"}, Denied},
+		{"--force-if-includes denied", []string{"git", "push", "--force-if-includes", "origin", "main"}, Denied},
+		{"plus refspec forces", []string{"git", "push", "origin", "+main"}, Denied},
+		{"deletion refspec denied", []string{"git", "push", "origin", ":main"}, Denied},
+		{"--mirror denied", []string{"git", "push", "--mirror", "origin"}, Denied},
+		{"--delete denied", []string{"git", "push", "--delete", "origin", "feat"}, Denied},
+		{"unknown push flag fails closed", []string{"git", "push", "--no-verify", "origin", "main"}, Denied},
+		{"set-upstream still needs approval", []string{"git", "push", "-u", "origin", "main"}, RequiresApproval},
+		{"dry-run still needs approval", []string{"git", "push", "--dry-run", "origin", "main"}, RequiresApproval},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

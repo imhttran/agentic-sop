@@ -79,10 +79,10 @@ func Classify(argv []string) (Class, error) {
 }
 
 func classifyGit(args []string) Class {
-	// A force push is refused whatever configuration precedes it. The override
-	// check below would otherwise downgrade it to an approval request.
-	if gitSubcommand(args) == "push" && hasForceFlag(args) {
-		return Denied
+	// A push is classified before the configuration check, and it fails closed:
+	// the override check below would otherwise hide a force push behind an approval.
+	if gitSubcommand(args) == "push" {
+		return classifyPush(args)
 	}
 	if gitConfigOverride(args) {
 		// A global configuration override can make even a read-only subcommand
@@ -93,11 +93,6 @@ func classifyGit(args []string) Class {
 	sub := gitSubcommand(args)
 	switch {
 	case sub == "":
-		return RequiresApproval
-	case sub == "push":
-		if hasForceFlag(args) {
-			return Denied
-		}
 		return RequiresApproval
 	case readOnlyGit[sub]:
 		return Safe
@@ -157,17 +152,34 @@ func gitSubcommand(args []string) string {
 	return ""
 }
 
-// hasForceFlag reports whether a git push would rewrite history.
-func hasForceFlag(args []string) bool {
+// pushSafeFlags are the push options that do not change which refs move.
+var pushSafeFlags = map[string]bool{
+	"-u": true, "--set-upstream": true, "-v": true, "--verbose": true,
+	"-n": true, "--dry-run": true, "--": true,
+}
+
+// classifyPush fails closed. A plain push needs approval. A push that could
+// rewrite or delete a remote ref is denied: any option outside pushSafeFlags
+// (git accepts bundled short flags such as -fu, unambiguous long-option prefixes
+// such as --force-with, and --mirror or --delete), and any refspec with a leading
+// '+' (forced update) or ':' (deletion).
+func classifyPush(args []string) Class {
+	seen := false
 	for _, a := range args {
+		if !seen {
+			seen = a == "push"
+			continue
+		}
 		switch {
-		case a == "--force", a == "-f", a == "--force-with-lease":
-			return true
-		case strings.HasPrefix(a, "--force-with-lease="):
-			return true
+		case strings.HasPrefix(a, "-"):
+			if !pushSafeFlags[a] {
+				return Denied
+			}
+		case strings.HasPrefix(a, "+"), strings.HasPrefix(a, ":"):
+			return Denied
 		}
 	}
-	return false
+	return RequiresApproval
 }
 
 // Policy is project configuration that tightens the default classes. It can
