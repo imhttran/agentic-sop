@@ -215,6 +215,11 @@ reported and still blocks.
 **Implementation impact.** One entry. Without it, Option C remains `FAIL` with exactly 1
 blocking finding.
 
+**Boundary analysis.** A dedicated evaluation of every path that can disable isolation, what the
+model can execute in each state, and the smallest containment is in
+[PROPOSAL-LLM03-D4-5-ISOLATION-BOUNDARY.md](PROPOSAL-LLM03-D4-5-ISOLATION-BOUNDARY.md). It recommends a
+confirmation-gated override and records the exact authorization; it changes nothing by itself.
+
 ## D4-6 — 16 non-blocking MEDIUM findings (group E)
 
 **Recommended: no baseline entries.** Leave them visible and non-blocking.
