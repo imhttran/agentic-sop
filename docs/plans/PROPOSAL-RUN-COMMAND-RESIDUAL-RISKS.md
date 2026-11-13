@@ -26,7 +26,7 @@ acceptance.
 | **R2** | Pre-existing hardlink alias to a credential | Operator (risk); `internal/toolharness/identity.go` (control) | `ACCEPTED (BOUNDED)` | Gap 5 option 1 record, 2026-11-12; accepted as bounded limits in LLM02 packet C.4 (chat, 2026-11-12); Option D `RISK_ACCEPTED — SUBPROCESS HARDLINK ALIAS (BOUNDED)` for the Linux subprocess case | `TestLinuxIsolationPreExistingCredentialHardlink`, `TestDarwinIsolationSAFECommandCredentialRead`, `TestRunCommandIsolationDeniesCredentialHardlink` |
 | **R4** | macOS parent launch-time environment (`kern.procargs2`) | Operator (risk); `internal/toolharness/isolation.go` (control) | `ACCEPTED (KNOWN LIMIT)` | Gap 6 record, PR #447; accepted as a known limit in LLM02 packet C.4 (chat, 2026-11-12) | `seatbelt-evidence.md` launch-chain options; measurement report |
 | **H2S** | Host-to-sandbox Unix socket connectivity | Operator (risk); `internal/toolharness/isolation.go` profile rule | `RECORDED` — bounded architectural property, **not** a risk acceptance | H2S Option A, 2026-11-12, decision memory `a73749c2…`, source `operator:h2s-option-a-2026-11-12` | Measured on both backends; reverse direction pinned by `TestRunCommandIsolationAllowsOwnUnixSocketOnly` |
-| **OVR** | Authorized operator `off` override restores policy-only execution on macOS/Linux | Operator (explicit action) | `AUTHORIZED BY POLICY` — exposure tracked here so it is never read as enforced isolation | Default-on approval, PR #441 §8 | `TestIsolationPolicyNotice`, `TestRunCommandIsolationOffKeepsExecCapturedPath`; `sop run` / `sop prompt` notice |
+| **OVR** | Authorized operator `off` override **with its acknowledgement** restores policy-only execution on macOS/Linux | Operator (explicit action) | `AUTHORIZED BY POLICY` — exposure tracked here so it is never read as enforced isolation | Default-on approval, PR #441 §8; tightened by D4-5 (PR #478) | `TestIsolationPolicyNotice`, `TestRunCommandIsolationOffKeepsExecCapturedPath`, `TestRunCommandIsolationOffWithoutAckStaysSandboxed`, `TestRunCommandChildEnvironmentDropsIsolationControls`; `sop run` / `sop prompt` notice |
 | **VC** | Verification coverage gaps | SOP maintainers | `PARTIAL` — Linux host and Linux `amd64` are `NOT_RUN` | none needed (evidence gap, not a risk decision) | Platform table below |
 | **OPS** | Operational limits: 120 s default `CommandTimeout` against a ~90 s in-sandbox suite; 20 000-entry `$HOME` scan bound that refuses the command | SOP maintainers | `DOCUMENTED` — not a risk decision | none | Measurement report |
 
@@ -47,9 +47,11 @@ direct-read claim, and it holds under enforcement.
 
 Two things are explicitly **not** claimed by that:
 
-1. The operator override `SOP_AGENT_RUN_COMMAND_ISOLATION=off` restores
+1. The operator override — `SOP_AGENT_RUN_COMMAND_ISOLATION=off` together with
+   `SOP_AGENT_RUN_COMMAND_UNSANDBOXED_ACK=1` (D4-5, PR #478) — restores
    policy-only execution on macOS and Linux, by approval. Under it, the
-   direct-read vector is open again; the startup notice makes that visible.
+   direct-read vector is open again; the startup notice makes that visible, and
+   the acknowledgement keeps an inherited value from doing it alone.
 2. Three exposures survive **even with the sandbox on**. They are assessed below.
 
 ## The three residuals

@@ -42,7 +42,7 @@ func TestDarwinIsolationSAFECommandCredentialRead(t *testing.T) {
 	writeRepoFile(t, root, "cred/cred_test.go", safeCommandCredentialFixture)
 	// Pin the off leg: an inherited override or a future default change must not
 	// silently turn this run sandboxed.
-	t.Setenv(IsolationEnv, "off")
+	unsandboxed(t)
 	t.Setenv("HOME", home)
 	ctx := context.Background()
 	credentialCmd := "go test ./cred -run TestCredentialRead -v"

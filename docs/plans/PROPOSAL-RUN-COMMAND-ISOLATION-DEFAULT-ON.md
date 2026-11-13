@@ -6,8 +6,10 @@ override, subject to documented compatibility constraints. Select Windows B1
 (fail closed), with its compatibility impact explicitly acknowledged."
 
 Implemented as: isolation is required by default on every platform, the
-`SOP_AGENT_RUN_COMMAND_ISOLATION` override accepts `off`/`0`/`false`/`no` with a
-startup notice, and a host with no backend refuses `run_command` (B1) instead of
+`SOP_AGENT_RUN_COMMAND_ISOLATION` override accepts `off`/`0`/`false`/`no` and takes
+effect only together with `SOP_AGENT_RUN_COMMAND_UNSANDBOXED_ACK=1` (D4-5,
+PR #478), with a startup notice, and a host with no backend refuses `run_command`
+(B1) instead of
 running it unsandboxed. `Config.IsolateCommands` remains the programmatic opt-in
 and wins over the override. Verification is recorded in the
 [measurement report](../reports/owasp-llm/llm06-sandbox-default-measurements.md).
@@ -111,7 +113,10 @@ control.
 
 1. **Default on where a backend exists** (Darwin and Linux).
 2. **Explicit operator override**: `SOP_AGENT_RUN_COMMAND_ISOLATION=off`
-   (also `0`, `false`, `no`), printed once at startup.
+   (also `0`, `false`, `no`) together with
+   `SOP_AGENT_RUN_COMMAND_UNSANDBOXED_ACK=1`, printed once at startup. One
+   variable is not enough, so an inherited or stale value cannot remove the
+   sandbox by itself.
 3. **Unsupported platforms** (currently Windows): **B1 — deny `run_command`
    uniformly.** Selected by the operator: a host with no backend fails closed.
    The compatibility impact, acknowledged with the decision: on Windows every
@@ -222,8 +227,10 @@ the audit contract. The notice covers visibility.
 
 1. On Darwin and Linux with a working backend, `run_command` is sandboxed with no
    environment set, and the audit detail names the backend.
-2. `SOP_AGENT_RUN_COMMAND_ISOLATION=off` disables it and prints one notice, for
-   callers that do not set `Config.IsolateCommands`.
+2. `SOP_AGENT_RUN_COMMAND_ISOLATION=off` together with
+   `SOP_AGENT_RUN_COMMAND_UNSANDBOXED_ACK=1` disables it and prints one notice, for
+   callers that do not set `Config.IsolateCommands`. Without the acknowledgement
+   isolation stays in effect and a distinct notice says so.
 3. A missing or failing backend still fails closed
    (`TestRunCommandIsolationOnFailsClosedWithoutBackend`,
    `TestRunCommandIsolationDoesNotFallBackWhenBackendFails`).
@@ -259,8 +266,10 @@ the audit contract. The notice covers visibility.
 ## 7. Migration and rollback
 
 Migration: none for data or configuration. Operators who need today's behavior
-set `SOP_AGENT_RUN_COMMAND_ISOLATION=off`. Users on hosts where `bwrap` cannot
+set `SOP_AGENT_RUN_COMMAND_ISOLATION=off` **and**
+`SOP_AGENT_RUN_COMMAND_UNSANDBOXED_ACK=1`. Users on hosts where `bwrap` cannot
 start will see `run_command` denials with an explicit diagnostic and can opt out.
+An unacknowledged `off` leaves isolation in effect.
 
 Rollback: revert `isolationRequested`/`IsolationDefaultOn` and the notice; one
 release note. No state, schema, or artifact change.
@@ -279,7 +288,7 @@ What that settles, and what it does not:
 | Item | Status |
 | --- | --- |
 | 1. Default `run_command` isolation on | **Approved; implemented** as required-by-default on every platform. |
-| 2. `SOP_AGENT_RUN_COMMAND_ISOLATION=off` override with a startup notice | **Approved; implemented** (`off`, `0`, `false`, `no`; `sop run` and `sop prompt` print one notice). |
+| 2. `SOP_AGENT_RUN_COMMAND_ISOLATION=off` override with a startup notice | **Approved; implemented** (`off`, `0`, `false`, `no`; `sop run` and `sop prompt` print one notice). **Tightened by D4-5 (PR #478):** the override now also requires `SOP_AGENT_RUN_COMMAND_UNSANDBOXED_ACK=1` and is not inherited by child processes. |
 | 3. Unsupported-platform behavior | **B1 selected and enforced by platform**: on a platform with no backend (Windows) `run_command` is refused, and no override or `Config` value can change that — the PR #441 P2 recorded in #442 is fixed here. On macOS/Linux a missing backend binary under the override still runs policy-only, and the startup notice makes that visible. Compatibility impact acknowledged below. |
 | 4. Migrating the repository's own tests | **Approved; completed** without changing any other execution path. |
 | 5. Accepting the §6 residuals | **Not decided.** The decision covers the policy, not the residual risks. R4 and the Option-D hardlink alias stay open, and the host-to-sandbox socket direction stays recorded. |

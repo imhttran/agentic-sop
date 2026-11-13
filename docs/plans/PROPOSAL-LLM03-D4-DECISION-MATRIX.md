@@ -273,8 +273,9 @@ rather than a trusted-config or test-only site. It is constrained by:
   (`TestRunCommandIsolationIsOnByDefault`, `TestIsolationPolicyNotice`,
   `TestIsolationDecisionUnsupportedPlatforms`, and the Windows runtime test).
 
-The residual returns if the operator sets `SOP_AGENT_RUN_COMMAND_ISOLATION=off` on
-macOS/Linux, or if a platform has no backend (Windows refuses by design).
+The residual returns if the operator sets `SOP_AGENT_RUN_COMMAND_ISOLATION=off`
+together with `SOP_AGENT_RUN_COMMAND_UNSANDBOXED_ACK=1` on macOS/Linux (D4-5,
+PR #478), or if a platform has no backend (Windows refuses by design).
 
 **Decision: OPEN — not accepted.** The options are:
 

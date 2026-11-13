@@ -52,12 +52,15 @@ func markerExists(t *testing.T, root string) bool {
 // override bypass, and it runs on every host because the decision is pure.
 func TestIsolationDecisionUnsupportedPlatforms(t *testing.T) {
 	overrides := []string{"", "on", "1", "true", "off", "0", "false", "no", "OFF", " off ", "bogus", "2"}
+	acks := []string{"", "1", "true", "yes", "bogus"}
 	for _, goos := range []string{"windows", "plan9", "aix"} {
 		for _, override := range overrides {
-			for _, isolate := range []bool{false, true} {
-				if !isolationDecision(goos, override, isolate) {
-					t.Errorf("goos=%s override=%q IsolateCommands=%v: policy-only execution allowed, want refusal",
-						goos, override, isolate)
+			for _, ack := range acks {
+				for _, isolate := range []bool{false, true} {
+					if !isolationDecision(goos, override, ack, isolate) {
+						t.Errorf("goos=%s override=%q ack=%q IsolateCommands=%v: policy-only execution allowed, want refusal",
+							goos, override, ack, isolate)
+					}
 				}
 			}
 		}
@@ -67,21 +70,28 @@ func TestIsolationDecisionUnsupportedPlatforms(t *testing.T) {
 // The authorized behavior on a platform with a backend is unchanged.
 func TestIsolationDecisionSupportedPlatforms(t *testing.T) {
 	for _, goos := range []string{"darwin", "linux"} {
-		if !isolationDecision(goos, "", false) {
+		if !isolationDecision(goos, "", "", false) {
 			t.Errorf("goos=%s default: isolation not requested", goos)
 		}
 		for _, override := range []string{"off", "0", "false", "no", "OFF", " off "} {
-			if isolationDecision(goos, override, false) {
-				t.Errorf("goos=%s override=%q: the operator override was ignored", goos, override)
+			for _, ack := range []string{"", "bogus", "0", "false", "no"} {
+				if !isolationDecision(goos, override, ack, false) {
+					t.Errorf("goos=%s override=%q ack=%q: unacknowledged override took effect", goos, override, ack)
+				}
+			}
+			for _, ack := range []string{"1", "true", "yes", " YES "} {
+				if isolationDecision(goos, override, ack, false) {
+					t.Errorf("goos=%s override=%q ack=%q: acknowledged override ignored", goos, override, ack)
+				}
+			}
+			if !isolationDecision(goos, override, "1", true) {
+				t.Errorf("goos=%s: Config.IsolateCommands must win over an acknowledged override", goos)
 			}
 		}
 		for _, override := range []string{"on", "1", "true", "yes", "bogus", "2"} {
-			if !isolationDecision(goos, override, false) {
+			if !isolationDecision(goos, override, "1", false) {
 				t.Errorf("goos=%s override=%q: the default was not kept", goos, override)
 			}
-		}
-		if !isolationDecision(goos, "off", true) {
-			t.Errorf("goos=%s: Config.IsolateCommands must win over the override", goos)
 		}
 	}
 }
@@ -106,10 +116,12 @@ func TestRunCommandIsolationOnWindowsRefuses(t *testing.T) {
 		{"unknown", "bogus", false},
 		{"config-true", "off", true},
 		{"config-false", "off", false},
+		{"ack-only", "", false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Setenv(IsolationEnv, c.override)
+			t.Setenv(UnsandboxedAckEnv, "1")
 			root := t.TempDir()
 			writeMarkerModule(t, root)
 			cfg := DefaultConfig()

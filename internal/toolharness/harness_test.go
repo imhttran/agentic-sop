@@ -477,7 +477,7 @@ func TestFileAuditorWritesJSONLines(t *testing.T) {
 // and the harness refuses it even with the sandbox off. The marker proves no
 // external program executed.
 func TestRunCommandRejectsGitConfigInjection(t *testing.T) {
-	t.Setenv(IsolationEnv, "off")
+	unsandboxed(t)
 	root := t.TempDir()
 	gitIn := func(args ...string) {
 		t.Helper()

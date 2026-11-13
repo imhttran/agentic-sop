@@ -19,9 +19,18 @@ import (
 // IsolationEnv selects run_command isolation (LLM03,
 // PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON). Isolation is required by default on
 // every platform: where no backend exists the command is refused, never run
-// unsandboxed. The operator override is "off" (also 0/false/no).
-// Config.IsolateCommands is the programmatic equivalent of "on" and wins.
+// unsandboxed. The operator override is "off" (also 0/false/no) and takes effect
+// only with UnsandboxedAckEnv, so one inherited or stale variable cannot remove
+// the control on its own. Config.IsolateCommands is the programmatic equivalent
+// of "on" and wins.
 const IsolationEnv = "SOP_AGENT_RUN_COMMAND_ISOLATION"
+
+// UnsandboxedAckEnv must be set to an affirmative value together with the
+// IsolationEnv off spellings before run_command may run without the OS sandbox.
+// The exception is deliberate: an operator on a host where the backend cannot
+// start opts out by asserting two variables, and an ambient value cannot do it
+// alone.
+const UnsandboxedAckEnv = "SOP_AGENT_RUN_COMMAND_UNSANDBOXED_ACK"
 
 // errIsolationUnavailable is a policy denial: isolation is required but no
 // backend can enforce it, so the command never runs unsandboxed.
@@ -38,6 +47,17 @@ func isOffValue(raw string) bool {
 	return false
 }
 
+// isAcknowledged reports whether raw is a deliberate acknowledgement of
+// unsandboxed execution. Every other value, including an empty one, leaves
+// isolation in effect, so a partial or misspelled setting fails safe.
+func isAcknowledged(raw string) bool {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "1", "true", "yes":
+		return true
+	}
+	return false
+}
+
 // isolationOverrideOff reports whether the environment explicitly disables
 // isolation, and the raw value, so the caller can echo what the operator set.
 func isolationOverrideOff() (bool, string) {
@@ -46,10 +66,13 @@ func isolationOverrideOff() (bool, string) {
 }
 
 // IsolationPolicyNotice is the one-line notice `sop` prints at startup when the
-// environment disables run_command isolation, so a stale or inherited value
-// cannot remove the control silently. It returns "" when isolation is in effect.
-// A missing backend is not a notice: that path refuses the command instead, and
-// the override has no effect there.
+// environment asks to disable run_command isolation, so a stale or inherited
+// value cannot change the control silently. It returns "" when isolation is in
+// effect and no override was requested. A missing backend is not a notice: that
+// path refuses the command instead, and the override has no effect there.
+//
+// An unacknowledged override gets its own notice, because the operator's intent
+// did not take effect and the reason must be visible.
 func IsolationPolicyNotice() string {
 	if !hasBackend(runtime.GOOS) {
 		return ""
@@ -57,6 +80,9 @@ func IsolationPolicyNotice() string {
 	off, raw := isolationOverrideOff()
 	if !off {
 		return ""
+	}
+	if !isAcknowledged(os.Getenv(UnsandboxedAckEnv)) {
+		return fmt.Sprintf("[config] %s=%q was ignored: set %s=1 to confirm unsandboxed run_command execution, so isolation remains in effect", IsolationEnv, raw, UnsandboxedAckEnv)
 	}
 	return fmt.Sprintf("[config] %s=%q disables run_command isolation; commands run with policy checks only and a scrubbed credential environment", IsolationEnv, raw)
 }
@@ -86,20 +112,24 @@ func hasBackend(goos string) bool {
 // A platform with no backend always returns true: the caller then refuses the
 // command through sandboxArgv, and no override can turn that into policy-only
 // execution (Windows B1). Where a backend exists the default is true, the
-// operator override can disable it, and Config.IsolateCommands always wins.
-func isolationDecision(goos, override string, isolateCommands bool) bool {
+// operator override can disable it only when it is also acknowledged, and
+// Config.IsolateCommands always wins.
+func isolationDecision(goos, override, ack string, isolateCommands bool) bool {
 	if !hasBackend(goos) {
 		return true
 	}
 	if isolateCommands {
 		return true
 	}
-	return !isOffValue(override)
+	if !isOffValue(override) {
+		return true
+	}
+	return !isAcknowledged(ack)
 }
 
 // isolationRequested reports whether the command must run inside the OS sandbox.
 func (h *Harness) isolationRequested() bool {
-	return isolationDecision(runtime.GOOS, os.Getenv(IsolationEnv), h.cfg.IsolateCommands)
+	return isolationDecision(runtime.GOOS, os.Getenv(IsolationEnv), os.Getenv(UnsandboxedAckEnv), h.cfg.IsolateCommands)
 }
 
 // isolate wraps argv in the platform sandbox: Seatbelt on macOS, bubblewrap
@@ -141,13 +171,22 @@ func scrubbedEnvironment() (env []string, dropped int) {
 	env = make([]string, 0, len(inherited))
 	for _, kv := range inherited {
 		name, value, _ := strings.Cut(kv, "=")
-		if redact.IsSecretName(name) || redact.Shapes(value, marker) != value {
+		if controlEnvNames[name] || redact.IsSecretName(name) || redact.Shapes(value, marker) != value {
 			dropped++
 			continue
 		}
 		env = append(env, kv)
 	}
 	return env, dropped
+}
+
+// controlEnvNames are SOP control-plane switches. They never reach a
+// model-controlled child: a nested SOP process must decide its own isolation
+// instead of inheriting the parent's, and a model-authored command has no reason
+// to see either value.
+var controlEnvNames = map[string]bool{
+	IsolationEnv:      true,
+	UnsandboxedAckEnv: true,
 }
 
 // sandboxEnv is the sandboxed child environment: the scrubbed environment plus
