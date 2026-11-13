@@ -199,13 +199,16 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     blocking gate is an operator decision
     ([PROPOSAL-SCANNER-PIN-POLICY.md](../../plans/PROPOSAL-SCANNER-PIN-POLICY.md)).
 
-> **Current scanner-enforcement status (PRs #471–#474):** required categories
-> remain disabled; the scan is report-only. The reproduced full-workspace baseline is
-> **101 findings, 40 suppressed and 45 blocking** — the original 45 blocking findings,
-> with the residual at `internal/toolharness/harness.go:926`
-> (`semgrep:3076a05322acb6e35b02c87144da3b8a6dfbe8eac96a7679614c4d5402973771`). The five
-> Gitleaks findings that the decision documents introduced by quoting placeholder shapes
-> were redacted, so no baseline entry is needed for them; the
+> **Current scanner-enforcement status (PRs #471–#482):** required categories remain
+> disabled; the scan is report-only. The D4 baseline approvals were implemented on
+> 2026-11-13 (Groups A, B and C, 44 fingerprints; 16 stale entries retired;
+> [decision record](../../plans/PROPOSAL-LLM03-D4-OPERATOR-DECISION-RECORD.md)). The
+> reproduced full-workspace baseline is now **101 findings, 84 suppressed, 17 unsuppressed
+> and 1 blocking**: the sole blocking finding is the deliberately unaccepted `run_command`
+> residual at `internal/toolharness/harness.go:926`
+> (`semgrep:3076a05322acb6e35b02c87144da3b8a6dfbe8eac96a7679614c4d5402973771`; D4-5 = R2).
+> The five Gitleaks findings that the decision documents introduced by quoting placeholder
+> shapes were redacted, so no baseline entry was needed for them; the
 > [operator packet](../../plans/PROPOSAL-LLM03-D4-OPERATOR-APPROVAL-PACKET.md) records the
 > pre-redaction fingerprints as history.
 > The advisory unmatched-baseline diagnostic is verdict-neutral and now reports only

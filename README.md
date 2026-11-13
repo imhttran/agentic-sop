@@ -191,14 +191,17 @@ waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-ga
   coverage remain limited or unobserved.
 - Slack rendering was observed. A plain `@here` can notify the bound channel;
   the operator chose to document this as a residual rather than change the encoder.
-- LLM03 scanner-integrity code and per-platform pins are merged. D4 enforcement
-  remains report-only: the reproduced full-workspace baseline is 101 findings,
-  40 suppressed, and 45 blocking. PRs #471–#478 provide the approval packet, the
-  investigations, the M1/M3 hardening, the acknowledged run_command override, and
-  the Semgrep 1.183.0 alignment. The stale-baseline diagnostic now reports only
-  after a complete workspace scan, so partial, failed, disabled, and changed-files
-  scans stay silent. The five Gitleaks fixtures that the decision documents
-  introduced were redacted rather than baselined.
+- LLM03 scanner-integrity code and per-platform pins are merged. The D4 baseline
+  approvals were implemented on 2026-11-13 and enforcement remains report-only:
+  the full-workspace baseline is 101 findings, 84 suppressed, 17 unsuppressed and
+  1 blocking. The single blocker is the deliberately unaccepted `run_command`
+  residual (D4-5 R2). PRs #471–#482 provide the approval packet, the
+  investigations, the M1/M3 hardening, the acknowledged run_command override, the
+  Semgrep 1.183.0 alignment, and the approved baseline. The stale-baseline
+  diagnostic now reports only after a complete workspace scan, so partial,
+  failed, disabled, and changed-files scans stay silent, and the five Gitleaks
+  fixtures that the decision documents introduced were redacted rather than
+  baselined.
 - Every `exec.CommandContext` subprocess path binds process-group termination,
   enforced by an architecture guard. Token budgeting remains opt-in and is not a
   monetary cap.

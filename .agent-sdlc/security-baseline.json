@@ -10,25 +10,9 @@
       "expires_at": "2027-06-30T00:00:00Z"
     },
     {
-      "fingerprint": "semgrep:e8a0b7e0647ce66aaef103f0705ab4a036ab69bc4f02ec9aeae0f0e1f35316dd",
-      "rule_id": "dangerous-exec-command",
-      "path": "internal/agent/command.go",
-      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
-      "owner": "imhttran",
-      "expires_at": "2027-06-30T00:00:00Z"
-    },
-    {
       "fingerprint": "semgrep:1c1fe97130f651dc92e5172e21b0f333f6da5e7d16d114fa328cfbc7eff86180",
       "rule_id": "dangerous-exec-command",
       "path": "internal/cli/mcp_start_work.go",
-      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
-      "owner": "imhttran",
-      "expires_at": "2027-06-30T00:00:00Z"
-    },
-    {
-      "fingerprint": "semgrep:78d6fce54bcddcec7fecce1d57b85a0bca44d0d35bb59a1827d44268d0de3725",
-      "rule_id": "dangerous-exec-command",
-      "path": "internal/cli/outcome.go",
       "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
       "owner": "imhttran",
       "expires_at": "2027-06-30T00:00:00Z"
@@ -114,14 +98,6 @@
       "expires_at": "2027-06-30T00:00:00Z"
     },
     {
-      "fingerprint": "semgrep:bce81695879c635bb1894f6dfa12b0e3ec4a306aa5cd935750d1cb8018c8048d",
-      "rule_id": "dangerous-exec-command",
-      "path": "internal/decision/command/command.go",
-      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
-      "owner": "imhttran",
-      "expires_at": "2027-06-30T00:00:00Z"
-    },
-    {
       "fingerprint": "semgrep:d3dbea35b4123879c95a9662e31d0255ce8f995cb85905d3d4c7c9f1a7ced0b9",
       "rule_id": "dangerous-exec-command",
       "path": "internal/decision/commandprofile/connector.go",
@@ -146,26 +122,10 @@
       "expires_at": "2027-06-30T00:00:00Z"
     },
     {
-      "fingerprint": "semgrep:5e4ca22cffafe0022e8a379bf3923e1c9a0356aaf8981b5b7f985ac9c7f9b17f",
-      "rule_id": "dangerous-exec-command",
-      "path": "internal/decisionadapter/providers/julia/runner.go",
-      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
-      "owner": "imhttran",
-      "expires_at": "2027-06-30T00:00:00Z"
-    },
-    {
       "fingerprint": "semgrep:c4621add634185098bd2ffd2fb4e6bad3782f5bb20df069eea93dce282c94dbb",
       "rule_id": "math-random-used",
       "path": "internal/decisionquality/paired.go",
       "reason": "False positive: math/rand is used for seeded bootstrap resampling, not for security decisions.",
-      "owner": "imhttran",
-      "expires_at": "2027-06-30T00:00:00Z"
-    },
-    {
-      "fingerprint": "semgrep:dfd17358d313f17a0b7d29f6165dbae892ad87254f44ff94578ce3d9d8aeb7a4",
-      "rule_id": "dangerous-exec-command",
-      "path": "internal/dqharness/replay_exec.go",
-      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
       "owner": "imhttran",
       "expires_at": "2027-06-30T00:00:00Z"
     },
@@ -178,58 +138,10 @@
       "expires_at": "2027-06-30T00:00:00Z"
     },
     {
-      "fingerprint": "semgrep:cd2dacdbe1fe084913193ef4582be496d3552ea84c2250f543e70663821f916e",
-      "rule_id": "dangerous-exec-command",
-      "path": "internal/github/command.go",
-      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
-      "owner": "imhttran",
-      "expires_at": "2027-06-30T00:00:00Z"
-    },
-    {
-      "fingerprint": "semgrep:6e0e49455f2627426687c1e0cc00e8d12401df91f700f1b849826940d1bb14d1",
-      "rule_id": "dangerous-exec-command",
-      "path": "internal/handoff/caveman/caveman.go",
-      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
-      "owner": "imhttran",
-      "expires_at": "2027-06-30T00:00:00Z"
-    },
-    {
-      "fingerprint": "semgrep:5d918d1490e4e6cec109a5b2cc278df1fec6a39db70d536df0921d76fdeddf8a",
-      "rule_id": "dangerous-exec-command",
-      "path": "internal/hipcompare/command.go",
-      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
-      "owner": "imhttran",
-      "expires_at": "2027-06-30T00:00:00Z"
-    },
-    {
-      "fingerprint": "semgrep:819e8d960cbaa81049fb4ba0a730ba8a716de4e39b3e1e437c7b3da85e027e37",
-      "rule_id": "dangerous-exec-command",
-      "path": "internal/hipcompare/command.go",
-      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
-      "owner": "imhttran",
-      "expires_at": "2027-06-30T00:00:00Z"
-    },
-    {
       "fingerprint": "semgrep:e71af4f30c73fb23c487d0760fbc361af1b5a6b84849abaa3185362cea0a5aa2",
       "rule_id": "string-formatted-query",
       "path": "internal/memindex/index.go",
       "reason": "False positive: the query interpolates a package constant int into a PRAGMA.",
-      "owner": "imhttran",
-      "expires_at": "2027-06-30T00:00:00Z"
-    },
-    {
-      "fingerprint": "semgrep:ecc01dc3634cb18e2c81bba972ca62940d1ab3345e44ea4e39b0dfb16fc459e4",
-      "rule_id": "dangerous-exec-command",
-      "path": "internal/ragclient/exec.go",
-      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
-      "owner": "imhttran",
-      "expires_at": "2027-06-30T00:00:00Z"
-    },
-    {
-      "fingerprint": "semgrep:f9f6b86b583ac0c7c48c655215c73cab10f601eaa10af2bb56fe49b4a402e00a",
-      "rule_id": "dangerous-exec-command",
-      "path": "internal/review/ocr.go",
-      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
       "owner": "imhttran",
       "expires_at": "2027-06-30T00:00:00Z"
     },
@@ -246,30 +158,6 @@
       "rule_id": "string-formatted-query",
       "path": "internal/store/handoff.go",
       "reason": "Not actionable: columns are a constant list and values are bound with placeholders (ISSUE-52).",
-      "owner": "imhttran",
-      "expires_at": "2027-06-30T00:00:00Z"
-    },
-    {
-      "fingerprint": "semgrep:331eef7a50809fae26080144035531412b17956e61bfbe9813288f25ead3a55e",
-      "rule_id": "dangerous-exec-command",
-      "path": "internal/testrunner/command.go",
-      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
-      "owner": "imhttran",
-      "expires_at": "2027-06-30T00:00:00Z"
-    },
-    {
-      "fingerprint": "semgrep:df4e9848d6aa031ce1d4a27e7262d449ba8bec5573f4ef0b86efc7a9102326d7",
-      "rule_id": "dangerous-exec-command",
-      "path": "internal/toolharness/harness.go",
-      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
-      "owner": "imhttran",
-      "expires_at": "2027-06-30T00:00:00Z"
-    },
-    {
-      "fingerprint": "semgrep:82f8cbd035e31b4adffe1f201507e29781b9626f8acb040142ad16ee46216576",
-      "rule_id": "dangerous-exec-command",
-      "path": "internal/cli/outcome.go",
-      "reason": "False positive, reviewed: acceptance checks execute only after commandpolicy.Classify returns SAFE and rejectDangerousForm rejects injection flags; argv is operator/task-defined, no shell is invoked, and output is redacted. Triaged 2026-11-08.",
       "owner": "imhttran",
       "expires_at": "2027-06-30T00:00:00Z"
     },
@@ -294,14 +182,6 @@
       "rule_id": "dangerous-exec-command",
       "path": "internal/decision/commandprofile/connector_test.go",
       "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
-      "owner": "imhttran",
-      "expires_at": "2027-06-30T00:00:00Z"
-    },
-    {
-      "fingerprint": "semgrep:11fb9bdc2aa5607323d07d686df44459f31e57e5e91c0745e3d21a8fb779672d",
-      "rule_id": "dangerous-exec-command",
-      "path": "internal/decisionadapter/providers/julia/runner.go",
-      "reason": "False positive, reviewed: the adapter command is operator-configured argv with no shell; model input is JSON on stdin and the child environment is scrubbed by childEnv(). Triaged 2026-11-08.",
       "owner": "imhttran",
       "expires_at": "2027-06-30T00:00:00Z"
     },
@@ -358,14 +238,6 @@
       "rule_id": "dangerous-exec-command",
       "path": "internal/dist/install_windows_test.go",
       "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
-      "owner": "imhttran",
-      "expires_at": "2027-06-30T00:00:00Z"
-    },
-    {
-      "fingerprint": "semgrep:90576e4e8d83cebe41710b35562e65f7d78cccbd10cccf1bc41c38c47f66c8ef",
-      "rule_id": "dangerous-exec-command",
-      "path": "internal/dqharness/replay_exec.go",
-      "reason": "False positive, reviewed: this is the sandbox launcher. It executes only the detected bwrap/sandbox-exec backend with an argv built by isolationCommand, uses a scrubbed environment, and fails closed when isolation is unavailable. Triaged 2026-11-08.",
       "owner": "imhttran",
       "expires_at": "2027-06-30T00:00:00Z"
     },
@@ -448,6 +320,358 @@
       "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
       "owner": "imhttran",
       "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:542e8c41d5552a91a81d7070b25f4978c67e8c9ccde6d9d194818ef2b7e2d09a",
+      "rule_id": "aws-access-token",
+      "path": "docs/plans/PROPOSAL-LLM02-KNOWN-FORMAT-ENHANCEMENT.md",
+      "reason": "Synthetic credential fixture: a reviewed fixture documentation or campaign evidence with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:9bce24de528ad1aac6f0b7be3c2ec32290e8254146b8e48727cd99be16576a2a",
+      "rule_id": "stripe-access-token",
+      "path": "docs/plans/PROPOSAL-LLM02-KNOWN-FORMAT-ENHANCEMENT.md",
+      "reason": "Synthetic credential fixture: a reviewed fixture documentation or campaign evidence with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:332c11915593ec84a395c2cd64eaa59eb77545cd4d4af9448a6b6f6e2a1eabd4",
+      "rule_id": "aws-access-token",
+      "path": "docs/reports/owasp-llm/llm02-seven-format-campaign.json",
+      "reason": "Synthetic credential fixture: a reviewed fixture documentation or campaign evidence with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:b1a51e668cf2e25a1b4a46fb3127b73d0d0d5ca113aa33e7ad942d4ee86234ea",
+      "rule_id": "stripe-access-token",
+      "path": "docs/reports/owasp-llm/llm02-seven-format-campaign.json",
+      "reason": "Synthetic credential fixture: a reviewed fixture documentation or campaign evidence with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:c31d51667dc25b605d12faebb0a2b9afb0e8f7b46cd40d0ab4c91e0955dd8d1d",
+      "rule_id": "stripe-access-token",
+      "path": "docs/reports/owasp-llm/llm02-seven-format-campaign.json",
+      "reason": "Synthetic credential fixture: a reviewed fixture documentation or campaign evidence with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:f32006839b09007ede952842800cf6e5e3438e8d2c404936e403df23e591e5e5",
+      "rule_id": "aws-access-token",
+      "path": "docs/reports/owasp-llm/llm02-seven-format-campaign.json",
+      "reason": "Synthetic credential fixture: a reviewed fixture documentation or campaign evidence with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:c68e84fd911325959deb53720896e44ecf6a2a3164dc470b7a68da69a2392e4c",
+      "rule_id": "generic-api-key",
+      "path": "internal/cli/llm08_notification_secrets_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:db3bc94721d39f463b41ec350303a3a3bd47e4fafa91d8ca723298bd23c5aa98",
+      "rule_id": "generic-api-key",
+      "path": "internal/notify/llm08_notification_secrets_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:35daf7cd697b192e38c7bb0ff5d82dd592b0c2b6e361a466f2b9bf8197af88a9",
+      "rule_id": "aws-access-token",
+      "path": "internal/ollamaagent/llm02_seven_format_linux_live_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:5024394e9c2eab930589a60820e675678826502a3f04b5924612851e2acf340b",
+      "rule_id": "stripe-access-token",
+      "path": "internal/ollamaagent/llm02_seven_format_linux_live_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:018670038beb44e4d94058bcc9a894ecabc6a70c2add7e15cd2a804126e054f7",
+      "rule_id": "stripe-access-token",
+      "path": "internal/redact/known_format_enhancement_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:1a6feaa4d53f118595851afd37311b9498aeb77b10f7b628f3246dcf9a47fecf",
+      "rule_id": "aws-access-token",
+      "path": "internal/redact/known_format_enhancement_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:1bd172eb44cf97b69bdd68d57e1e1065e86cff947b8fe73fcbb9d19f18e5c5d1",
+      "rule_id": "generic-api-key",
+      "path": "internal/redact/policy_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:6278e72f9d4d7130e78109d480ecc6c0993403d84bb176fdf06cd4e799e3bc8f",
+      "rule_id": "stripe-access-token",
+      "path": "internal/redact/policy_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:72987dfb22a55d6f24b93f98a3a36ffc7410c06443e223f320af33a295425862",
+      "rule_id": "stripe-access-token",
+      "path": "internal/redact/policy_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:9910e1b901cbbe5cd43ecf1262e0bda8b834a04246bdfa7c2ee941e93e99561b",
+      "rule_id": "gitlab-pat",
+      "path": "internal/redact/policy_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:9a6496cc947aa36105cff143d189ef0f5df1a6ba345a07623a185cb791ce319c",
+      "rule_id": "generic-api-key",
+      "path": "internal/redact/policy_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:fd2fd2e2a251b47fce4948677f9f77dc237e0af1d63031f71d4ab6087bed0b6d",
+      "rule_id": "generic-api-key",
+      "path": "internal/redact/scrub_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:279f4fc447993b022ddd16668b3310e912e5fe821ea34bdb0689edc1ffc55eae",
+      "rule_id": "stripe-access-token",
+      "path": "internal/redact/unknown_format_assessment_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:51df64d7eaa35e4f60faedc832ef84c835119afe4e24ad879b0b4651e604b85c",
+      "rule_id": "generic-api-key",
+      "path": "internal/redact/unknown_format_assessment_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:8ba804fb22f81445bcda29f9901a5e87870a43a0694aa2ed8fd7017b2dabb74a",
+      "rule_id": "jwt",
+      "path": "internal/redact/unknown_format_assessment_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:92d6018e06ca21eb02731f20e69e2dfe2db00b0d2633aa209bf386b5945bc3fb",
+      "rule_id": "generic-api-key",
+      "path": "internal/redact/unknown_format_assessment_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:95a03c2ff32f3a935b4c07f194f26a5730181c036db84e0e57e9ba62ff502bdc",
+      "rule_id": "stripe-access-token",
+      "path": "internal/redact/unknown_format_assessment_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:9c1a8a1484b137ecb944c88c75296d103776d8331ffb6c170a7a4f2dfe27b385",
+      "rule_id": "gitlab-pat",
+      "path": "internal/redact/unknown_format_assessment_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:9fee8d1fea5eaa6bf431c1aa807463e37d526af2e82c56a9cd1dbc517f8c43dd",
+      "rule_id": "aws-access-token",
+      "path": "internal/redact/unknown_format_assessment_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:aa717d45db7a1d5e66910d7071b67e3612fa4cad1854c559480bbd23320044e0",
+      "rule_id": "aws-access-token",
+      "path": "internal/redact/unknown_format_assessment_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "gitleaks:bf5aa4c0629a2eb4d05a03a059370c7b64a25b2bb74aaf39f462bac123802b57",
+      "rule_id": "gitlab-pat",
+      "path": "internal/redact/unknown_format_assessment_test.go",
+      "reason": "Synthetic credential fixture: a redaction or canary test input with no live credential. D4-2 group A, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:ccb4bb42ca610fd2963268b516385bba795ee7c294c4ad0f7968bcd03d25725c",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/dqharness/replay_exec_test.go",
+      "reason": "Test-only harness helper that starts a sandbox or probes isolation; it cannot run in production. D4-3 group B, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:fab835e9941bb1ad0ab32bf7e51f0a1f30944f2d500ba43cf844b247c4c35718",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/toolharness/isolation_credential_linux_test.go",
+      "reason": "Test-only harness helper that starts a sandbox or probes isolation; it cannot run in production. D4-3 group B, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:11ef53417d1b9eedc8e24e1593bdfa38b6d8df035e3265fce7c61bff2aa3e5c2",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/toolharness/isolation_test.go",
+      "reason": "Test-only harness helper that starts a sandbox or probes isolation; it cannot run in production. D4-3 group B, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:765bec591c74b4bc0a7bfbee12daaeb711a7123391832670c4d7d8d2a99d9f28",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/toolharness/isolation_test.go",
+      "reason": "Test-only harness helper that starts a sandbox or probes isolation; it cannot run in production. D4-3 group B, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:fbedd5f6a2ed946cd639a20ce584f6ab65c3788767ea09cbb60e2c08294313b2",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/toolharness/isolation_test.go",
+      "reason": "Test-only harness helper that starts a sandbox or probes isolation; it cannot run in production. D4-3 group B, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:60898e80cd5c2bc481c1929520ff2a58292a4bd4bc50d06cce1553701a9b7781",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/agent/command.go",
+      "reason": "operator env/config; the command is intentional and no untrusted text is interpolated into it. D4-4 group C, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-03-31T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:4c5c524ae8329de9fb052b337310f9d8ed1156c34a96194668ea43e2654a7728",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/cli/outcome.go",
+      "reason": "operator task spec + command policy; the command is intentional and no untrusted text is interpolated into it. D4-4 group C, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-03-31T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:bc6bd5cd04fa74b928093ebbe7c45d48447cd59af4a39cfaab0579fa4a73820e",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/decision/command/command.go",
+      "reason": "operator config; the command is intentional and no untrusted text is interpolated into it. D4-4 group C, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-03-31T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:049c3e59d957e1d4a28a4954b676810d7aa514eb22bda8aef587116f1188db3c",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/decisionadapter/providers/julia/runner.go",
+      "reason": "operator config; the command is intentional and no untrusted text is interpolated into it. D4-4 group C, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-03-31T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:63433ea4f23e9fd5bb730c3c0b26dedf34a3081dba435580b1bc301f8802fe6d",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/dqharness/replay_exec.go",
+      "reason": "replay fixture + required sandbox; the command is intentional and no untrusted text is interpolated into it. D4-4 group C, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-03-31T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:a057a8819f65f11b35ac5d11a41e7394f53b118e04c6073e90be61d48c4019f1",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/github/command.go",
+      "reason": "internal fixed gh/git commands; the command is intentional and no untrusted text is interpolated into it. D4-4 group C, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-03-31T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:435864db8eb90bf0f49f6c97e8990a93e1bdb87230425c80b9bf6a9d200768bc",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/handoff/caveman/caveman.go",
+      "reason": "operator config; the command is intentional and no untrusted text is interpolated into it. D4-4 group C, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-03-31T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:5933a67130ae763b9e6d30126cd43e84e2066fc2d2c218b85d32c57366905a16",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/hipcompare/command.go",
+      "reason": "manifest verification commands; the command is intentional and no untrusted text is interpolated into it. D4-4 group C, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-03-31T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:d982e8f12bb7c6597513193a4622edaf6a955a626feba0ed8f9198ec406560be",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/hipcompare/command.go",
+      "reason": "operator executor command; the command is intentional and no untrusted text is interpolated into it. D4-4 group C, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-03-31T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:f4506eb456705bd1fd134e7a2d1a79051205e570d70f62577be23702b2f8b71c",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/ragclient/exec.go",
+      "reason": "operator config absolute path; the command is intentional and no untrusted text is interpolated into it. D4-4 group C, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-03-31T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:fc8287f18275bcdb937f8d3e12dab172076126d3045cc73a997cf5f523780b88",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/review/ocr.go",
+      "reason": "operator env; the command is intentional and no untrusted text is interpolated into it. D4-4 group C, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-03-31T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:0f959d4f3632e1c2244db5405f3f0309e58abbb00c08ab0d71b874d2c75ca344",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/testrunner/command.go",
+      "reason": "project validation config; the command is intentional and no untrusted text is interpolated into it. D4-4 group C, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-03-31T00:00:00Z"
     }
   ]
 }
