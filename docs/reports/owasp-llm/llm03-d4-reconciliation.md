@@ -5,6 +5,15 @@ added, and no enforcement setting is changed.** This report independently reprod
 reconciles the D4 packet. Where it differs from the merged packet, the difference is
 stated as a finding for the operator, not applied as a change.
 
+> **Superseded detail (2026-11-13).** The reproduction below is preserved as recorded at
+> `bd2e0d45`. Later merged work moved the residual from `harness.go:920` to `:926`, so the
+> current blocking remainder is that line with fingerprint
+> `semgrep:3076a05322acb6e35b02c87144da3b8a6dfbe8eac96a7679614c4d5402973771`. The current
+> full-workspace report-only baseline is 106 findings, 40 suppressed and 50 blocking; the
+> five additional Gitleaks findings are the decision documents' own quoted placeholders,
+> pending disposition. Use the current values, not the `:920` references below, for any
+> approval.
+
 **Inputs reconciled:**
 
 - [PROPOSAL-LLM03-D4-ENFORCEMENT.md](../../plans/PROPOSAL-LLM03-D4-ENFORCEMENT.md) (PR #467)

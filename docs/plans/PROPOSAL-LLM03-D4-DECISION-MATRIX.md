@@ -3,7 +3,7 @@
 **Status:** decision matrix, read-only. **Option C (`secrets` + `dependencies` +
 `sast`) is the preferred target but is not approved for activation.** The current
 configuration remains report-only. No baseline entry is added or approved, and the
-`internal/toolharness/harness.go:920` residual is **not accepted**.
+`internal/toolharness/harness.go:926` residual is **not accepted**.
 
 **Authoritative inventory:** [PROPOSAL-LLM03-D4-ENFORCEMENT.md](PROPOSAL-LLM03-D4-ENFORCEMENT.md)
 (PR #467), including its correction that there are **six** production `sh -c` sites.
@@ -16,6 +16,16 @@ The scan is identical to the `6ff4ee4b` baseline: **101 findings, 40 suppressed,
 unsuppressed, 45 blocking**; all three adapters `COMPLETED` / `COMPLETE`; verdict
 `FAIL` in report-only mode. Local artifact:
 `.agent-sdlc/runs/gap9-d4-matrix/security/scan.json` (not committed).
+
+> **Revision (2026-11-13, verified at `main` `986b9132`).** The residual moved from
+> `harness.go:920` to `:926` when M1 added the environment scrub above `execCaptured`, so
+> its fingerprint is now `semgrep:3076a05322acb6e35b02c87144da3b8a6dfbe8eac96a7679614c4d5402973771` (was `semgrep:2e3c98676c0b89b137c13339ae43b6a5928dae9e7ff2fcf893de77038f473847`, preserved here as historical
+> evidence). The other 73 Semgrep fingerprints are unchanged. The full-workspace
+> report-only baseline is now **106 findings, 40 suppressed, 66 unsuppressed, 50
+> blocking**: the residual's move did not change the count, and the five additional
+> Gitleaks fixture findings are the decision documents' own quoted placeholders, pending
+> disposition. Only the current fingerprint may be used for a new approval.
+
 
 ## Decision legend
 
@@ -74,7 +84,7 @@ All 45 are unsuppressed findings at `critical`/`high` under the current
 | 38 | semgrep | `dangerous-exec-command` | `internal/ragclient/exec.go:19` | `semgrep:f4506eb456705bd1fd134e7a2d1a79051205e570d70f62577be23702b2f8b71c` | **B** | 2027-03-31 |
 | 39 | semgrep | `dangerous-exec-command` | `internal/review/ocr.go:57` | `semgrep:fc8287f18275bcdb937f8d3e12dab172076126d3045cc73a997cf5f523780b88` | **B** | 2027-03-31 |
 | 40 | semgrep | `dangerous-exec-command` | `internal/testrunner/command.go:53` | `semgrep:0f959d4f3632e1c2244db5405f3f0309e58abbb00c08ab0d71b874d2c75ca344` | **B** | 2027-03-31 |
-| 41 | semgrep | `dangerous-exec-command` | `internal/toolharness/harness.go:920` | `semgrep:2e3c98676c0b89b137c13339ae43b6a5928dae9e7ff2fcf893de77038f473847` | **R** | OPEN |
+| 41 | semgrep | `dangerous-exec-command` | `internal/toolharness/harness.go:926` | `semgrep:3076a05322acb6e35b02c87144da3b8a6dfbe8eac96a7679614c4d5402973771` | **R** | OPEN |
 | 42 | semgrep | `dangerous-exec-command` | `internal/toolharness/isolation_credential_linux_test.go:113` | `semgrep:fab835e9941bb1ad0ab32bf7e51f0a1f30944f2d500ba43cf844b247c4c35718` | **B** | 2027-06-30 |
 | 43 | semgrep | `dangerous-exec-command` | `internal/toolharness/isolation_test.go:32` | `semgrep:11ef53417d1b9eedc8e24e1593bdfa38b6d8df035e3265fce7c61bff2aa3e5c2` | **B** | 2027-06-30 |
 | 44 | semgrep | `dangerous-exec-command` | `internal/toolharness/isolation_test.go:60` | `semgrep:fbedd5f6a2ed946cd639a20ce584f6ab65c3788767ea09cbb60e2c08294313b2` | **B** | 2027-06-30 |
@@ -82,7 +92,7 @@ All 45 are unsuppressed findings at `critical`/`high` under the current
 
 **Summary:** 44 proposed fingerprint entries (**B**) — 27 Gitleaks, 5 test-only
 Semgrep HIGH, and 12 production Semgrep — and one residual decision (**R**,
-`internal/toolharness/harness.go:920`). No finding is proposed as a code fix.
+`internal/toolharness/harness.go:926`). No finding is proposed as a code fix.
 
 ## 2. Production dispositions (13 sites)
 
@@ -100,13 +110,13 @@ Semgrep HIGH, and 12 production Semgrep — and one residual decision (**R**,
 | `internal/ragclient/exec.go:19` | argv | operator config absolute path | **B** | 2027-03-31 | `semgrep:f4506eb456705bd1fd134e7a2d1a79051205e570d70f62577be23702b2f8b71c` |
 | `internal/review/ocr.go:57` | sh -c | operator env | **B** | 2027-03-31 | `semgrep:fc8287f18275bcdb937f8d3e12dab172076126d3045cc73a997cf5f523780b88` |
 | `internal/testrunner/command.go:53` | sh -c | project validation config | **B** | 2027-03-31 | `semgrep:0f959d4f3632e1c2244db5405f3f0309e58abbb00c08ab0d71b874d2c75ca344` |
-| `internal/toolharness/harness.go:920` | argv | model run_command + command policy + default-on sandbox | **R** | OPEN | `semgrep:2e3c98676c0b89b137c13339ae43b6a5928dae9e7ff2fcf893de77038f473847` |
+| `internal/toolharness/harness.go:926` | argv | model run_command + command policy + default-on sandbox | **R** | OPEN | `semgrep:3076a05322acb6e35b02c87144da3b8a6dfbe8eac96a7679614c4d5402973771` |
 
 The six `sh -c` sites are `internal/agent/command.go:104`,
 `internal/handoff/caveman/caveman.go:90`, `internal/hipcompare/command.go:402`,
 `internal/hipcompare/command.go:430`, `internal/review/ocr.go:57`, and
 `internal/testrunner/command.go:53`. The other seven execute a structured argv.
-`internal/toolharness/harness.go:920` is the only model-controlled exec path; it is
+`internal/toolharness/harness.go:926` is the only model-controlled exec path; it is
 subject to `commandpolicy.Classify` and the default-on OS sandbox, and is marked
 **R**, not **B**.
 
@@ -191,7 +201,7 @@ broad.** A path-wide entry would hide a new production exec in the same file.
 | `internal/review/ocr.go:57` | sh -c | operator env | `semgrep:fc8287f18275bcdb937f8d3e12dab172076126d3045cc73a997cf5f523780b88` | 2027-03-31 |
 | `internal/testrunner/command.go:53` | sh -c | project validation config | `semgrep:0f959d4f3632e1c2244db5405f3f0309e58abbb00c08ab0d71b874d2c75ca344` | 2027-03-31 |
 
-The thirteenth production site, `internal/toolharness/harness.go:920`, is not in this
+The thirteenth production site, `internal/toolharness/harness.go:926`, is not in this
 table because it is the residual decision in §5.
 
 ### 3.4 Optional non-blocking Semgrep MEDIUM (16 entries)
@@ -242,14 +252,14 @@ result of the review, not an assumption:
 - **Dead-code candidate.** #466 notes that `caveman.New` has no non-test caller. Removing
   the Caveman shell runner would eliminate one finding, but it is a feature removal,
   not a policy-neutral correction, and is not independently authorized.
-- **`internal/toolharness/harness.go:920`.** The exec is the intended capability. There
+- **`internal/toolharness/harness.go:926`.** The exec is the intended capability. There
   is no code fix that removes the finding without removing `run_command` or weakening
   the policy; the residual decision is §5.
 
 Accordingly, this change is **documentation only**; it makes no code, configuration,
 baseline, or enforcement change.
 
-## 5. Remaining residual-risk decision: `internal/toolharness/harness.go:920`
+## 5. Remaining residual-risk decision: `internal/toolharness/harness.go:926`
 
 This is the only blocking finding that is a **true model-controlled exec capability**
 rather than a trusted-config or test-only site. It is constrained by:
@@ -261,7 +271,7 @@ rather than a trusted-config or test-only site. It is constrained by:
   network and writes outside the root/temp, and Windows refuses `run_command`.
 - Tests pin the default-on policy and the platform refusal
   (`TestRunCommandIsolationIsOnByDefault`, `TestIsolationPolicyNotice`,
-  `TestRunCommandIsolationUnsupportedPlatforms`, and the Windows runtime test).
+  `TestIsolationDecisionUnsupportedPlatforms`, and the Windows runtime test).
 
 The residual returns if the operator sets `SOP_AGENT_RUN_COMMAND_ISOLATION=off` on
 macOS/Linux, or if a platform has no backend (Windows refuses by design).

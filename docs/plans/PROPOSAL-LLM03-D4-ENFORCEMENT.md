@@ -17,6 +17,16 @@ Reproduction: with the pinned Gitleaks 8.30.1 and OSV-Scanner 2.7.0 first on `PA
 Semgrep 1.183.0, and the pinned rules, run
 `sop security scan --report-only --run-id gap9-d4-baseline` on clean `origin/main`.
 Local evidence: `.agent-sdlc/runs/gap9-d4-baseline/security/scan.json` (not committed).
+
+> **Revision (2026-11-13, verified at `main` `986b9132`).** The residual moved from
+> `harness.go:920` to `:926` when M1 added the environment scrub above `execCaptured`, so
+> its fingerprint is now `semgrep:3076a05322acb6e35b02c87144da3b8a6dfbe8eac96a7679614c4d5402973771` (was `semgrep:2e3c98676c0b89b137c13339ae43b6a5928dae9e7ff2fcf893de77038f473847`, preserved here as historical
+> evidence). The other 73 Semgrep fingerprints are unchanged. The full-workspace
+> report-only baseline is now **106 findings, 40 suppressed, 66 unsuppressed, 50
+> blocking**: the residual's move did not change the count, and the five additional
+> Gitleaks fixture findings are the decision documents' own quoted placeholders, pending
+> disposition. Only the current fingerprint may be used for a new approval.
+
 Related records: [llm03-baseline-triage.md](../reports/owasp-llm/llm03-baseline-triage.md),
 [llm03-scanner-binary-pins.md](../reports/owasp-llm/llm03-scanner-binary-pins.md),
 [PROPOSAL-SCANNER-PIN-POLICY.md](PROPOSAL-SCANNER-PIN-POLICY.md).
@@ -60,7 +70,7 @@ harmless.
 | 10 | `internal/ragclient/exec.go:19` | `executable` with no args; request JSON on stdin | Operator-configured absolute executable | No | Process group; bounded stdin/stdout/stderr | Justified use; no shell; the executable is operator configuration. | Fingerprint baseline, expiry 2027-03-31. |
 | 11 | `internal/review/ocr.go:57` | `sh -c p.command`; request JSON on stdin | `SOP_REVIEW_COMMAND` environment | Yes | Process group; input on stdin; bounded output | Justified use; operator environment is trusted; no untrusted interpolation. | Fingerprint baseline, expiry 2027-03-31. |
 | 12 | `internal/testrunner/command.go:53` | `sh -c command` | Project validation commands (`build`/`test`/`lint`) | Yes | Command is trusted project configuration; process group; timeout; bounded output | Justified use; shell is required for common validation syntax; the command is never built from model output. | Fingerprint baseline, expiry 2027-03-31. |
-| 13 | `internal/toolharness/harness.go:920` | Direct argv from `SplitCommand`; no shell | **Model-controlled `run_command`**, constrained by command policy + sandbox | No | Shell metacharacters/globs rejected; `commandpolicy.Classify` must be `SAFE`; default-on Seatbelt/bubblewrap; Windows refuses; audit trail | **True exec capability with strong mitigations.** This is not a false positive. The residual returns if the operator disables isolation on macOS/Linux, or if a platform has no backend (Windows refuses by design). | **Do not blanket-baseline.** Either keep SAST report-only (Option A), or add one fingerprint entry with a short expiry (2027-03-31) whose reason cites the default-on isolation and command-policy tests; revalidate on any `commandpolicy`, isolation, or `run_command` change. |
+| 13 | `internal/toolharness/harness.go:926` | Direct argv from `SplitCommand`; no shell | **Model-controlled `run_command`**, constrained by command policy + sandbox | No | Shell metacharacters/globs rejected; `commandpolicy.Classify` must be `SAFE`; default-on Seatbelt/bubblewrap; Windows refuses; audit trail | **True exec capability with strong mitigations.** This is not a false positive. The residual returns if the operator disables isolation on macOS/Linux, or if a platform has no backend (Windows refuses by design). | **Do not blanket-baseline.** Either keep SAST report-only (Option A), or add one fingerprint entry with a short expiry (2027-03-31) whose reason cites the default-on isolation and command-policy tests; revalidate on any `commandpolicy`, isolation, or `run_command` change. |
 
 ### Fingerprints for the 13 production sites
 
@@ -78,7 +88,7 @@ harmless.
 | `internal/ragclient/exec.go:19` | `semgrep:f4506eb456705bd1fd134e7a2d1a79051205e570d70f62577be23702b2f8b71c` |
 | `internal/review/ocr.go:57` | `semgrep:fc8287f18275bcdb937f8d3e12dab172076126d3045cc73a997cf5f523780b88` |
 | `internal/testrunner/command.go:53` | `semgrep:0f959d4f3632e1c2244db5405f3f0309e58abbb00c08ab0d71b874d2c75ca344` |
-| `internal/toolharness/harness.go:920` | `semgrep:2e3c98676c0b89b137c13339ae43b6a5928dae9e7ff2fcf893de77038f473847` |
+| `internal/toolharness/harness.go:926` | `semgrep:3076a05322acb6e35b02c87144da3b8a6dfbe8eac96a7679614c4d5402973771` |
 
 ## 3. Proposed baseline entries
 
@@ -219,7 +229,7 @@ evidence favors C over B:
 1. Approve the 27 Gitleaks fixture entries and the 5 test-only Semgrep HIGH entries
    (expiry 2027-06-30).
 2. Review and approve the 13 production dispositions. Prefer fingerprint entries with
-   the reasons in §2; for `internal/toolharness/harness.go:920`, either keep SAST
+   the reasons in §2; for `internal/toolharness/harness.go:926`, either keep SAST
    report-only until the isolation/policy evidence is accepted, or add a short-expiry
    entry and explicitly accept the residual.
 3. Decide whether to also record the 16 MEDIUM test-only entries (not required for the
@@ -239,7 +249,7 @@ while creating the impression of a narrower gate.
   production dispositions in §2. No entry is added by this proposal.
 - **Expiry:** approve 2027-06-30 for fixtures/test-only and 2027-03-31 for production
   exec sites, or set a shorter period.
-- **`run_command` residual:** for `internal/toolharness/harness.go:920`, explicitly
+- **`run_command` residual:** for `internal/toolharness/harness.go:926`, explicitly
   accept the bounded residual (default-on sandbox + command policy; the override on
   macOS/Linux and the Windows refusal are the boundaries).
 - **Enforcement change:** approve `security.mode: required` and the exact

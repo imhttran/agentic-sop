@@ -204,6 +204,74 @@ func (b Baseline) UnmatchedDiagnostics(findings []Finding, now time.Time) []stri
 		len(labels), noun, strings.Join(listed, ", "), suffix)}
 }
 
+// workspaceScopeMode is the only scope in which a scan sees the whole
+// repository, so it is the only scope in which "no finding matched this entry"
+// means the entry is really inert.
+const workspaceScopeMode = "workspace"
+
+// BaselineDriftDiagnostics returns the unmatched-entry diagnostic for a scan that
+// observed the whole baseline. It is the entry point callers should use: the
+// suppression method alone cannot tell a drifted entry from an entry the scan
+// never looked for.
+//
+// The observation is complete only when the scope is the full workspace and every
+// adapter the baseline holds entries for completed with complete coverage. A
+// changed-files scan omits unchanged files by design, and a partial, failed,
+// disabled, or no-op adapter leaves its entries unobserved, so a valid entry
+// would then look unmatched. The function returns nothing in those cases instead
+// of warning about entries it did not actually test.
+//
+// The result is advisory: it cannot suppress, block, or change a verdict.
+func BaselineDriftDiagnostics(b Baseline, scan Scan, now time.Time) []string {
+	if !baselineFullyObserved(b, scan) {
+		return nil
+	}
+	return b.UnmatchedDiagnostics(scan.Findings, now)
+}
+
+// baselineFullyObserved reports whether this scan covered every adapter that owns
+// a reviewed entry across the whole workspace.
+func baselineFullyObserved(b Baseline, scan Scan) bool {
+	if strings.TrimSpace(scan.Scope.Mode) != workspaceScopeMode {
+		return false
+	}
+	required := baselineAdapters(b)
+	if len(required) == 0 {
+		return true // no reviewed entry can drift
+	}
+	observed := make(map[string]bool, len(required))
+	for _, exec := range scan.Adapters {
+		if observed[exec.AdapterID] {
+			continue
+		}
+		if !exec.Disabled && exec.Status == StatusCompleted &&
+			exec.Coverage == CoverageComplete && !exec.NoApplicableContent {
+			observed[exec.AdapterID] = true
+		}
+	}
+	for adapter := range required {
+		if !observed[adapter] {
+			return false
+		}
+	}
+	return true
+}
+
+// baselineAdapters is the set of adapter IDs the baseline holds entries for. A
+// finding fingerprint is namespaced with its adapter ID by StableFingerprint, so
+// the prefix is the same identifier the scan reports in Execution.AdapterID.
+func baselineAdapters(b Baseline) map[string]bool {
+	out := make(map[string]bool, len(b.Entries))
+	for _, entry := range b.Entries {
+		adapter, _, ok := strings.Cut(strings.TrimSpace(entry.Fingerprint), ":")
+		if !ok || adapter == "" {
+			continue
+		}
+		out[adapter] = true
+	}
+	return out
+}
+
 // Identity returns a deterministic policy identity that includes the baseline
 // content, so changing a suppression invalidates resumed evidence.
 func (b Baseline) Identity() string {
