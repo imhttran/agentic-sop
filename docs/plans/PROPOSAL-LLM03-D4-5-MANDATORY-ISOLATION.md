@@ -5,8 +5,16 @@ accepted**, `security.mode` stays `report-only`, the baseline stays at 84 entrie
 suppression is added. This packet supplies the evidence and the exact authorization a D4-5
 change needs.
 
-**Verified at:** `origin/main` `f7e06355` (2026-11-13), darwin arm64, Go 1.27.1, pinned
-Gitleaks 8.30.1, Semgrep 1.183.0, OSV-Scanner 2.7.0.
+> **Correction (2026-11-13, after PR #484 merged).** The first version recommended G2
+> (execution-safe git invocations). That is **incomplete**: `git status` and `git diff` run a
+> configured **clean filter**, and no git flag disables filters. The #484 review raised this as
+> a P1 and it was reproduced here on Git 2.50.1. The recommendation is now **M1 + G3**
+> (sandbox every model-reachable git subprocess), with G4 as defense in depth. §3.4, §4–§9 and
+> §11 are corrected; the original reasoning is kept so the change is auditable.
+
+**Verified at:** `origin/main` `0344c7cf` (2026-11-13; the first analysis ran against
+`f7e06355`), darwin arm64, Go 1.27.1, Git 2.50.1, pinned Gitleaks 8.30.1, Semgrep 1.183.0,
+OSV-Scanner 2.7.0.
 
 **Current scan:** 101 findings, 84 suppressed, 17 unsuppressed, **1 blocking** — the
 `run_command` residual at `internal/toolharness/harness.go:926`
@@ -104,6 +112,22 @@ the override was present afterwards). The sandbox permits writes anywhere under 
 except `.agent-sdlc`, so a tool-level write deny (G4) cannot be the only control: the
 execution surface must be neutralised or contained.
 
+### 3.4 Clean filters execute from `status` and `diff` (measured)
+
+A repository can define `filter.<driver>.clean` and select it with a `filter=` attribute.
+Git runs the clean command whenever it reads a working-tree file to compare it, so both
+`git status` and `git diff` execute it, with SOP's environment, unsandboxed.
+
+Measured on Git 2.50.1 with a probe script that appends to a marker:
+
+| Command | Unhardened | With `--no-ext-diff --no-textconv -c core.fsmonitor=false` |
+| --- | --- | --- |
+| `git status --porcelain` | filter executed | **filter still executed** |
+| `git diff` | filter executed | **filter still executed** |
+
+Git exposes no global switch to disable filter drivers: the driver name is repository-chosen,
+so `-c filter.<name>.clean=` cannot be applied in advance. This is why G2 is not a boundary.
+
 ## 4. Options compared
 
 | Option | Mechanism | Closes model-controlled unsandboxed execution? | Compatibility | Verdict |
@@ -114,132 +138,166 @@ execution surface must be neutralised or contained.
 | **R1** | accept the residual with an expiry | **No** | None | Rejected: leaves a default-path bypass |
 | **R2** | keep report-only | No | None | Not a mitigation; remains the fallback |
 
-M1 alone is **not sufficient** because of §3.2. The git surface needs one of:
+M1 alone is **not sufficient** because of §3.2 and §3.4. The git surface needs containment:
+
+| Vector | Unhardened | With the G2 flags |
+| --- | --- | --- |
+| external diff driver (`diff.external`) | executes | **blocked** |
+| diff driver command (`diff.<driver>.command`) | executes | **blocked** |
+| textconv (`diff.<driver>.textconv`) | executes | **blocked** |
+| `GIT_EXTERNAL_DIFF` in the inherited environment | executes | **blocked** |
+| fsmonitor (`core.fsmonitor`) on `status` | executes | **blocked** |
+| **clean filter (`filter.<driver>.clean`)** | executes | **NOT blocked** |
+| smudge filter (`filter.<driver>.smudge`) | not invoked by `status`/`diff` | not invoked |
+| pager (`core.pager`, `GIT_PAGER`) | not invoked for captured (non-tty) output | not invoked |
+| commit hooks on `status`/`diff` | not invoked | not invoked |
+| alias replacing a builtin | not applied | not applied |
 
 | Option | Mechanism | Completeness | Compatibility |
 | --- | --- | --- | --- |
-| **G2** | run every harness git invocation with execution vectors disabled (`--no-ext-diff`, `--no-textconv`, `-c core.fsmonitor=false`) | Covers external diff, textconv, and fsmonitor: the program-execution vectors reachable from `status`/`diff` | No backend needed; works on Windows and bwrap-less hosts |
-| **G3** | run the git tools and internal git calls inside the sandbox | Strongest: containment rather than enumeration | Git tools fail closed wherever no backend exists — a real regression on Windows, which has working git tools today |
-| **G4** | deny model writes under `.git` | Removes the injection source | Not sufficient alone: an operator-shipped config still executes, and sandboxed model code can write `.git/config` (measured) |
+| **G2** | disable known execution mechanisms per invocation | **Incomplete**: clean filters remain, and the list is version-dependent | No backend needed |
+| **G3** | run every model-reachable git subprocess inside the sandbox | **Complete by containment**: filters, drivers, and future mechanisms all run contained, with the scrubbed sandbox environment | Git tools fail closed wherever no backend exists |
+| **G4** | deny model writes under `.git` | Removes the injection source from the file tools | Not sufficient alone: model code can write `.git/config` inside the sandbox (measured) |
 
-**Recommendation: M1 + G2, with G4 as defense in depth.** M1 closes the override path; G2
-closes the repository-configuration path without a backend dependency; G4 stops the model
-polluting git metadata, which also protects the operator's later git use.
+**Recommendation: M1 + G3, with G4 as defense in depth.** M1 closes the `run_command` override
+path; G3 closes the git path by containing whatever git executes; G4 keeps the model from
+polluting git metadata through the file tools.
 
-G3 is the stronger boundary and the right choice if the operator accepts git tools failing
-closed without a sandbox. It is not the default recommendation because it degrades Windows for
-no gain over G2 on the vectors actually reachable.
+G2's flags can ride along inside the sandbox as defense in depth, but they are not the boundary:
+the #484 review and the §3.4 measurement show a clean filter executes through them on both
+Git 2.43.0 and 2.50.1. A boundary that depends on enumerating another project's execution
+vectors will be invalidated by a future release.
+
+The cost of G3 is explicit: `git_status` and `git_diff` fail closed where no sandbox backend
+exists (Windows, and Linux hosts where `bwrap` cannot start). That is the trade for a boundary
+that does not depend on git's flag semantics.
 
 ## 5. Recommended architecture
 
 ```
 model tool call
 ├── run_command ──► … ──► isolate() ──► execCaptured     (always; refuse without backend)
-└── git_status / git_diff
-        └──► git -c core.fsmonitor=false … --no-ext-diff --no-textconv
-                        └──► execCaptured              (no program execution possible)
+└── git_status / git_diff ──► isolate() ──► execCaptured  (always; refuse without backend)
 
-SOP-initiated git ──► same hardened argv
+SOP-initiated git (fingerprints) ──► isolate()           (same decision)
 operator-configured execution ──► unchanged, outside the tool loop
 ```
 
-One policy, not two: the existing `isolationDecision`/`sandboxArgv` machinery stays the only
-sandbox decision and returns "sandbox" for every model-controlled command. G2 is argument
-hardening in one helper, not a second classification engine.
+One policy, not two: `isolationDecision`/`sandboxArgv` stays the only sandbox decision and
+returns "sandbox" for every model-reachable command. There is no second classifier, no flag
+allowlist, and no per-vector maintenance.
+
+The sandbox already provides the second half of the mitigation: an isolated child gets
+`sandboxEnv`, which drops credential-named and credential-shaped variables. G3 therefore
+removes both the code-execution boundary failure and the environment exposure that made the
+exploit serious.
 
 ## 6. Implementation scope
 
 | File | Change |
 | --- | --- |
 | `internal/toolharness/isolation.go` | Make the sandbox mandatory: `isolationRequested` returns true (or `isolationDecision` loses the override parameter). Delete `IsolationEnv`, `UnsandboxedAckEnv`, `isOffValue`, `isAcknowledged`, `isolationOverrideOff`, `IsolationPolicyNotice`, and the `controlEnvNames` entries they fed. Keep `Config.IsolateCommands` as a deprecated always-on no-op, or remove it with its tests. |
-| `internal/cli/run.go`, `internal/cli/prompt.go` | Remove the notice call sites. |
-| `internal/toolharness/harness.go` | Add one `gitArgv(args ...string)` helper that prefixes `-c core.fsmonitor=false -c core.pager=cat` and adds `--no-ext-diff --no-textconv` for `diff`; use it in `git`, `execFingerprintCmd`, and `WorkingTreeChanged`. |
+| `internal/toolharness/harness.go` | Route every model-reachable exec through `isolate()`: `runCommandWithStatus` (already), plus `git`, `execFingerprintCmd`, and `WorkingTreeChanged`. The simplest shape is one `execIsolated(ctx, dir, argv)` helper that isolates, runs, and cleans up, used by all four sites. Remove the per-vector hardening helper if G3 lands. |
 | `internal/toolharness/files.go` | Deny write tools under `.git/` (G4), mirroring the state-directory rule; the message should say git metadata is read-only to the model. |
+| `internal/cli/run.go`, `internal/cli/prompt.go` | Remove the notice call sites. |
 | Docs | `PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md`, `PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md` (OVR row), the D4-5 packet, and the decision record. |
 
 Smallest viable variant: keep the constants and the notice, make `isolationRequested` return
 true, and have the notice say the override no longer applies. That is a one-line policy change
-plus G2, at the cost of dead configuration.
+plus the isolated-exec routing, at the cost of dead configuration.
 
 ## 7. Compatibility and operational impact
 
 | Area | Impact |
 | --- | --- |
-| macOS Seatbelt | `run_command` unchanged. Sandboxed `git status`/`git diff` were measured working (index writes stay inside the root); G2 does not need the sandbox. |
-| Linux bubblewrap | Unchanged where `bwrap` works. Where it cannot start (Ubuntu 24.04 AppArmor default), `run_command` now always fails closed; previously an operator could opt out. That is the intended trade. |
-| Windows | `run_command` already refused; unchanged. **Git tools keep working** under G2, which is why G2 is preferred over G3. |
+| macOS Seatbelt | Sandboxed `git status` and `git diff` were measured working here (index writes stay inside the root). |
+| Linux bubblewrap | Feasibility checked in a Debian bookworm container (Git 2.39.5): the production-style argument set runs `git status` and `git diff` successfully. Requires unprivileged user namespaces on the host; where `bwrap` cannot start (Ubuntu 24.04 AppArmor default), git tools and `run_command` fail closed. Host containment (filter and environment) not measured. |
+| **Windows** | No backend exists, so `git_status`/`git_diff` are now **refused** (they work today). This is the main compatibility regression and the reason G2 was attractive. It is unavoidable if the boundary is containment. |
 | Local LLM / Ollama | Unaffected: providers, not executors. |
-| Build/test commands | `go test`/`go build` keep running model-authored code **inside** the sandbox; the throwaway `GOCACHE` and scrubbed environment are unchanged. |
+| Build/test commands | `go test`/`go build` keep running model-authored code inside the sandbox; throwaway `GOCACHE` and scrubbed environment unchanged. |
 | Tool approval | `commandpolicy` is untouched, so `SAFE`/`REQUIRES_APPROVAL`/`DENIED` semantics are unchanged. |
-| Operator override semantics | The override stops applying to `run_command`; operators who relied on it need a host where the backend works. |
+| Operator override semantics | The override stops applying to model-controlled execution; operators who relied on it need a host where the backend works. |
 | CI and quality stage | CI does not run SOP's agent tools, so no CI change. The quality stage is unaffected. |
-| Configuration | No new config key. Removing the override deprecates two environment variables, not configuration. |
-| Git tooling | `diff.external`/textconv/fsmonitor stop influencing SOP's git output. Operators see plain diffs in tool results; their own shell is unaffected. |
+| Configuration | No new config key. Removing the override deprecates two environment variables. |
+| Git tooling | `diff.external`, textconv, fsmonitor, and filters no longer influence SOP's git output because they cannot run. Operators see plain diffs in tool results; their own shell is unaffected. |
+| Performance | One sandbox exec per git call: two tools plus two to three fingerprint calls per turn. Measured git calls complete in the low milliseconds on this host. |
 
 ## 8. Verification design
 
 | Test | Asserts |
 | --- | --- |
 | `TestModelCommandSandboxedDespiteOverrides` | with both variables set and `Config.IsolateCommands` false, `run_command` still audits `isolate=`; fails on the current code |
-| `TestModelCommandRefusedWithoutBackend` | no backend refuses even with both variables (extend the existing decision table) |
-| `TestSafeBuildAndTestCannotBypassIsolation` | `go test`, `go build`, and `go vet` runs carry `isolate=` |
-| `TestGitToolsIgnoreRepositoryExternalCommands` | a `.git/config` with `diff.external` does not execute; `git_diff` returns a normal diff |
-| `TestGitStatusIgnoresRepositoryFsmonitor` | `core.fsmonitor` does not execute |
-| `TestGitMetadataIsReadOnlyToModelTools` | `write_file`/`create_file` under `.git/` are refused; git metadata stays readable |
+| `TestModelCommandRefusedWithoutBackend` | no backend refuses even with both variables |
+| `TestSafeBuildAndTestCannotBypassIsolation` | `go test`, `go build`, `go vet` runs carry `isolate=` |
+| `TestGitToolsAreSandboxed` | `git_status` and `git_diff` audits carry `isolate=`; fails on the current code |
+| `TestGitToolsRefusedWithoutBackend` | no backend refuses both git tools |
+| `TestGitStatusIgnoresRepositoryFsmonitor` | `core.fsmonitor` cannot reach the host (runs contained or not at all) |
+| `TestGitDiffIgnoresExternalDiff` | `diff.external` and `GIT_EXTERNAL_DIFF` cannot reach the host |
+| `TestGitDiffIgnoresTextconv` | `diff.<driver>.textconv` cannot reach the host |
+| **`TestGitToolsIgnoreCleanFilters`** | a `filter.<driver>.clean` cannot reach the host on `status` or `diff`; the P1 regression |
+| `TestSandboxedGitFilterCannotReadCredentialsOrEnv` | a filter that does run sees no credential-named environment variable and cannot read `$HOME/.ssh` (measured: `env=` empty, `ssh=DENIED`) |
+| `TestGitMetadataIsReadOnlyToModelTools` | `write_file`/`create_file` under `.git/` are refused (G4) |
 | `TestCredentialScrubbingRemainsActive` | the existing scrub tests stay green under mandatory isolation |
-| `TestNestedSOPDoesNotInheritOverrides` | the child environment carries neither variable (today's behavior, kept) |
 | `TestCommandPolicyClassesUnchanged` | the existing classifier table is unchanged |
 | `TestOperatorConfiguredExecutionStillRuns` | `internal/testrunner` and the scanner adapters still execute operator commands unsandboxed, as designed |
 
-Acceptance criteria: every model-reachable exec is either sandboxed or provably free of
-command execution; the new git tests fail on `f7e06355`; `test-fast` and the scanner
-integration job stay green; the scan keeps 1 blocking finding because remediation does not
-remove the `exec.CommandContext` call.
+Positive controls: each git test must fail on `0344c7cf` (the merged proposal's base) — the
+canary must reach the host without the change. Containment tests assert the canary does **not**
+reach the host, not merely that git exits non-zero.
 
-**The Semgrep finding does not disappear.** Mandatory isolation mitigates behavior, not the
-call site. The finding must remain visible and must not be suppressed to make a scan pass.
+Acceptance criteria: every model-reachable exec is sandboxed; the git tests fail on the
+current code; `test-fast` and the scanner integration job stay green; the scan keeps 1 blocking
+finding because remediation does not remove the `exec.CommandContext` call.
 
-## 9. Remaining exposure after M1 + G2 + G4
+**The Semgrep finding does not disappear.** Containment mitigates behavior, not the call site.
+It must remain visible and must not be suppressed to make a scan pass.
+
+## 9. Remaining exposure after M1 + G3 + G4
 
 - The sandbox still does not prevent every disclosure: pre-existing hardlink aliases (R2), the
   macOS `kern.procargs2` parent-environment read (R4), host-to-sandbox Unix sockets (H2S), and
   credentials outside the deny list.
-- Model-authored code still runs sandboxed with repository read access and a writable root.
+- Model-authored code, including repository-configured git programs, still runs, but inside the
+  sandbox with a scrubbed environment.
 - Operator-configured executors (validation commands, scanners) remain unsandboxed by design.
-- An operator-supplied `diff.external` is neutralized for SOP's git calls by G2 but still runs
-  in the operator's shell.
-- Git itself runs unsandboxed for the git tools under G2; its execution surface is restricted
-  by flags, not containment. That is the residual if G2 misses a vector.
-- Model code can still write `.git/config` (measured) unless the sandbox itself denies it; G2
-  makes such config inert for SOP's git calls, but the operator's own later git use would see
-  it. G4 only covers the file tools.
+- G4 only covers the file tools; sandboxed model code can still write `.git/config` (measured).
+  Under G3 that config is inert for host-level execution but visible to the operator's later
+  git use.
+- G3 depends on backend availability: on Windows and on Linux hosts without working user
+  namespaces, git tools and `run_command` are unavailable.
+- Platform coverage: macOS measured for the bypass, the G2 gaps, and G3 containment; Linux
+  bubblewrap git feasibility checked in a container but containment not measured; Windows
+  untested (no backend exists, so the behaviour is refusal by construction).
 
 ## 10. Relationship to D4-5 and Option C
 
 - Today (`D4-1 = A`, report-only) nothing changes in the scan; the residual is unaccepted and
   D4-5 remains open.
-- After M1 + G2 the D4-5 question changes shape: the *unsandboxed* path is closed, so R1
+- After M1 + G3 the D4-5 question changes shape: the *unsandboxed* path is closed, so R1
   ("accept the residual") becomes moot. What remains is a **sandboxed capability**, and the
   Semgrep finding is a true positive about a call site whose risk is controlled structurally.
 - For Option C a Group D fingerprint entry would still be needed for the gate to pass, but its
-  justification becomes "mandatory isolation + hardened git", not "accepted residual". That is
+  justification becomes "mandatory isolation + sandboxed git", not "accepted residual". That is
   a new authorization and is not implied by this packet.
 
 ## 11. Authorization required
 
-> I authorize M1 + G2 + G4 as specified in
-> `docs/plans/PROPOSAL-LLM03-D4-5-MANDATORY-ISOLATION.md`: `run_command` always executes inside
-> a supported sandbox on macOS and Linux and is refused when no backend exists; the
+> I authorize M1 + G3 + G4 as specified in
+> `docs/plans/PROPOSAL-LLM03-D4-5-MANDATORY-ISOLATION.md`: every model-reachable execution —
+> `run_command`, `git_status`, `git_diff`, and the per-turn git fingerprint calls — executes
+> inside a supported sandbox on macOS and Linux and is refused when no backend exists; the
 > `SOP_AGENT_RUN_COMMAND_ISOLATION` override and `SOP_AGENT_RUN_COMMAND_UNSANDBOXED_ACK`
-> acknowledgement no longer disable it, and their notice and constants may be removed; every
-> harness git invocation disables external diff, textconv, fsmonitor, and pager execution; and
-> model write tools may not modify paths under `.git`. This supersedes the R4 A+B override
+> acknowledgement no longer disable it, and their notice and constants may be removed; model
+> write tools may not modify paths under `.git`. This supersedes the R4 A+B override
 > authorization. It does not accept the D4-5 residual, does not add a baseline entry, does not
 > enable Option C, and does not change `security.mode` or `required_categories`.
 
-If the operator prefers containment over enumeration for git, authorize **G3** instead of G2
-and accept that `git_status`/`git_diff` fail closed wherever no sandbox backend exists,
-including Windows.
+This accepts the compatibility trade stated in §7: `git_status` and `git_diff` become
+unavailable on Windows and on hosts without a working sandbox backend.
+
+If the operator is unwilling to accept that trade, the alternative is **not** G2 — the §3.4
+measurement shows it is not a boundary. The remaining options are R2 (stay report-only with the
+bypass present) or removing the git tools on unsupported platforms.
 
 ## What this packet does not do
 
