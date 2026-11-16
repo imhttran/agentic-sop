@@ -1,9 +1,11 @@
 # Git output integrity — repository-configured helpers and manipulated output
 
-**Status:** `IMPLEMENTED` / `VERIFIED`; **merged at `2f544a62`** via PR #491
-(2026-11-16, full CI green: 13 of 13 checks). The clean/smudge-filter residual is
-`OPEN` and is **not** accepted. The wider containment proposal (M1 + G3 + G4) is
-**not approved** and not implemented.
+**Status:** `IMPLEMENTED` / `VERIFIED`. The W1 hardening is **merged at
+`2f544a62`** via PR #491, with the filter-detection accuracy fix merged at
+`6c9500e4` via PR #494. **Decision 2 (Option C, the verified git-lfs filter
+policy) is approved and implemented** — see the Option C section. The wider
+containment proposal (M1 + G3 + G4) is **approved but blocked on CI backend
+availability** and is not implemented; see the decision packet.
 
 **Revision:** `origin/main` at `c55b42ff` (2026-11-16), darwin arm64, Go 1.27.1,
 Git 2.50.1 (Apple Git-155).
@@ -92,11 +94,10 @@ Applied at `git`, `WorkingTreeChanged`, and `execFingerprintCmd`.
 ### Residuals that remain open
 
 1. **A clean filter runs on `status` and `diff`.** It can transform the reported
-   content, and a hostile filter can under-report changes. That would make a
-   working-tree fingerprint blind to a modification. The fingerprint is not
-   changed by this work: making it fail closed whenever a filter is configured
-   would disable mutation detection on every `git-lfs` repository, which is a
-   behaviour change to an approved control and needs an operator decision.
+   content, and a hostile filter can under-report changes. This is addressed for
+   every configuration SOP cannot verify by the Option C policy below; a _verified_
+   git-lfs filter is accepted, so its transformation is expected but still named in
+   the tool result.
 2. **`git diff`/`git status` output is still repository-shaped**, not raw file
    bytes. Only the label tells the model so.
 3. Detection is bounded (100 paths per probe, only the paths git already
@@ -108,6 +109,42 @@ Applied at `git`, `WorkingTreeChanged`, and `execFingerprintCmd`.
 4. The OS sandbox residuals recorded elsewhere (pre-existing hardlink aliases,
    the macOS `kern.procargs2` parent-environment read, host-to-sandbox Unix
    sockets) are unchanged.
+
+## Option C — verified git-lfs filter policy (W7, approved 2026-11-16)
+
+Approved as Decision 2 of [DECISION-PACKET-OWASP-LLM-W6-W8.md](../../plans/DECISION-PACKET-OWASP-LLM-W6-W8.md).
+Implemented in `internal/toolharness/git_filter_policy.go`.
+
+**Trust rule.** A configured filter driver is trusted only when all three hold:
+the driver is named `lfs`, its effective command is exactly the string
+`git lfs install` writes (`git-lfs filter-process`, or `git-lfs clean -- %f` /
+`git-lfs smudge -- %f`), and a `git-lfs` binary resolves **outside** the
+repository. A repository therefore cannot pass by naming a driver `lfs`, by
+shipping its own `git-lfs`, or by pointing the driver at an arbitrary program.
+
+**Fail-closed behaviour.** Any other configured driver makes git output untrusted:
+
+| Surface                   | Verified git-lfs                     | Unverified driver                                    |
+| ------------------------- | ------------------------------------ | ---------------------------------------------------- |
+| `git_status` / `git_diff` | named as the expected transformation | labelled "output integrity could not be established" |
+| `WorkingTreeFingerprint`  | normal                               | `errGitOutputUntrusted`                              |
+| `ChangedSince`            | normal comparison                    | `true` — never claims "nothing changed"              |
+| `WorkingTreeChanged`      | normal                               | `true`                                               |
+
+**Why the decision is repository-wide, not path-accurate.** A filter can hide a
+change, so `git status` may report nothing at all. Deciding from the paths git
+reported would miss exactly the case that matters. The _label_ stays path-accurate
+(attribute-selected and configured) so it describes what actually ran; the _trust_
+decision uses the configured driver set. Both are needed.
+
+**Bounded cost.** A repository that configures an executable driver it never
+selects still loses mutation detection (it reports "changed"). This is the
+approved trade: the conservative direction, with the label explaining why. A
+custom non-git-lfs filter can be supported later by an explicit allowlist decision.
+
+**Residual, not closed.** A verified git-lfs filter still executes and still
+transforms content. Verification establishes _which_ program runs and that it is
+the expected one, not that its output is benign.
 
 ## 5. Verification
 
@@ -130,6 +167,13 @@ would pass on a broken canary and is not used.
 | `TestGitOutputUnlabelledWithoutFilters`                         | negative control: no notice on an ordinary repository                                                   |
 | `TestGitOutputUnlabelledWhenAttributeNamesAnUnconfiguredDriver` | an attribute naming a driver nothing implements is not labelled (fails on the attribute-only behaviour) |
 | `TestConfiguredFilterNames`                                     | the configuration probe counts `clean`/`smudge`/`process`, not `required`                               |
+| `TestVerifiedGitLFSFilterIsAccepted`                            | a standard git-lfs config (global) is verified; fingerprints still work; the label names it             |
+| `TestGlobalGitLFSConfigLeavesUnrelatedRepositoriesTrusted`      | global git-lfs config alone does not label or fail closed an unrelated repository                       |
+| `TestUnverifiedFilterFailsClosed`                               | an unverified driver makes fingerprints untrusted and change checks report changed                      |
+| `TestUnverifiedFilterIsLabelledWithoutAttributeSelection`       | untrusted output is labelled even when no path selects the driver                                       |
+| `TestRepoLocalGitLFSBinaryIsNotVerified`                        | a repository-shipped `git-lfs` is not accepted                                                          |
+| `TestNonStandardLFSCommandIsNotVerified`                        | a driver named `lfs` with a non-git-lfs command is not accepted                                         |
+| `TestIsStandardGitLFSCommand`                                   | the exact-command allowlist, including `; rm -rf /` and `&& curl` injections                            |
 | `TestFingerprintStillObservableWithHardening`                   | fingerprints still detect a real change                                                                 |
 
 Positive control for the change itself: with `hardenedGitArgs` reverted to a
@@ -142,7 +186,9 @@ Commands and results (this revision, darwin arm64):
 ```
 go build ./...                                                  # ok
 go vet ./internal/toolharness/                                  # ok
-go test ./internal/toolharness/ -count=1                        # ok  33.5s
+go test ./internal/toolharness/ -count=1                        # ok  37.6s
+go test ./internal/ollamaagent/ -count=1                         # ok  29.2s
+go test ./internal/cli/ -count=1                                 # ok  64.9s
 go test ./internal/ollamaagent/ -count=1                        # ok  25.5s
 go test ./internal/agent/ ./internal/commandpolicy/ ./internal/security/ -count=1   # ok
 ```
@@ -171,10 +217,10 @@ call site and no suppression.
 
 ## 6. Operator decisions this work surfaces
 
-| #   | Decision                                                                      | Why it cannot be settled here                                                                                                                                         |
-| --- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Approve M1 + G3 + G4 (sandbox every model-reachable exec; deny `.git` writes) | It changes the approved override and removes `git_status`/`git_diff` where no backend exists. Exact wording is in the proposal §11.                                   |
-| 2   | Decide the clean-filter fingerprint policy                                    | Making fingerprints fail closed on a configured filter would disable mutation detection on `git-lfs` repositories. That is a behaviour change to an approved control. |
+| #   | Decision                                                                      | State                                                                                                                                                                                                                                 |
+| --- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Approve M1 + G3 + G4 (sandbox every model-reachable exec; deny `.git` writes) | **Approved 2026-11-16**, but **blocked**: the CI runner image has no sandbox backend, so mandatory isolation would refuse every exec there. See [DECISION-PACKET-OWASP-LLM-W6-W8.md](../../plans/DECISION-PACKET-OWASP-LLM-W6-W8.md). |
+| 2   | Clean-filter fingerprint policy                                               | **Decided: Option C**, approved 2026-11-16 and implemented here.                                                                                                                                                                      |
 
-Until item 1 is approved, `git` remains unsandboxed and the Semgrep finding remains
-blocking. Until item 2 is decided, residual 1 above stays open and unaccepted.
+Until item 1 is unblocked, `git` remains unsandboxed and the Semgrep finding
+remains blocking.
