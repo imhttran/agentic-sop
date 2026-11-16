@@ -211,8 +211,8 @@ waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-ga
   hardened (`-c core.fsmonitor=false`, `--no-ext-diff --no-textconv` for `diff`) and
   its environment is stripped of git execution-injection variables, which was
   measured to block `diff.external`, `GIT_EXTERNAL_DIFF`, `core.fsmonitor`, and
-  textconv. A clean filter still executes and is now labelled, not trusted. Full CI
-  was not run for that change. See
+  textconv. A clean filter still executes and is now labelled, not trusted. That
+  change is PR #491 with full CI green (13 of 13 checks) and is **unmerged**. See
   [git-output-integrity.md](docs/reports/owasp-llm/git-output-integrity.md) and the
   [acceptance report](docs/reports/owasp-llm/acceptance-report-2026-11-16.md).
 - Every `exec.CommandContext` subprocess path binds process-group termination,

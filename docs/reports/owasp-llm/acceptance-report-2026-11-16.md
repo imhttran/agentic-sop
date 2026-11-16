@@ -18,23 +18,29 @@ against any risk. Coverage classifications are:
 
 ## Summary
 
-| OWASP 2025 | Repo plan | Classification | Change in this pass | Open decision |
-| --- | --- | --- | --- | --- |
-| LLM01 Prompt Injection | Plan 02 | `VERIFIED` (bounded) | none | none |
-| LLM02 Sensitive Information Disclosure | Plan 03 | `PARTIAL` | none (reviewed) | C1 enablement, residuals |
-| LLM03 Supply Chain | Plan 04 | `PARTIAL` + `BLOCKED` | scanners re-run; git output integrity implemented | M1+G3+G4; baseline/enforcement |
-| LLM04 Data and Model Poisoning | Plan 05 | `PARTIAL` | #488/#489 verified; index guard verified | none |
-| LLM05 Improper Output Handling | Plan 10 | `VERIFIED` (SOP sinks) | none | none |
-| LLM06 Excessive Agency | Plan 01 | `PARTIAL` + `BLOCKED` | git invocation hardening | M1+G3+G4 |
-| LLM07 System Prompt Leakage | Plan 08 | `PARTIAL` (by design) | none | none |
-| LLM08 Vector and Embedding Weaknesses | Plan 09 | `VERIFIED` (shipped path) | none | none |
-| LLM09 Misinformation | Plan 07 | `PARTIAL` (by scope) | git output labelled | clean-filter fingerprint policy |
-| LLM10 Unbounded Consumption | Plan 06 | `VERIFIED` (bounded) | none | none |
+| OWASP 2025                             | Repo plan | Classification            | Change in this pass                               | Open decision                   |
+| -------------------------------------- | --------- | ------------------------- | ------------------------------------------------- | ------------------------------- |
+| LLM01 Prompt Injection                 | Plan 02   | `VERIFIED` (bounded)      | none                                              | none                            |
+| LLM02 Sensitive Information Disclosure | Plan 03   | `PARTIAL`                 | none (reviewed)                                   | C1 enablement, residuals        |
+| LLM03 Supply Chain                     | Plan 04   | `PARTIAL` + `BLOCKED`     | scanners re-run; git output integrity implemented | M1+G3+G4; baseline/enforcement  |
+| LLM04 Data and Model Poisoning         | Plan 05   | `PARTIAL`                 | #488/#489 verified; index guard verified          | none                            |
+| LLM05 Improper Output Handling         | Plan 10   | `VERIFIED` (SOP sinks)    | none                                              | none                            |
+| LLM06 Excessive Agency                 | Plan 01   | `PARTIAL` + `BLOCKED`     | git invocation hardening                          | M1+G3+G4                        |
+| LLM07 System Prompt Leakage            | Plan 08   | `PARTIAL` (by design)     | none                                              | none                            |
+| LLM08 Vector and Embedding Weaknesses  | Plan 09   | `VERIFIED` (shipped path) | none                                              | none                            |
+| LLM09 Misinformation                   | Plan 07   | `PARTIAL` (by scope)      | git output labelled                               | clean-filter fingerprint policy |
+| LLM10 Unbounded Consumption            | Plan 06   | `VERIFIED` (bounded)      | none                                              | none                            |
 
 ## Verification performed in this pass
 
 All commands run from a worktree at `origin/main` `c55b42ff` on darwin arm64.
-Only focused packages were run; the full CI suite was **`NOT_RUN`** here.
+Focused packages were run locally, and **full CI passed on the pull-request head**
+(`f0d8d399`, 13 of 13 checks: build/test, race detector, real
+Semgrep+Gitleaks+OSV integration, installer packaging, Windows, tagged
+acceptance, CodeQL; runs
+[43924409662](https://github.com/imhttran/agentic-sop/actions/runs/43924409662),
+[43924403486](https://github.com/imhttran/agentic-sop/actions/runs/43924403486)).
+The change is **unmerged**.
 
 ```
 go build ./...                                                             # ok
@@ -156,10 +162,11 @@ findings 101, suppressed 84, unsuppressed 17, blocking 1
   fail-closed refusal where no backend exists (Windows); the override requires
   `SOP_AGENT_RUN_COMMAND_UNSANDBOXED_ACK`; control variables are dropped from
   model-controlled child environments; a per-run throwaway build cache.
-- **Implemented in this pass (local, unmerged):** every SOP-run git command now
-  carries `-c core.fsmonitor=false` and, for `diff`, `--no-ext-diff
-  --no-textconv`, and inherits a filtered environment. Measured: this blocks
-  `diff.external`, `GIT_EXTERNAL_DIFF`, `core.fsmonitor`, and textconv.
+- **Implemented in this pass (PR #491, unmerged):** every SOP-run git command now
+  carries `-c core.fsmonitor=false` and, for `diff`,
+  `--no-ext-diff --no-textconv`, and inherits a filtered environment. Measured:
+  this blocks `diff.external`, `GIT_EXTERNAL_DIFF`, `core.fsmonitor`, and
+  textconv.
 - **Remaining gaps:** `run_command` is the only sandboxed path. Validation
   commands, scanners, and the `git`/`gh` sinks stay unsandboxed; a clean filter
   still executes and can transform git output; pre-existing hardlink aliases, the
@@ -224,12 +231,12 @@ findings 101, suppressed 84, unsuppressed 17, blocking 1
 
 ## Implemented in this pass
 
-| Change | Files | Status |
-| --- | --- | --- |
-| Git invocation hardening + clean-filter labelling | `internal/toolharness/git_integrity.go`, `harness.go`, `git_integrity_test.go` | local, tested, **unmerged** |
-| Evidence: git output integrity | `docs/reports/owasp-llm/git-output-integrity.md` | local, **unmerged** |
-| This acceptance report | `docs/reports/owasp-llm/acceptance-report-2026-11-16.md` | local, **unmerged** |
-| Plan of record | `docs/plans/PLAN-OWASP-LLM-E2E-REMEDIATION.md` | local, **unmerged** |
+| Change                                            | Files                                                                          | Status                                |
+| ------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------- |
+| Git invocation hardening + clean-filter labelling | `internal/toolharness/git_integrity.go`, `harness.go`, `git_integrity_test.go` | PR #491; CI 13/13 green; **unmerged** |
+| Evidence: git output integrity                    | `docs/reports/owasp-llm/git-output-integrity.md`                               | PR #491; **unmerged**                 |
+| This acceptance report                            | `docs/reports/owasp-llm/acceptance-report-2026-11-16.md`                       | PR #492 (chained); **unmerged**       |
+| Plan of record                                    | `docs/plans/PLAN-OWASP-LLM-E2E-REMEDIATION.md`                                 | PR #492 (chained); **unmerged**       |
 
 ## Decisions requiring operator approval
 
@@ -248,12 +255,15 @@ findings 101, suppressed 84, unsuppressed 17, blocking 1
 
 ## Honest limitations of this report
 
-- No PR was opened, no branch was pushed, and nothing was merged. Every change
-  here is a local worktree edit.
-- Full CI was not run. Only the focused packages listed above were executed.
+- Nothing is merged. The git hardening is PR #491 (CI green) and this
+  reconciliation is PR #492, chained on #491. Both await review and a merge
+  decision.
+- Full CI was not run locally; it passed on the PR head for #491. The docs PR
+  itself is documentation-only.
 - Live-provider campaigns were not re-run; the campaign evidence cited is the
   recorded historical evidence, not a fresh observation.
 - The git-helper measurements were taken on Git 2.50.1 on darwin arm64 only.
-  Linux and Windows were not measured for this change.
+  Linux and Windows were not measured for this change; Windows CI passed, which
+  exercises the build and tests, not the helper measurements.
 - The scan's `secrets` coverage depends on the pinned Gitleaks binary being on
   `PATH`; with an unpinned binary the scan fails closed rather than scanning.

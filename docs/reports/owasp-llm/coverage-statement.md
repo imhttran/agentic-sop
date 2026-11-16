@@ -235,8 +235,8 @@ SOP-run git command now carries `-c core.fsmonitor=false` (and, for `diff`,
 execution-injection variables. Measured on Git 2.50.1, this blocks `diff.external`,
 `GIT_EXTERNAL_DIFF`, `core.fsmonitor`, and textconv. A clean filter still executes
 (git has no switch) and is now **labelled** in the tool result rather than
-presented as raw. See [git-output-integrity.md](git-output-integrity.md). This is a
-local worktree change: no PR, no merge, no baseline change.
+presented as raw. See [git-output-integrity.md](git-output-integrity.md). This is PR
+#491: full CI passed (13 of 13 checks) and it is **unmerged**. No baseline change.
 
 **Still blocked on the operator:** M1 + G3 + G4 (mandatory isolation for every
 model-reachable exec, sandboxed git, `.git` write deny) and the clean-filter
