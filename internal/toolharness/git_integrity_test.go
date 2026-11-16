@@ -49,6 +49,17 @@ func requirePOSIXShell(t *testing.T) {
 	}
 }
 
+// isolateGitConfig points git at empty global and system configuration for the
+// duration of a test. Without it these tests depend on the host: a machine with
+// git-lfs installed configures `filter.lfs.*` globally, so "no driver configured"
+// is false there. The harness's own git children inherit this environment, so the
+// probes under test see the same isolated configuration.
+func isolateGitConfig(t *testing.T) {
+	t.Helper()
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+}
+
 func commitRepoFile(t *testing.T, dir, name, content string) {
 	t.Helper()
 	writeRepoFile(t, dir, name, content)
@@ -329,6 +340,7 @@ func TestGitOutputUnlabelledWithoutFilters(t *testing.T) {
 // `status` works normally. Labelling that would tell the model its output was
 // transformed when it was not.
 func TestGitOutputUnlabelledWhenAttributeNamesAnUnconfiguredDriver(t *testing.T) {
+	isolateGitConfig(t)
 	dir := t.TempDir()
 	gitInitRepo(t, dir)
 	commitRepoFile(t, dir, "f.txt", "x: y\n")
@@ -340,7 +352,7 @@ func TestGitOutputUnlabelledWhenAttributeNamesAnUnconfiguredDriver(t *testing.T)
 		t.Fatalf("precondition: check-attr = %q err=%v, want an lfs attribute", out, err)
 	}
 	if err := exec.Command("git", "-C", dir, "config", "--get", "filter.lfs.clean").Run(); err == nil {
-		t.Fatal("precondition: filter.lfs.clean is configured; this host has git-lfs set up")
+		t.Fatal("precondition: filter.lfs.clean is configured despite the isolated git config")
 	}
 
 	h := newTestHarness(t, dir, nil)
@@ -356,6 +368,7 @@ func TestGitOutputUnlabelledWhenAttributeNamesAnUnconfiguredDriver(t *testing.T)
 // TestConfiguredFilterNames covers the configuration probe directly, so the
 // attribute/config intersection is testable without a working filter script.
 func TestConfiguredFilterNames(t *testing.T) {
+	isolateGitConfig(t)
 	dir := t.TempDir()
 	gitInitRepo(t, dir)
 	commitRepoFile(t, dir, "f.txt", "x: y\n")
