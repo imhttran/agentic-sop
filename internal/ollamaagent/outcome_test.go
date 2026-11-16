@@ -12,6 +12,7 @@ import (
 )
 
 func TestEnsureStructuredOutcomeWrapsProseAsCompleted(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	gitInit(t, dir)
 
@@ -103,6 +104,7 @@ func TestEnsureStructuredOutcomeHandlesEmptyInput(t *testing.T) {
 }
 
 func TestEnsureStructuredOutcomeReflectsActualChanges(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	gitInit(t, dir)
 	// Create a file so we can change it
@@ -150,6 +152,7 @@ func TestReconcileOutcomeHandlesProseAndDoesNotChange(t *testing.T) {
 }
 
 func TestReconcileOutcomeGroundsChangesExpected(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	gitInit(t, dir)
 	// Create a file that we'll later modify
@@ -192,6 +195,7 @@ func TestReconcileOutcomeGroundsChangesExpected(t *testing.T) {
 }
 
 func TestRetryNoChangeFailureConvertsFailedToNeedsHuman(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	gitInit(t, dir)
 

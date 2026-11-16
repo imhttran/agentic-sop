@@ -13,12 +13,11 @@ import (
 // macOS counterpart of TestLinuxIsolationSAFECommandCredentialRead. The R3
 // residual is the SAFE `go test` vector: `go test` is SAFE, so model-written
 // test code is ordinary authorized work and the credential read happens in a
-// process the command policy already allowed. This pins all three legs:
+// process the command policy already allowed. Isolation is mandatory (M1), so
+// this pins the remaining behaviour:
 //
-//   - isolation off (the shipped default): the canary reaches the raw command
-//     output, so the harness cannot claim any process-level protection;
-//   - isolation on: the read is denied at the process level, the canary is
-//     absent from the raw output, and an ordinary neighbour still reads;
+//   - the read is denied at the process level, the canary is absent from the raw
+//     output, and an ordinary neighbour still reads;
 //   - a pre-existing hardlink alias with an ordinary name stays readable, the
 //     documented inode residual (Option D is Linux-scoped; this records that
 //     macOS behaves the same way).
@@ -40,30 +39,14 @@ func TestDarwinIsolationSAFECommandCredentialRead(t *testing.T) {
 	}
 	writeRepoFile(t, root, "go.mod", "module cred\n\ngo 1.27\n")
 	writeRepoFile(t, root, "cred/cred_test.go", safeCommandCredentialFixture)
-	// Pin the off leg: an inherited override or a future default change must not
-	// silently turn this run sandboxed.
-	unsandboxed(t)
 	t.Setenv("HOME", home)
 	ctx := context.Background()
 	credentialCmd := "go test ./cred -run TestCredentialRead -v"
 
-	// Isolation off: the shipped default exposes the credential through a command
-	// the policy already classified SAFE. This is the R3 exposure, measured rather
-	// than asserted.
-	off := New(root, DefaultConfig(), NewAuditLog(0))
-	out, err := off.Run(ctx, ToolRunCommand, map[string]any{"command": credentialCmd})
-	if err != nil {
-		t.Fatalf("the SAFE command did not run with isolation off: %v (%s)", err, out)
-	}
-	if !strings.Contains(out, canary) {
-		t.Fatalf("isolation off no longer exposes the credential; the R3 evidence needs updating: %q", out)
-	}
+	// Isolation is mandatory, so there is no unsandboxed leg to measure.
+	on := New(root, DefaultConfig(), NewAuditLog(0))
 
-	onCfg := DefaultConfig()
-	onCfg.IsolateCommands = true
-	on := New(root, onCfg, NewAuditLog(0))
-
-	out, err = on.Run(ctx, ToolRunCommand, map[string]any{"command": credentialCmd})
+	out, err := on.Run(ctx, ToolRunCommand, map[string]any{"command": credentialCmd})
 	if err != nil {
 		t.Fatalf("the SAFE command did not run: %v (%s)", err, out)
 	}

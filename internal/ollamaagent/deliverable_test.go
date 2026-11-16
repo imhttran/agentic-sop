@@ -45,6 +45,7 @@ func TestDeliverableMissingFailsClosed(t *testing.T) {
 // to write the deliverable, while file tools stay available and the written
 // deliverable becomes an ordinary verified mutation.
 func TestDeliverableWithholdsCommandTools(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	seedToolFiles(t, dir, "pkg", implementNowAfter)
 	if err := os.MkdirAll(filepath.Join(dir, "docs/reports/t"), 0o755); err != nil {
@@ -97,6 +98,7 @@ func TestDeliverableWithholdsCommandTools(t *testing.T) {
 // declared deliverable, command tools stay available past the implement-now
 // threshold (unchanged behavior).
 func TestNoDeliverableKeepsCommandTools(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	seedToolFiles(t, dir, "pkg", implementNowAfter)
 	responses := make([]string, 0, implementNowAfter+3)

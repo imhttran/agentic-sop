@@ -26,6 +26,7 @@ import (
 // Everything runs in t.TempDir against the scripted fake model; no real project,
 // provider, or SOP state is touched.
 func TestEvidenceArtifactMutationCompletes(t *testing.T) {
+	needSandboxAvailable(t)
 	// reportContent is the exact evidence artifact the invocation is authorized
 	// to write. It carries every label the immutable Go test requires.
 	const reportContent = "# Evidence Artifact\n" +

@@ -107,6 +107,7 @@ func TestReadOnlyRootRejectsSymlinkEscapeArgument(t *testing.T) {
 }
 
 func TestReadOnlyRootAllowsReadOnlyGoCommands(t *testing.T) {
+	needSandbox(t)
 	h, _, external, _ := readonlyFixture(t)
 	ctx := context.Background()
 	for _, command := range []string{"gofmt -l .", "go build ./...", "go vet ./...", "go test ./..."} {
@@ -125,6 +126,7 @@ func TestReadOnlyRootAllowsReadOnlyGoCommands(t *testing.T) {
 }
 
 func TestPrimaryRootStillAllowsGofmtWrite(t *testing.T) {
+	needSandbox(t)
 	h, primary, _, _ := readonlyFixture(t)
 	ctx := context.Background()
 	writeFixture(t, filepath.Join(primary, "p.go"), "package p\n\nfunc  H(){}\n")

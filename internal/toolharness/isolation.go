@@ -16,76 +16,32 @@ import (
 	"github.com/imhttran/agentic-sop/internal/sensitivepath"
 )
 
-// IsolationEnv selects run_command isolation (LLM03,
-// PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON). Isolation is required by default on
-// every platform: where no backend exists the command is refused, never run
-// unsandboxed. The operator override is "off" (also 0/false/no) and takes effect
-// only with UnsandboxedAckEnv, so one inherited or stale variable cannot remove
-// the control on its own. Config.IsolateCommands is the programmatic equivalent
-// of "on" and wins.
-const IsolationEnv = "SOP_AGENT_RUN_COMMAND_ISOLATION"
-
-// UnsandboxedAckEnv must be set to an affirmative value together with the
-// IsolationEnv off spellings before run_command may run without the OS sandbox.
-// The exception is deliberate: an operator on a host where the backend cannot
-// start opts out by asserting two variables, and an ambient value cannot do it
-// alone.
-const UnsandboxedAckEnv = "SOP_AGENT_RUN_COMMAND_UNSANDBOXED_ACK"
-
-// errIsolationUnavailable is a policy denial: isolation is required but no
-// backend can enforce it, so the command never runs unsandboxed.
-var errIsolationUnavailable = errors.New("run_command isolation unavailable")
-
-// isOffValue reports whether an override value disables isolation. An
-// unrecognized value leaves the default in place rather than silently disabling
-// the sandbox.
-func isOffValue(raw string) bool {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "0", "false", "no", "off":
-		return true
-	}
-	return false
-}
-
-// isAcknowledged reports whether raw is a deliberate acknowledgement of
-// unsandboxed execution. Every other value, including an empty one, leaves
-// isolation in effect, so a partial or misspelled setting fails safe.
-func isAcknowledged(raw string) bool {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "1", "true", "yes":
-		return true
-	}
-	return false
-}
-
-// isolationOverrideOff reports whether the environment explicitly disables
-// isolation, and the raw value, so the caller can echo what the operator set.
-func isolationOverrideOff() (bool, string) {
-	raw := strings.TrimSpace(os.Getenv(IsolationEnv))
-	return isOffValue(raw), raw
-}
-
-// IsolationPolicyNotice is the one-line notice `sop` prints at startup when the
-// environment asks to disable run_command isolation, so a stale or inherited
-// value cannot change the control silently. It returns "" when isolation is in
-// effect and no override was requested. A missing backend is not a notice: that
-// path refuses the command instead, and the override has no effect there.
+// Isolation is mandatory for every model-reachable execution (M1 + G3 + G4,
+// authorized 2026-11-16). There is no operator switch and no configuration value
+// that turns it off: the OS sandbox is part of what "the tool ran" means. A
+// platform or host without a usable backend refuses the command rather than
+// running it unsandboxed (Windows, and Linux hosts where bubblewrap cannot
+// start).
 //
-// An unacknowledged override gets its own notice, because the operator's intent
-// did not take effect and the reason must be visible.
-func IsolationPolicyNotice() string {
-	if !hasBackend(runtime.GOOS) {
-		return ""
-	}
-	off, raw := isolationOverrideOff()
-	if !off {
-		return ""
-	}
-	if !isAcknowledged(os.Getenv(UnsandboxedAckEnv)) {
-		return fmt.Sprintf("[config] %s=%q was ignored: set %s=1 to confirm unsandboxed run_command execution, so isolation remains in effect", IsolationEnv, raw, UnsandboxedAckEnv)
-	}
-	return fmt.Sprintf("[config] %s=%q disables run_command isolation; commands run with policy checks only and a scrubbed credential environment", IsolationEnv, raw)
-}
+// The D4-5 R4 override and its acknowledgement were retired with this change.
+// Their variable names are still stripped from model-controlled child
+// environments, so a stale or inherited value cannot reach a nested SOP process
+// or appear in a command's output.
+const (
+	// retiredIsolationEnv and retiredAckEnv are the removed operator switches. They
+	// have no effect; they are named here only so they can be dropped from a child.
+	retiredIsolationEnv = "SOP_AGENT_RUN_COMMAND_ISOLATION"
+	retiredAckEnv       = "SOP_AGENT_RUN_COMMAND_UNSANDBOXED_ACK"
+)
+
+// errIsolationUnavailable is a policy denial: isolation is required and no usable
+// backend can enforce it, so the command never runs unsandboxed.
+var errIsolationUnavailable = errors.New("execution isolation unavailable")
+
+// sandboxRequired reports whether a model-reachable command must run inside the
+// OS sandbox. It is unconditional by design, so there is exactly one policy
+// decision to reason about and no value anywhere that can disable it.
+func sandboxRequired() bool { return true }
 
 // backendFor maps a GOOS to the sandbox backend and the binary it needs. An empty
 // name means the platform has no supported backend. sandboxArgv and the isolation
@@ -106,30 +62,66 @@ func hasBackend(goos string) bool {
 	return name != ""
 }
 
-// isolationDecision reports whether the command must run inside the OS sandbox.
-// It is pure so the platform rule can be tested on any host.
-//
-// A platform with no backend always returns true: the caller then refuses the
-// command through sandboxArgv, and no override can turn that into policy-only
-// execution (Windows B1). Where a backend exists the default is true, the
-// operator override can disable it only when it is also acknowledged, and
-// Config.IsolateCommands always wins.
-func isolationDecision(goos, override, ack string, isolateCommands bool) bool {
-	if !hasBackend(goos) {
-		return true
+// SandboxRunnable reports whether this host can actually start the platform
+// sandbox. It distinguishes "the boundary refused this command" from "this host
+// cannot run the boundary at all", which is what a test needs in order to skip
+// honestly instead of faking a pass or a failure. It never disables isolation.
+func SandboxRunnable() error {
+	name, _ := backendFor(runtime.GOOS)
+	var err error
+	// Each probe names its program literally: a static program name keeps this a
+	// reviewed exec site rather than a new dynamic one.
+	switch name {
+	case "seatbelt":
+		err = exec.Command("sandbox-exec", "-p", "(version 1)(allow default)", "true").Run()
+	case "bubblewrap":
+		err = exec.Command("bwrap", "--ro-bind", "/", "/", "--unshare-net", "true").Run()
+	case "":
+		return fmt.Errorf("%w: no sandbox backend on %s", errIsolationUnavailable, runtime.GOOS)
+	default:
+		return fmt.Errorf("%w: no start probe for backend %q", errIsolationUnavailable, name)
 	}
-	if isolateCommands {
-		return true
+	if err != nil {
+		return fmt.Errorf("%w: %s cannot start here: %v", errIsolationUnavailable, name, err)
 	}
-	if !isOffValue(override) {
-		return true
-	}
-	return !isAcknowledged(ack)
+	return probeProductionInvocation(name)
 }
 
-// isolationRequested reports whether the command must run inside the OS sandbox.
-func (h *Harness) isolationRequested() bool {
-	return isolationDecision(runtime.GOOS, os.Getenv(IsolationEnv), os.Getenv(UnsandboxedAckEnv), h.cfg.IsolateCommands)
+// probeProductionInvocation runs one trivial command through the same isolate()
+// path the harness uses. The backend probe above only proves the binary starts;
+// it does not prove the production mount set works on this host. Without this,
+// a caller would treat "binary present" as "commands run here" and a test that
+// expects execution would fail instead of skipping.
+func probeProductionInvocation(name string) error {
+	root, err := os.MkdirTemp("", "sop-sandbox-probe-")
+	if err != nil {
+		return fmt.Errorf("%w: cannot create probe root: %v", errIsolationUnavailable, err)
+	}
+	defer os.RemoveAll(root)
+
+	wrapped, env, _, cleanup, err := isolate(root, []string{"true"})
+	if err != nil {
+		return fmt.Errorf("%w: production sandbox argv unavailable: %v", errIsolationUnavailable, err)
+	}
+	defer cleanup()
+
+	var cmd *exec.Cmd
+	// Name the program literally, as the probe above does, so this stays a
+	// reviewed exec site rather than a new dynamic one.
+	switch name {
+	case "seatbelt":
+		cmd = exec.Command("sandbox-exec", wrapped[1:]...)
+	case "bubblewrap":
+		cmd = exec.Command("bwrap", wrapped[1:]...)
+	default:
+		return fmt.Errorf("%w: no argv builder for backend %q", errIsolationUnavailable, name)
+	}
+	cmd.Dir = root
+	cmd.Env = env
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%w: the sandbox cannot run a command here: %v (%s)", errIsolationUnavailable, err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
 
 // isolate wraps argv in the platform sandbox: Seatbelt on macOS, bubblewrap
@@ -171,7 +163,7 @@ func scrubbedEnvironment() (env []string, dropped int) {
 	env = make([]string, 0, len(inherited))
 	for _, kv := range inherited {
 		name, value, _ := strings.Cut(kv, "=")
-		if controlEnvNames[name] || redact.IsSecretName(name) || redact.Shapes(value, marker) != value {
+		if retiredControlEnvNames[name] || redact.IsSecretName(name) || redact.Shapes(value, marker) != value {
 			dropped++
 			continue
 		}
@@ -180,13 +172,13 @@ func scrubbedEnvironment() (env []string, dropped int) {
 	return env, dropped
 }
 
-// controlEnvNames are SOP control-plane switches. They never reach a
-// model-controlled child: a nested SOP process must decide its own isolation
-// instead of inheriting the parent's, and a model-authored command has no reason
-// to see either value.
-var controlEnvNames = map[string]bool{
-	IsolationEnv:      true,
-	UnsandboxedAckEnv: true,
+// retiredControlEnvNames are the removed SOP control-plane switches. They no
+// longer change anything, but they are still dropped from a model-controlled
+// child: a nested SOP must not inherit a stale value, and a model-authored
+// command has no reason to see one.
+var retiredControlEnvNames = map[string]bool{
+	retiredIsolationEnv: true,
+	retiredAckEnv:       true,
 }
 
 // sandboxEnv is the sandboxed child environment: the scrubbed environment plus

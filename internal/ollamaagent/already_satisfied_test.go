@@ -30,6 +30,7 @@ func satisfactionFixture(t *testing.T) (string, agent.Request) {
 }
 
 func TestVerifiedAlreadySatisfied(t *testing.T) {
+	needSandboxAvailable(t)
 	for _, cap := range []agent.Capability{agent.Implement, agent.Fix} {
 		t.Run(string(cap), func(t *testing.T) {
 			dir, req := satisfactionFixture(t)
@@ -184,6 +185,7 @@ func TestAlreadySatisfiedUnavailableSnapshotFailsClosed(t *testing.T) {
 }
 
 func TestAlreadySatisfiedAfterFiveInspections(t *testing.T) {
+	needSandboxAvailable(t)
 	for _, cap := range []agent.Capability{agent.Implement, agent.Fix} {
 		t.Run(string(cap), func(t *testing.T) {
 			dir, req := satisfactionFixture(t)
@@ -238,6 +240,7 @@ func TestAlreadySatisfiedRejectsMissingDeliverable(t *testing.T) {
 // TestAlreadySatisfiedAcceptsAuthorizedValidationWaiver: a required validation command
 // that is not executed is accepted only when an authorized waiver names it.
 func TestAlreadySatisfiedAcceptsAuthorizedValidationWaiver(t *testing.T) {
+	needSandboxAvailable(t)
 	dir, req := satisfactionFixture(t)
 	gitInit(t, dir)
 	commitAll(t, dir, "existing implementation")
@@ -261,6 +264,7 @@ func TestAlreadySatisfiedAcceptsAuthorizedValidationWaiver(t *testing.T) {
 // TestAlreadySatisfiedNormalizedCriterionMatch: a criterion differing only by case and
 // whitespace from the evidence is accepted (content match, not byte match).
 func TestAlreadySatisfiedNormalizedCriterionMatch(t *testing.T) {
+	needSandboxAvailable(t)
 	dir, req := satisfactionFixture(t)
 	gitInit(t, dir)
 	commitAll(t, dir, "existing implementation")
@@ -290,6 +294,7 @@ const satisfiedFinalNoEvidence = `{"status":"completed","completion":"ALREADY_SA
 // criterion evidence is corrected once, and the corrected (complete) evidence is
 // accepted by the deterministic verifier with no repository mutation.
 func TestAlreadySatisfiedEvidenceCorrectionAccepted(t *testing.T) {
+	needSandboxAvailable(t)
 	dir, req := satisfactionFixture(t)
 	gitInit(t, dir)
 	commitAll(t, dir, "existing implementation")
@@ -343,6 +348,7 @@ func TestAlreadySatisfiedEvidenceCorrectionRejectsUnreadPath(t *testing.T) {
 // criterion to an unread path is still offered the single correction; the corrected
 // claim (read-backed) is accepted, and the invalid one is never accepted on its own.
 func TestAlreadySatisfiedEvidenceCorrectionFromUnreadPath(t *testing.T) {
+	needSandboxAvailable(t)
 	dir, req := satisfactionFixture(t)
 	gitInit(t, dir)
 	commitAll(t, dir, "existing implementation")
@@ -496,6 +502,7 @@ const multiPathUnreadClaim = `{"status":"completed","completion":"ALREADY_SATISF
 // two files while only one was read now triggers the single correction; once the agent
 // reads the second file, the corrected claim is accepted (zero mutations).
 func TestAlreadySatisfiedEvidenceCorrectionMultiPathAccepted(t *testing.T) {
+	needSandboxAvailable(t)
 	dir, req := satisfactionFixture(t)
 	gitInit(t, dir)
 	commitAll(t, dir, "existing implementation")

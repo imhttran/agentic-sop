@@ -231,6 +231,7 @@ func TestSplitCommandRejectsShellMetacharacters(t *testing.T) {
 }
 
 func TestRunCommandExecutesSafeCommand(t *testing.T) {
+	needSandbox(t)
 	root := t.TempDir()
 	if out, err := exec.Command("git", "init", "-q", root).CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v (%s)", err, out)
@@ -249,6 +250,7 @@ func TestRunCommandExecutesSafeCommand(t *testing.T) {
 // --- git inspection ---
 
 func TestGitInspectionToolsAreReadOnly(t *testing.T) {
+	needSandbox(t)
 	root := t.TempDir()
 	if out, err := exec.Command("git", "init", "-q", root).CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v (%s)", err, out)
@@ -267,6 +269,7 @@ func TestGitInspectionToolsAreReadOnly(t *testing.T) {
 // --- working tree observation ---
 
 func TestWorkingTreeChanged(t *testing.T) {
+	needSandbox(t)
 	root := t.TempDir()
 	if out, err := exec.Command("git", "init", "-q", root).CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v (%s)", err, out)
@@ -292,6 +295,7 @@ func TestWorkingTreeChanged(t *testing.T) {
 }
 
 func TestWorkingTreeChangedOutsideRepo(t *testing.T) {
+	needSandbox(t)
 	h := newTestHarness(t, t.TempDir(), nil)
 	if _, err := h.WorkingTreeChanged(context.Background()); err == nil {
 		t.Error("want an error outside a git repository")
@@ -474,10 +478,10 @@ func TestFileAuditorWritesJSONLines(t *testing.T) {
 }
 
 // Inline git configuration can name a program git later runs, so it is not SAFE
-// and the harness refuses it even with the sandbox off. The marker proves no
-// external program executed.
+// and the harness refuses it at the policy layer, before any sandbox is built.
+// The marker proves no external program executed.
 func TestRunCommandRejectsGitConfigInjection(t *testing.T) {
-	unsandboxed(t)
+	needSandbox(t)
 	root := t.TempDir()
 	gitIn := func(args ...string) {
 		t.Helper()

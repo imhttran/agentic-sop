@@ -43,6 +43,7 @@ const (
 // includes an ordinary-source positive control, and exercises a denial error
 // whose detail contains a synthetic credential.
 func TestModelInputToolBoundaries(t *testing.T) {
+	needSandboxAvailable(t)
 	cases := []struct {
 		name         string
 		toolCall     string
@@ -162,6 +163,7 @@ func runGitForTest(t *testing.T, dir string, args ...string) {
 // ordinary name is now denied by the Option C Phase 1 identity policy.
 // Recognised credential shapes in the ordinary paths are still redacted.
 func TestModelInputToolBoundariesResidualLimits(t *testing.T) {
+	needSandboxAvailable(t)
 	const (
 		opaqueFile    = "opaque-live-value-42"
 		opaqueEnv     = "opaque-env-value-43"
@@ -244,6 +246,7 @@ func TestModelInputToolBoundariesResidualLimits(t *testing.T) {
 // value and ordinary positive controls. The default functions are asserted to
 // retain the pre-C1 behavior.
 func TestModelInputWithPolicyRedactsUnknownFormats(t *testing.T) {
+	needSandboxAvailable(t)
 	const (
 		opaque   = "opaque-live-value-42"
 		bare     = "bare-opaque-value-88"

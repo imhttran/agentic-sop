@@ -1,8 +1,9 @@
 # Decision packet — OWASP W6–W8 (execution boundary, clean-filter policy, scanner enforcement)
 
-**Status:** decision packet. **W6 is approved but blocked; W7 is approved and
-implemented; W8 stays deferred.**
-**Base:** `origin/main` @ `6c9500e4` (2026-11-16), darwin arm64, Go 1.27.1, Git 2.50.1.
+**Status:** decision packet. **W6 is authorized and implemented (option B, with
+mandatory sandbox-enabled integration verification); W7 is implemented; W8 stays
+deferred.**
+**Base:** `origin/main` @ `fe5b61cf` (2026-11-16), darwin arm64, Go 1.27.1, Git 2.50.1.
 
 **W6 blocker (measured, 2026-11-16).** The GitHub `ubuntu-latest` runner image
 ships no `bubblewrap` (verified against `Ubuntu2404-Readme.md`, image
@@ -66,6 +67,14 @@ is blocked on the CI backend question below.
 coverage, and the change is confined to CI. It cannot be validated on macOS; the
 PR would need to prove it in the Linux job.
 
+**Operator decision (2026-11-16): option B**, with mandatory sandbox-enabled
+integration verification. The override and acknowledgement are removed and
+isolation is mandatory; sandbox-dependent tests skip on a host with no runnable
+backend, and a separate `sandbox-linux` CI job (Ubuntu 22.04, which permits
+unprivileged user namespaces without touching AppArmor) runs them with
+`SOP_SANDBOX_REQUIRED=1` so a skip is a failure. See
+[execution-boundary-w6.md](../reports/owasp-llm/execution-boundary-w6.md).
+
 **Trade-off.** The only real loss is Windows and `bwrap`-less hosts. The alternative
 in the packet — removing the git tools on those platforms — is strictly worse, and
 G2 is measurably not a boundary.
@@ -122,13 +131,12 @@ ignore it.
 
 ## Status summary
 
-| Decision          | Recommendation                                           | Operator decision                    | State                                       |
-| ----------------- | -------------------------------------------------------- | ------------------------------------ | ------------------------------------------- |
-| 1 — M1+G3+G4      | Approve as written, **keep** the W1 hardening flags      | Approved 2026-11-16 (with amendment) | **Blocked** on the CI backend options above |
-| 2 — Clean filter  | Option C (verified-LFS allowlist, fail closed otherwise) | Approved 2026-11-16                  | **Implemented**                             |
-| 3 — Required mode | Defer; sequence after Decision 1                         | Deferred                             | Not started; `report-only` unchanged        |
+| Decision          | Recommendation                                           | Operator decision             | State                                                                |
+| ----------------- | -------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------- |
+| 1 — M1+G3+G4      | Approve as written, **keep** the W1 hardening flags      | Approved 2026-11-16, option B | **Implemented** (Linux containment `NOT_RUN` until the new job runs) |
+| 2 — Clean filter  | Option C (verified-LFS allowlist, fail closed otherwise) | Approved 2026-11-16           | **Implemented**                                                      |
+| 3 — Required mode | Defer; sequence after Decision 1                         | Deferred                      | Not started; `report-only` unchanged                                 |
 
-W7 is implemented. W6 is authorized but cannot be implemented without resolving
-the CI backend question. W8 remains deferred, so `security.mode: report-only`,
+W6 and W7 are implemented. W8 remains deferred, so `security.mode: report-only`,
 `required_categories: []`, and the single blocking `dangerous-exec-command`
 finding are unchanged.

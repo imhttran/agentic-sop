@@ -1,11 +1,12 @@
 # OWASP LLM Top 10 — coverage statement
 
-**As of:** `main` at `6c9500e4` (2026-11-16), through PR #494. The approved D4
+**As of:** `main` at `fe5b61cf` (2026-11-16), through PR #497. The approved D4
 baseline is merged; the D4-5 `run_command` residual remains unaccepted and
-blocking; enforcement stays report-only. Merged since the last statement: the git
-output hardening (PR #491, `2f544a62`) and the filter-detection accuracy fix
-(PR #494, `6c9500e4`). The clean-filter policy is decided (Option C) and
-implemented; M1 + G3 + G4 is approved but blocked on a CI-backend decision. See
+blocking; enforcement stays report-only. Merged earlier: the git output hardening
+(PR #491, `2f544a62`) and the filter-detection accuracy fix (PR #494, `6c9500e4`).
+**W7 (clean-filter policy) and W6 (mandatory isolation for every model-reachable
+execution) are implemented**; Linux containment verification for W6 is `NOT_RUN`
+until the new `sandbox-linux` job runs. See
 [acceptance-report-2026-11-16.md](acceptance-report-2026-11-16.md).
 
 This statement answers one question for each of the ten OWASP LLM risks: what
@@ -300,63 +301,73 @@ acceptance criterion. It is **not implemented** pending a CI-backend decision; s
   `NOT_OBSERVED`. All six Plan 10 manual criteria were accepted, and Plan 10 was
   historicalized `COMPLETE`.
 
-### LLM06 Excessive Agency — covered by policy, with default-on sandboxing on macOS and Linux
+### LLM06 Excessive Agency — covered by policy, with mandatory sandboxing of every model-reachable execution
 
 - **Covered:**
   - Root and command policy, with read-only roots.
   - OS isolation on the replay and evaltarget paths, on both macOS and Linux.
   - Since PR #343 (macOS, Seatbelt) and the bubblewrap follow-up (Linux),
-    `run_command` runs inside an OS sandbox by default. In it, outbound network is
-    blocked, writes are limited to the root and temp, `.agent-sdlc/` is denied, and
-    it fails closed when no sandbox is available. Each run gets its own throwaway
-    build cache and the shared module cache is read-only, so one run cannot poison
-    a later run's Go caches.
-  - Where a backend exists (macOS, Linux), the operator override
-    `SOP_AGENT_RUN_COMMAND_ISOLATION=off` (also `0`, `false`, `no`) is the only way
-    to run commands with policy checks alone, and `sop run` and `sop prompt` print
-    a startup notice when it is set. The override is operator-scoped: a model
-    cannot set its own parent's environment.
-  - A platform with no backend refuses `run_command` rather than running it
-    unsandboxed (Windows B1, selected by the operator). The refusal is
-    unconditional there: no override value and no `Config.IsolateCommands` value
-    can turn it into policy-only execution, and the startup notice is suppressed
-    because the override does nothing. The PR #441 P2 recorded in #442 is fixed
-    and pinned by `TestIsolationDecisionUnsupportedPlatforms` and, at runtime on
-    Windows, `TestRunCommandIsolationOnWindowsRefuses`.
-  - (Merged 2026-11-16 at `2f544a62`, PR #491) Every SOP-run git command is hardened so the
-    repository cannot make git launch a program: `-c core.fsmonitor=false`
-    globally and `--no-ext-diff --no-textconv` for `diff`, plus a git child
-    environment stripped of execution-injection variables. This covers `git_status`,
-    `git_diff`, and the per-turn fingerprint calls, and is independent of the
-    sandbox. Evidence: [git-output-integrity.md](git-output-integrity.md).
+    `run_command` runs inside an OS sandbox. In it, outbound network is blocked,
+    writes are limited to the root and temp, `.agent-sdlc/` is denied, and it fails
+    closed when no sandbox is available. Each run gets its own throwaway build
+    cache and the shared module cache is read-only, so one run cannot poison a
+    later run's Go caches.
+  - **Isolation is now mandatory (M1 + G3 + G4, 2026-11-16).** The operator
+    override and its acknowledgement were removed. Every model-reachable execution
+    runs through one `execIsolated` path: `run_command`, `git_status`, `git_diff`,
+    and the per-turn git fingerprints. A host with no usable backend refuses, and
+    change detection reports "changed" rather than claiming nothing changed.
+  - Model write tools refuse any path whose segments include `.git`, so a repository
+    filter, external diff driver, fsmonitor hook, or alias cannot be authored by the
+    model through the file tools. Reading git metadata stays allowed.
+  - A platform with no backend refuses execution rather than running it
+    unsandboxed (Windows B1). The refusal is unconditional: no configuration value
+    can turn it into policy-only execution. Pinned by
+    `TestRunCommandIsolationDefaultsToFailClosed`,
+    `TestGitToolsRefusedWithoutBackend`,
+    `TestFingerprintFailsClosedWithoutBackend`, and, at runtime on Windows,
+    `TestRunCommandIsolationOnWindowsRefuses`.
+  - The W1 git hardening is preserved **inside** the sandbox:
+    `-c core.fsmonitor=false` globally and `--no-ext-diff --no-textconv` for `diff`,
+    plus a git child environment stripped of execution-injection variables. A
+    repository-configured clean filter that does run is contained:
+    `TestSandboxedGitFilterCannotReachHost` shows it cannot write SOP state or read
+    a home credential, with the unsandboxed leg as the positive control.
 
-  Evidence: [llm03-agency.md](llm03-agency.md),
+  Evidence: [execution-boundary-w6.md](execution-boundary-w6.md),
+  [llm03-agency.md](llm03-agency.md),
   [seatbelt-evidence.md](../security-shift-left/seatbelt-evidence.md#run_command-opt-in-sandbox-llm03).
 
 - **Not covered, and why:**
-  - Windows has no backend, so `run_command` is unavailable there under B1. Every
-    override value and both `Config.IsolateCommands` values are refused; the
-    compatibility cost, acknowledged with the decision, is that the agent's
-    build/test loop and any validation that shells out cannot run on Windows.
-    `VERIFIED` at runtime in CI on the merged implementation. Decision and impact:
-    [PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md](../../plans/PROPOSAL-RUN-COMMAND-ISOLATION-DEFAULT-ON.md),
-    [llm06-sandbox-default-measurements.md](llm06-sandbox-default-measurements.md).
-  - Platform coverage is uneven: macOS arm64 and Linux arm64 (privileged
-    container) are `VERIFIED`; a Linux distribution host and Linux `amd64` are
-    `NOT_RUN`. The container results are not evidence of real-host compatibility.
-  - The operator override restores policy-only execution on request. Under it the
-    direct-read vector is open again, visibly, and the residual exposures listed
-    below stay open either way.
-  - The sandbox wraps `run_command` only. Validation commands
-    (`internal/testrunner`, `sh -c`), security scanners, and the `git`/`gh` sinks
-    are not sandboxed and this row makes no claim about them.
-  - Git output is hardened and its integrity is decided: a clean filter that SOP
+  - Windows and Linux hosts where bubblewrap cannot start lose `run_command`,
+    `git_status`, `git_diff` **and** working-tree change detection; the agent loop
+    still runs but cannot verify changes. This is the compatibility trade the
+    operator accepted with option B.
+  - Platform coverage: macOS arm64 is `VERIFIED` against a real Seatbelt backend.
+    Linux containment is `NOT_RUN` until the new `sandbox-linux` CI job runs; that
+    job installs bubblewrap on Ubuntu 22.04 (which permits unprivileged user
+    namespaces without changing the host's AppArmor policy) and runs the affected
+    suites with `SOP_SANDBOX_REQUIRED=1`, so a skip is a failure.
+  - **A green ordinary CI job is not evidence of this row.** On the ordinary
+    runner 66 sandbox-dependent tests skip (30 `toolharness`, 36 `ollamaagent`),
+    plus 22 unrelated skips. The skip counts and reasons are reported in
+    [execution-boundary-w6.md](execution-boundary-w6.md).
+  - Operator-configured execution stays outside the boundary by design: validation
+    commands (`internal/testrunner`, `sh -c`), security scanners, and the `gh` sink
+    are configured by the operator, not model-controlled, and are not sandboxed.
+  - Git output is hardened and its integrity is decided (W7): a clean filter SOP
     cannot verify makes fingerprints fail closed (reported as "changed"), and a
     verified git-lfs filter keeps normal mutation detection. A clean filter still
     executes and still transforms content — verification establishes which program
-    runs, not that its output is benign. M1 + G3 + G4 containment remains unapproved
-    for implementation on CI, so git runs unsandboxed and the Semgrep finding stays
-    blocking.
+    runs, not that its output is benign.
+  - G4 covers the file tools only: sandboxed model code can still write
+    `.git/config`, but it is inert for host execution because git itself is
+    sandboxed.
+  - The Semgrep `dangerous-exec-command` finding stays visible and blocking.
+    Containment mitigates behaviour, not the call site, and it is not suppressed.
+    The current scan is **98 findings, 81 suppressed, 17 unsuppressed, 1 blocking**
+    (three baseline entries went stale because this change removed the tests they
+    referenced; none was added, edited, or removed).
   - With the sandbox on, the repository's own suite passes on macOS (87-91 s
     in-sandbox against 86 s unsandboxed, no failures) and has no sandbox-caused
     failures on Linux arm64 in a container (two container artifacts remain). Tests
@@ -421,16 +432,13 @@ acceptance criterion. It is **not implemented** pending a CI-backend decision; s
   [llm07-misinformation.md](llm07-misinformation.md).
 - **Not covered, and why:** SOP checks that decisions rest on real evidence. It
   does not check that model prose is factually correct, which cannot be decided
-  mechanically. With isolation on by default, a `run_command` subprocess cannot
-  write SOP state (`TestSubprocessStateWriteIsDeniedByDefault`); the exposure
-  returns only through the operator override
-  ([llm07-state-write-detection-phase1.md](llm07-state-write-detection-phase1.md)).
-  A bounded live run on Linux and macOS shows the opt-in `run_command` sandbox
-  denies a state write from the allowed test command, and that the write goes
-  through with the sandbox off (
-  [llm07-state-write-detection-phase1.md](llm07-state-write-detection-phase1.md#live-evidence-gap-15-2026-11-12)).
-  Isolation is on by default (PR #441); the residual applies only under the
-  operator override `SOP_AGENT_RUN_COMMAND_ISOLATION=off`.
+  mechanically. A `run_command` subprocess cannot write SOP state: isolation is
+  mandatory since M1 + G3 + G4, so there is no override that reopens it
+  (`TestSubprocessStateWriteIsDeniedByDefault`,
+  [execution-boundary-w6.md](execution-boundary-w6.md)). The earlier live evidence
+  that the write succeeds with the sandbox off is historical; the off state no
+  longer exists. Git-reported change evidence is also policy-bound (W7): an
+  unverifiable filter makes fingerprints fail closed to "changed".
 
 ### LLM10 Unbounded Consumption — covered for time, output and process bounds
 
@@ -478,16 +486,15 @@ These cannot be closed by code in this repository:
    acceptance, and the Option-D subprocess hardlink alias is accepted within its
    bounded scope. Tracking:
    [PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md](../../plans/PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md).
-5. **M1 + G3 + G4 — approved, blocked on the CI backend (2026-11-16).** Mandatory
-   isolation for every model-reachable execution (`run_command`, `git_status`,
-   `git_diff`, and the per-turn fingerprints), with refusal where no backend
-   exists, plus a `.git` write deny. Authorized 2026-11-16 (wording:
-   [PROPOSAL-LLM03-D4-5-MANDATORY-ISOLATION.md](../../plans/PROPOSAL-LLM03-D4-5-MANDATORY-ISOLATION.md)
-   §11). **Not implemented**: the GitHub `ubuntu-latest` image ships no `bubblewrap`,
-   so mandatory isolation would refuse every execution on CI and fail the
-   "`test-fast` stays green" criterion. A CI-backend decision is required; see
-   [DECISION-PACKET-OWASP-LLM-W6-W8.md](../../plans/DECISION-PACKET-OWASP-LLM-W6-W8.md).
-   The Semgrep finding stays blocking until it lands.
+5. **M1 + G3 + G4 — implemented (2026-11-16), option B.** Mandatory isolation for
+   every model-reachable execution (`run_command`, `git_status`, `git_diff`, and
+   the per-turn fingerprints), with refusal where no backend exists, plus a `.git`
+   write deny. The override and acknowledgement are removed. Sandbox-dependent
+   tests skip on a host with no runnable backend and run in the `sandbox-linux` CI
+   job with `SOP_SANDBOX_REQUIRED=1`. Linux containment is `NOT_RUN` until that job
+   runs; see [execution-boundary-w6.md](execution-boundary-w6.md). The Semgrep
+   finding stays blocking because containment mitigates behaviour, not the call
+   site.
 6. **Clean-filter fingerprint policy — decided (2026-11-16).** Option C, the verified
    git-lfs policy, is approved and implemented: a verified git-lfs filter keeps
    normal mutation detection; any other configured driver makes git output untrusted

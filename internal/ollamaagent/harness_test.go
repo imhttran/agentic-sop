@@ -90,11 +90,15 @@ func messageText(req ollamaChatRequest) string {
 
 func testConfig(baseURL string) Config {
 	return Config{
-		BaseURL:        baseURL,
-		Model:          DefaultModel,
-		Timeout:        5 * time.Second,
-		MaxToolCalls:   4,
-		CommandTimeout: 10 * time.Second,
+		BaseURL:      baseURL,
+		Model:        DefaultModel,
+		Timeout:      5 * time.Second,
+		MaxToolCalls: 4,
+		// Every sandboxed run starts with a throwaway build cache (an anti-poisoning
+		// control), so a `go test` fixture compiles cold. On a loaded CI runner that
+		// exceeds a small budget; use the production default rather than encoding a
+		// fast-host assumption.
+		CommandTimeout: defaultCommandTimeout,
 		MaxOutputBytes: 1 << 20,
 	}
 }
@@ -182,6 +186,7 @@ func TestRunShowsRuntimeVisibilityAtStartup(t *testing.T) {
 }
 
 func TestRunReconcilesClaimedChangeWithNoChange(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	gitInit(t, dir)
 	// The model claims a change but the working tree is clean: observed reality wins.
@@ -299,6 +304,7 @@ func TestRunTracesModelReportedFailure(t *testing.T) {
 // nothing is surfaced as a retryable needs_human, so SOP requeues instead of
 // blocking a flaky "explored and gave up" attempt.
 func TestRunNoChangeFailureIsRetryable(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	gitInit(t, dir)
 	t.Setenv(agent.EnvOllamaBaseURL, "")
@@ -2247,6 +2253,7 @@ func TestRunEnsuresProseBecomeStructuredOutcome(t *testing.T) {
 }
 
 func TestRunWrapsProseInOutcomeWithNoChanges(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	gitInit(t, dir)
 	// The model returns prose but makes no changes: wraps as completed with changes_expected=false

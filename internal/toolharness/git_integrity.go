@@ -62,7 +62,14 @@ var gitInjectionEnvNames = map[string]bool{
 // without any variable that can inject configuration or an executable. It is
 // never nil, because a nil child environment means "inherit everything".
 func gitChildEnv() []string {
-	inherited := os.Environ()
+	return filterGitInjectionEnv(os.Environ())
+}
+
+// filterGitInjectionEnv drops the variables that make git run a program or read
+// configuration SOP did not choose. It is applied to the inherited environment
+// when git runs unsandboxed and to the sandbox's already-scrubbed environment, so
+// the hardening is the same either way and can only remove entries.
+func filterGitInjectionEnv(inherited []string) []string {
 	env := make([]string, 0, len(inherited))
 	for _, kv := range inherited {
 		name, _, _ := strings.Cut(kv, "=")

@@ -184,6 +184,7 @@ func TestGitTouchedPathsHandlesStatusAndDiff(t *testing.T) {
 // --- integration: the harness's git path runs no repository helper ---
 
 func TestGitStatusDoesNotRunRepositoryFsmonitor(t *testing.T) {
+	needSandbox(t)
 	requirePOSIXShell(t)
 	dir := t.TempDir()
 	gitInitRepo(t, dir)
@@ -212,6 +213,7 @@ func TestGitStatusDoesNotRunRepositoryFsmonitor(t *testing.T) {
 }
 
 func TestGitDiffDoesNotRunExternalDiffDriver(t *testing.T) {
+	needSandbox(t)
 	requirePOSIXShell(t)
 	dir := t.TempDir()
 	gitInitRepo(t, dir)
@@ -238,6 +240,7 @@ func TestGitDiffDoesNotRunExternalDiffDriver(t *testing.T) {
 }
 
 func TestGitDiffDoesNotRunTextconvDriver(t *testing.T) {
+	needSandbox(t)
 	requirePOSIXShell(t)
 	dir := t.TempDir()
 	gitInitRepo(t, dir)
@@ -265,6 +268,7 @@ func TestGitDiffDoesNotRunTextconvDriver(t *testing.T) {
 }
 
 func TestGitDiffDropsExternalDiffEnvironment(t *testing.T) {
+	needSandbox(t)
 	requirePOSIXShell(t)
 	dir := t.TempDir()
 	gitInitRepo(t, dir)
@@ -294,6 +298,7 @@ func TestGitDiffDropsExternalDiffEnvironment(t *testing.T) {
 // neutralise: a clean filter runs on status and diff with every documented flag.
 // The result must be labelled, and the harness must not present the output as raw.
 func TestGitOutputLabelsActiveCleanFilter(t *testing.T) {
+	needSandbox(t)
 	requirePOSIXShell(t)
 	dir := t.TempDir()
 	gitInitRepo(t, dir)
@@ -325,6 +330,7 @@ func TestGitOutputLabelsActiveCleanFilter(t *testing.T) {
 // TestGitOutputUnlabelledWithoutFilters is the negative control for the label: an
 // ordinary repository must not carry the notice, so the label stays meaningful.
 func TestGitOutputUnlabelledWithoutFilters(t *testing.T) {
+	needSandbox(t)
 	isolateGitConfig(t)
 	dir := t.TempDir()
 	gitInitRepo(t, dir)
@@ -347,6 +353,7 @@ func TestGitOutputUnlabelledWithoutFilters(t *testing.T) {
 // `status` works normally. Labelling that would tell the model its output was
 // transformed when it was not.
 func TestGitOutputUnlabelledWhenAttributeNamesAnUnconfiguredDriver(t *testing.T) {
+	needSandbox(t)
 	isolateGitConfig(t)
 	dir := t.TempDir()
 	gitInitRepo(t, dir)
@@ -404,6 +411,7 @@ func TestConfiguredFilterNames(t *testing.T) {
 // TestFingerprintStillObservableWithHardening proves the hardening did not break
 // the per-turn fingerprint: a real change is still detected.
 func TestFingerprintStillObservableWithHardening(t *testing.T) {
+	needSandbox(t)
 	isolateGitConfig(t)
 	dir := t.TempDir()
 	gitInitRepo(t, dir)

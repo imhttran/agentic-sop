@@ -18,19 +18,13 @@ import (
 // (sandbox-exec cannot nest; bwrap needs unprivileged user namespaces).
 func needSandbox(t *testing.T) {
 	t.Helper()
-	name, bin := backendFor(runtime.GOOS)
-	if name == "" {
-		t.Skipf("no sandbox backend on %s", runtime.GOOS)
-	}
-	probe := map[string][]string{
-		"seatbelt":   {bin, "-p", "(version 1)(allow default)", "true"},
-		"bubblewrap": {bin, "--ro-bind", "/", "/", "--unshare-net", "true"},
-	}[name]
-	if probe == nil {
-		t.Skipf("no start probe for backend %q", name)
-	}
-	if err := exec.Command(probe[0], probe[1:]...).Run(); err != nil {
-		t.Skipf("%s cannot start here: %v", probe[0], err)
+	if err := SandboxRunnable(); err != nil {
+		// The sandbox-enabled integration job sets this so a runner that lost its
+		// backend fails the job instead of reporting a green suite of skips.
+		if os.Getenv("SOP_SANDBOX_REQUIRED") == "1" {
+			t.Fatalf("SOP_SANDBOX_REQUIRED=1 but no runnable sandbox backend: %v", err)
+		}
+		t.Skipf("no runnable sandbox backend: %v", err)
 	}
 }
 
@@ -49,6 +43,26 @@ func sandboxed(t *testing.T, root, script string) error {
 	return err
 }
 
+// wrappedCmd builds the command for an already-wrapped sandbox argv. It names the
+// backend program literally, so the test suite keeps one reviewed exec site per
+// backend instead of a dynamic one.
+func wrappedCmd(t *testing.T, root string, argv, env []string) *exec.Cmd {
+	t.Helper()
+	name, _ := backendFor(runtime.GOOS)
+	var cmd *exec.Cmd
+	switch name {
+	case "seatbelt":
+		cmd = exec.Command("sandbox-exec", argv[1:]...)
+	case "bubblewrap":
+		cmd = exec.Command("bwrap", argv[1:]...)
+	default:
+		t.Fatalf("no sandbox backend on %s", runtime.GOOS)
+	}
+	cmd.Dir = root
+	cmd.Env = env
+	return cmd
+}
+
 // sandboxedOutput is sandboxed with the child's combined output.
 func sandboxedOutput(t *testing.T, root, script string) (string, error) {
 	t.Helper()
@@ -57,52 +71,15 @@ func sandboxedOutput(t *testing.T, root, script string) (string, error) {
 		t.Fatal(err)
 	}
 	defer cleanup()
-	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.Dir = root
-	cmd.Env = env
-	out, err := cmd.CombinedOutput()
+	out, err := wrappedCmd(t, root, argv, env).CombinedOutput()
 	return string(out), err
 }
 
-// unsandboxed selects the operator's policy-only mode for a test. The override
-// alone is not enough since D4-5: the acknowledgement goes with it.
-func unsandboxed(t *testing.T) {
-	t.Helper()
-	t.Setenv(IsolationEnv, "off")
-	t.Setenv(UnsandboxedAckEnv, "1")
-}
-
-func TestRunCommandIsolationOffKeepsExecCapturedPath(t *testing.T) {
-	unsandboxed(t)
-	log := NewAuditLog(0)
-	h := New(t.TempDir(), DefaultConfig(), log)
-	if _, err := h.Run(context.Background(), ToolRunCommand, map[string]any{"command": "go list ./..."}); err != nil {
-		t.Fatal(err)
-	}
-	if d := log.Records()[0].Detail; d != "" {
-		t.Fatalf("isolation off: audit detail = %q, want empty", d)
-	}
-}
-
-// The override alone must not weaken the boundary: without the acknowledgement
-// the command still runs inside the sandbox.
-func TestRunCommandIsolationOffWithoutAckStaysSandboxed(t *testing.T) {
-	needSandbox(t)
-	t.Setenv(IsolationEnv, "off")
-	t.Setenv(UnsandboxedAckEnv, "")
-	log := NewAuditLog(0)
-	h := New(t.TempDir(), DefaultConfig(), log)
-	if _, err := h.Run(context.Background(), ToolRunCommand, map[string]any{"command": "go list ./..."}); err != nil {
-		t.Fatalf("run failed: %v", err)
-	}
-	if d := log.Records()[0].Detail; !strings.Contains(d, "isolate=") {
-		t.Fatalf("unacknowledged override: audit detail = %q, want a sandboxed run", d)
-	}
-}
-
-// A model-controlled child must not see the control switches, so a nested SOP
-// process decides its own isolation instead of inheriting this one's.
+// The retired control switches must never reach a model-controlled child: a nested
+// SOP process must not inherit a stale value, and a command has no reason to see
+// one. Isolation is mandatory, so there is no state to report.
 func TestRunCommandChildEnvironmentDropsIsolationControls(t *testing.T) {
+	needSandbox(t)
 	fixture := `package fixture
 
 import (
@@ -116,88 +93,30 @@ func TestPrintControls(t *testing.T) {
 	fmt.Println("ack:" + os.Getenv("SOP_AGENT_RUN_COMMAND_UNSANDBOXED_ACK"))
 }
 `
-	for _, policyOnly := range []bool{false, true} {
-		name := "sandboxed"
-		if policyOnly {
-			name = "policy_only"
-		}
-		t.Run(name, func(t *testing.T) {
-			if policyOnly {
-				unsandboxed(t)
-			} else {
-				needSandbox(t)
-				t.Setenv(IsolationEnv, "")
-				t.Setenv(UnsandboxedAckEnv, "")
-			}
-			root := t.TempDir()
-			writeRepoFile(t, root, "go.mod", "module fixture\n\ngo 1.21\n")
-			writeRepoFile(t, root, "controls_test.go", fixture)
-			h := New(root, DefaultConfig(), NewAuditLog(0))
-			out, err := h.Run(context.Background(), ToolRunCommand, map[string]any{
-				"command": "go test -run TestPrintControls -v ./...",
-			})
-			if err != nil {
-				t.Fatalf("run failed: %v (%s)", err, out)
-			}
-			if strings.Contains(out, "iso:off") || strings.Contains(out, "iso:1") {
-				t.Errorf("the child saw the isolation override: %s", out)
-			}
-			if strings.Contains(out, "ack:1") || strings.Contains(out, "ack:true") {
-				t.Errorf("the child saw the acknowledgement: %s", out)
-			}
-			if !strings.Contains(out, "iso:") {
-				t.Errorf("the fixture did not report the variable state: %s", out)
-			}
-		})
+	root := t.TempDir()
+	writeRepoFile(t, root, "go.mod", "module fixture\n\ngo 1.21\n")
+	writeRepoFile(t, root, "controls_test.go", fixture)
+	h := New(root, DefaultConfig(), NewAuditLog(0))
+	out, err := h.Run(context.Background(), ToolRunCommand, map[string]any{
+		"command": "go test -run TestPrintControls -v ./...",
+	})
+	if err != nil {
+		t.Fatalf("run failed: %v (%s)", err, out)
 	}
-}
-
-// The startup notice exists so an operator can see what happened to the control.
-// An acknowledged override is reported as effective; an unacknowledged one is
-// reported as ignored, because isolation stayed on. An unrecognized value must
-// not disable isolation.
-func TestIsolationPolicyNotice(t *testing.T) {
-	t.Setenv(IsolationEnv, "")
-	t.Setenv(UnsandboxedAckEnv, "")
-	if got := IsolationPolicyNotice(); got != "" {
-		t.Fatalf("notice with the default in place = %q, want empty", got)
+	if strings.Contains(out, "iso:off") || strings.Contains(out, "iso:1") {
+		t.Errorf("the child saw the retired isolation override: %s", out)
 	}
-	for _, v := range []string{"off", "0", "false", "no", "OFF"} {
-		t.Run(v, func(t *testing.T) {
-			t.Setenv(IsolationEnv, v)
-			if !hasBackend(runtime.GOOS) {
-				// B1: the override has no effect where no backend exists.
-				t.Setenv(UnsandboxedAckEnv, "1")
-				if got := IsolationPolicyNotice(); got != "" {
-					t.Fatalf("notice for %q on %s = %q, want none: the override cannot disable isolation here", v, runtime.GOOS, got)
-				}
-				return
-			}
-			t.Setenv(UnsandboxedAckEnv, "")
-			ignored := IsolationPolicyNotice()
-			if !strings.Contains(ignored, IsolationEnv) || !strings.Contains(ignored, UnsandboxedAckEnv) || !strings.Contains(ignored, "remains in effect") {
-				t.Fatalf("unacknowledged notice for %q = %q, want it to name both variables and say isolation remains", v, ignored)
-			}
-			t.Setenv(UnsandboxedAckEnv, "1")
-			honoured := IsolationPolicyNotice()
-			if !strings.Contains(honoured, IsolationEnv) || !strings.Contains(honoured, "policy checks only") {
-				t.Fatalf("acknowledged notice for %q = %q, want it to name the variable and the effect", v, honoured)
-			}
-		})
+	if strings.Contains(out, "ack:1") || strings.Contains(out, "ack:true") {
+		t.Errorf("the child saw the retired acknowledgement: %s", out)
 	}
-	for _, v := range []string{"bogus", "maybe", "2"} {
-		t.Setenv(IsolationEnv, v)
-		t.Setenv(UnsandboxedAckEnv, "1")
-		if got := IsolationPolicyNotice(); got != "" {
-			t.Fatalf("an unrecognized value %q produced a notice: %q", v, got)
-		}
+	if !strings.Contains(out, "iso:") {
+		t.Errorf("the fixture did not report the variable state: %s", out)
 	}
 }
 
 // Isolation is required by default: with no configuration and no override, a
 // command runs inside the backend the platform provides.
 func TestRunCommandIsolationIsOnByDefault(t *testing.T) {
-	t.Setenv(IsolationEnv, "")
 	needSandbox(t)
 	log := NewAuditLog(0)
 	h := New(t.TempDir(), DefaultConfig(), log)
@@ -213,7 +132,6 @@ func TestRunCommandIsolationIsOnByDefault(t *testing.T) {
 // Windows B1: a platform with no backend denies the command instead of running it
 // unsandboxed. The empty PATH reproduces the unsupported-platform case on any host.
 func TestRunCommandIsolationDefaultsToFailClosed(t *testing.T) {
-	t.Setenv(IsolationEnv, "")
 	t.Setenv("PATH", t.TempDir()) // no sandbox backend
 	log := NewAuditLog(0)
 	h := New(t.TempDir(), DefaultConfig(), log)
@@ -229,7 +147,6 @@ func TestRunCommandIsolationDefaultsToFailClosed(t *testing.T) {
 }
 
 func TestRunCommandIsolationOnFailsClosedWithoutBackend(t *testing.T) {
-	t.Setenv(IsolationEnv, "1")
 	t.Setenv("PATH", t.TempDir()) // no sandbox-exec on PATH
 	log := NewAuditLog(0)
 	h := New(t.TempDir(), DefaultConfig(), log)
@@ -763,10 +680,7 @@ func TestIsolateScrubsSecretEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer cleanup()
-	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.Dir = root
-	cmd.Env = env
-	out, err := cmd.CombinedOutput()
+	out, err := wrappedCmd(t, root, argv, env).CombinedOutput()
 	if err != nil {
 		t.Fatalf("sandboxed env: %v: %s", err, out)
 	}
@@ -829,11 +743,11 @@ func TestIsolateKeepsArgvVerbatim(t *testing.T) {
 	}
 }
 
-// Every run_command child gets a scrubbed environment, so the operator disabling
-// the sandbox does not also hand SOP's own credentials to a model-authored
-// command. An ordinary neighbour stays visible, which proves the filter is
-// specific rather than "drop everything".
+// Every run_command child gets a scrubbed environment, so a model-authored
+// command never inherits SOP's own credentials. An ordinary neighbour stays
+// visible, which proves the filter is specific rather than "drop everything".
 func TestRunCommandScrubsCredentialEnvironment(t *testing.T) {
+	needSandbox(t)
 	fixture := `package fixture
 
 import (
@@ -848,18 +762,8 @@ func TestPrintEnv(t *testing.T) {
 	fmt.Println("shaped:" + os.Getenv("SOP_TEST_NEUTRAL_NAME"))
 }
 `
-	for _, isolate := range []bool{true, false} {
-		name := "isolation_off"
-		if isolate {
-			name = "isolation_on"
-		}
-		t.Run(name, func(t *testing.T) {
-			if isolate {
-				needSandbox(t)
-				t.Setenv(IsolationEnv, "")
-			} else {
-				unsandboxed(t)
-			}
+	{
+		{
 			root := t.TempDir()
 			writeRepoFile(t, root, "go.mod", "module fixture\n\ngo 1.21\n")
 			writeRepoFile(t, root, "env_test.go", fixture)
@@ -884,14 +788,10 @@ func TestPrintEnv(t *testing.T) {
 			if strings.Contains(out, "AKIAIOSFODNN7EXAMPLE") {
 				t.Errorf("credential-shaped value reached the child: %s", out)
 			}
-			detail := log.Records()[0].Detail
-			if isolate && !strings.Contains(detail, "isolate=") {
-				t.Errorf("isolation on: audit detail = %q, want a sandboxed run", detail)
+			if detail := log.Records()[0].Detail; !strings.Contains(detail, "isolate=") {
+				t.Errorf("audit detail = %q, want a sandboxed run", detail)
 			}
-			if !isolate && detail != "" {
-				t.Errorf("isolation off: audit detail = %q, want an unsandboxed run", detail)
-			}
-		})
+		}
 	}
 }
 

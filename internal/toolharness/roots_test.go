@@ -34,6 +34,7 @@ func rootsFixture(t *testing.T, mode RootMode) (h *Harness, primary, sibling str
 }
 
 func TestAuthorizedRootRead(t *testing.T) {
+	needSandbox(t)
 	h, _, sibling := rootsFixture(t, RootReadOnly)
 	ctx := context.Background()
 
@@ -144,6 +145,7 @@ func TestSummarizeRequestRecordsRootAndCwd(t *testing.T) {
 }
 
 func TestExternalCommandDoesNotMutatePrimaryRepository(t *testing.T) {
+	needSandbox(t)
 	h, _, sibling := rootsFixture(t, RootReadOnly)
 	ctx := context.Background()
 	if err := os.WriteFile(filepath.Join(sibling, "z.go"), []byte("package b\nfunc  F(){}\n"), 0o644); err != nil {

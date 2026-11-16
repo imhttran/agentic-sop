@@ -47,50 +47,35 @@ func markerExists(t *testing.T, root string) bool {
 	return false
 }
 
-// Windows B1: a platform with no supported backend must refuse, whatever the
-// override or the programmatic opt-in says. This is the regression for the
-// override bypass, and it runs on every host because the decision is pure.
-func TestIsolationDecisionUnsupportedPlatforms(t *testing.T) {
-	overrides := []string{"", "on", "1", "true", "off", "0", "false", "no", "OFF", " off ", "bogus", "2"}
-	acks := []string{"", "1", "true", "yes", "bogus"}
+// Isolation is unconditional. There is no platform, configuration value, or
+// environment value that makes policy-only execution legal; the refusal for a
+// platform with no backend comes from sandboxArgv, not from a configurable
+// decision. This replaces the old pure `isolationDecision` table.
+func TestIsolationIsUnconditional(t *testing.T) {
+	if !sandboxRequired() {
+		t.Fatal("sandboxRequired() = false; isolation must be mandatory")
+	}
 	for _, goos := range []string{"windows", "plan9", "aix"} {
-		for _, override := range overrides {
-			for _, ack := range acks {
-				for _, isolate := range []bool{false, true} {
-					if !isolationDecision(goos, override, ack, isolate) {
-						t.Errorf("goos=%s override=%q ack=%q IsolateCommands=%v: policy-only execution allowed, want refusal",
-							goos, override, ack, isolate)
-					}
-				}
-			}
+		if hasBackend(goos) {
+			t.Errorf("goos=%s: hasBackend = true, want false", goos)
+		}
+	}
+	for _, goos := range []string{"darwin", "linux"} {
+		if !hasBackend(goos) {
+			t.Errorf("goos=%s: hasBackend = false, want true", goos)
 		}
 	}
 }
 
-// The authorized behavior on a platform with a backend is unchanged.
-func TestIsolationDecisionSupportedPlatforms(t *testing.T) {
-	for _, goos := range []string{"darwin", "linux"} {
-		if !isolationDecision(goos, "", "", false) {
-			t.Errorf("goos=%s default: isolation not requested", goos)
-		}
-		for _, override := range []string{"off", "0", "false", "no", "OFF", " off "} {
-			for _, ack := range []string{"", "bogus", "0", "false", "no"} {
-				if !isolationDecision(goos, override, ack, false) {
-					t.Errorf("goos=%s override=%q ack=%q: unacknowledged override took effect", goos, override, ack)
-				}
-			}
-			for _, ack := range []string{"1", "true", "yes", " YES "} {
-				if isolationDecision(goos, override, ack, false) {
-					t.Errorf("goos=%s override=%q ack=%q: acknowledged override ignored", goos, override, ack)
-				}
-			}
-			if !isolationDecision(goos, override, "1", true) {
-				t.Errorf("goos=%s: Config.IsolateCommands must win over an acknowledged override", goos)
-			}
-		}
-		for _, override := range []string{"on", "1", "true", "yes", "bogus", "2"} {
-			if !isolationDecision(goos, override, "1", false) {
-				t.Errorf("goos=%s override=%q: the default was not kept", goos, override)
+// The retired D4-5 override and acknowledgement are inert. Every spelling, with
+// and without the acknowledgement, leaves isolation required.
+func TestRetiredOverrideVariablesHaveNoEffect(t *testing.T) {
+	for _, override := range []string{"", "on", "1", "true", "yes", "off", "0", "false", "no", "OFF", " off ", "bogus", "2"} {
+		for _, ack := range []string{"", "1", "true", "yes", "bogus"} {
+			t.Setenv(retiredIsolationEnv, override)
+			t.Setenv(retiredAckEnv, ack)
+			if !sandboxRequired() {
+				t.Fatalf("override=%q ack=%q disabled isolation", override, ack)
 			}
 		}
 	}
@@ -120,8 +105,8 @@ func TestRunCommandIsolationOnWindowsRefuses(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			t.Setenv(IsolationEnv, c.override)
-			t.Setenv(UnsandboxedAckEnv, "1")
+			t.Setenv(retiredIsolationEnv, c.override)
+			t.Setenv(retiredAckEnv, "1")
 			root := t.TempDir()
 			writeMarkerModule(t, root)
 			cfg := DefaultConfig()

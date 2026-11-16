@@ -44,6 +44,7 @@ func requestedCount(h *Harness) int {
 // with no attempt-local change is asked once for the existing already-satisfied object, and
 // the existing verifier closes the task with no mutation credited.
 func TestExistingWorkVerificationClosesCommittedWork(t *testing.T) {
+	needSandboxAvailable(t)
 	dir, req := committedFixture(t)
 	_, srv := newFakeOllama(t, readAdd, readAddTest, validateAdd, plainCompletion, satisfiedFinal)
 	cfg := testConfig(srv.URL)
@@ -117,6 +118,7 @@ func TestFalseCompletionClaimStillFailsClosed(t *testing.T) {
 // the evidence files, and no attempt-local change. It must close through the existing
 // already-satisfied verification with no new implementation and no mutation.
 func TestNEXT002ScenarioClosesWithNoNewChanges(t *testing.T) {
+	needSandboxAvailable(t)
 	dir, req := committedFixture(t)
 	req.AcceptanceCriteria = []string{"Add returns the sum"}
 	req.ValidationCommands = []string{"go test ./..."}

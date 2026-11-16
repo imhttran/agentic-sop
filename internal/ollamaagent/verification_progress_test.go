@@ -26,6 +26,7 @@ func writeGoModule(t *testing.T, dir string) {
 // required command resets the streak, and repeating it cannot keep the run alive
 // indefinitely.
 func TestRequiredValidationCommandIsVerificationProgress(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	writeGoModule(t, dir)
 	testCommand := `{"tool":"run_command","args":{"command":"go test ./..."}}`
@@ -58,6 +59,7 @@ func TestRequiredValidationCommandIsVerificationProgress(t *testing.T) {
 // to the task's configured validation commands, so an unrelated successful command
 // remains a stale turn.
 func TestUnrequiredCommandDoesNotEarnVerificationProgress(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	writeGoModule(t, dir)
 	testCommand := `{"tool":"run_command","args":{"command":"go test ./..."}}`

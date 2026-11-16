@@ -157,6 +157,7 @@ func TestRunCommandRejectsDestructiveCall(t *testing.T) {
 }
 
 func TestRunCommandExecutesSafeCommand(t *testing.T) {
+	needSandboxAvailable(t)
 	root := t.TempDir()
 	if out, err := exec.Command("git", "init", "-q", root).CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v (%s)", err, out)

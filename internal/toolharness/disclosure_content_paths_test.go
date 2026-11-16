@@ -23,6 +23,7 @@ const (
 // raw bytes at this boundary; the model-bound redaction in ollamaagent is tested
 // separately. Ordinary source, .env.example, and .env.sample remain usable.
 func TestCredentialPathDenialAndBoundaryDivision(t *testing.T) {
+	needSandbox(t)
 	root := t.TempDir()
 	write := func(name, content string) {
 		t.Helper()

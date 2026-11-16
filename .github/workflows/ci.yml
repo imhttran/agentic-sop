@@ -83,6 +83,31 @@ jobs:
           SOP_SECURITY_DOWNLOAD_CACHE: ${{ runner.temp }}/sop-security-downloads
         run: bash scripts/checks/security-integration.sh
 
+  # Sandbox-enabled integration for the execution boundary (M1 + G3 + G4).
+  #
+  # The ordinary `check` job runs on an image with no bubblewrap, so every
+  # sandbox-dependent test skips there. A green ordinary job is therefore not
+  # evidence that the boundary works. This job gives the boundary a real backend
+  # and runs the two affected suites with SOP_SANDBOX_REQUIRED=1, which turns a
+  # skip into a failure.
+  #
+  # Ubuntu 22.04 is chosen deliberately: it permits unprivileged user namespaces,
+  # so bubblewrap works without changing the host's AppArmor policy. The script
+  # probes the backend first and fails loudly if it cannot start.
+  sandbox-linux:
+    name: sandbox-backed execution boundary (Linux)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: install bubblewrap
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - name: verify the backend can start and run the sandbox-dependent suites
+        run: bash scripts/checks/sandbox-integration.sh
+
   # The suite under the race detector, which the lifecycle and scheduler tests rely on.
   race:
     name: race detector

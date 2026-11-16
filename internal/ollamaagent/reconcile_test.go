@@ -145,6 +145,7 @@ func TestMutationEvidenceIsInvocationScoped(t *testing.T) {
 // changes_expected=true over a working tree that was already dirty before the
 // invocation is reconciled to false when the invocation itself changed nothing.
 func TestPreDirtyNoInvocationChangeIsNotAttributed(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	gitInit(t, dir)
 	preDirtyWorktree(t, dir)
@@ -232,6 +233,7 @@ func TestPreDirtyContentPreservedAcrossInvocation(t *testing.T) {
 // TestPreDirtyStagedChangeNotAttributed covers a staged pre-existing change (one
 // already in the index before the invocation).
 func TestPreDirtyStagedChangeNotAttributed(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	gitInit(t, dir)
 	writeFile(t, dir, "staged.txt", "committed")
@@ -260,6 +262,7 @@ func TestPreDirtyStagedChangeNotAttributed(t *testing.T) {
 // TestChangedSinceReportsBaselineDivergence proves ChangedSince is false for a
 // tree unchanged since the baseline and true once the invocation changes it.
 func TestChangedSinceReportsBaselineDivergence(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	gitInit(t, dir)
 	writeFile(t, dir, "file.txt", "committed")
@@ -295,6 +298,7 @@ func TestChangedSinceReportsBaselineDivergence(t *testing.T) {
 // content is not a change, so a restored file is never attributed to the
 // invocation.
 func TestChangedSinceIgnoresRestoredFile(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	gitInit(t, dir)
 	writeFile(t, dir, "file.txt", "committed")
@@ -356,6 +360,7 @@ func TestReconcileOutcomeFingerprintFailureKeepsModelClaim(t *testing.T) {
 // TestReconcileOutcomeOverrideBothDirections proves reconciliation corrects the
 // model's claim in both directions.
 func TestReconcileOutcomeOverrideBothDirections(t *testing.T) {
+	needSandboxAvailable(t)
 	t.Run("model true observed false", func(t *testing.T) {
 		dir := t.TempDir()
 		gitInit(t, dir)
@@ -411,6 +416,7 @@ func TestReconcileOutcomeOverrideBothDirections(t *testing.T) {
 // outcome vocabulary are unchanged: only status/summary/reason/changes_expected,
 // and non-completed outcomes carry no changes_expected.
 func TestOutcomeWireShapeIsSOPCompatible(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	gitInit(t, dir)
 	h := New(testConfig("http://fake"), dir)
@@ -448,6 +454,7 @@ func TestOutcomeWireShapeIsSOPCompatible(t *testing.T) {
 // wrapped as a completed outcome whose changes_expected comes from the
 // invocation's mutation evidence, not from any model claim.
 func TestEnsureStructuredOutcomeProseUsesObservedReality(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	gitInit(t, dir)
 	h := New(testConfig("http://fake"), dir)

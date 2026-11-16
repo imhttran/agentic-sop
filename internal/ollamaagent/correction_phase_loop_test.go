@@ -38,6 +38,7 @@ func loopCorrectionFixture(t *testing.T) (string, agent.Request) {
 // read-only command the run would otherwise refuse is permitted, and the corrected claim is
 // then accepted. It exercises the actual harness, loop, and tool policy.
 func TestLoopCorrectionPermitsReadAfterWindow(t *testing.T) {
+	needSandboxAvailable(t)
 	dir, req := loopCorrectionFixture(t)
 	// turn 1 read (credited), turn 2 read (post-window, uncredited, stale turn),
 	// turn 3 claim missing the required command -> correction offered,
