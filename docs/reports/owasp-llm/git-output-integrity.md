@@ -1,9 +1,9 @@
 # Git output integrity — repository-configured helpers and manipulated output
 
-**Status:** `IMPLEMENTED` / `VERIFIED` locally on `darwin arm64` for the mechanisms
-listed below; **NOT MERGED**. The clean/smudge-filter residual is `OPEN` and is
-**not** accepted. The wider containment proposal (M1 + G3 + G4) is **not approved**
-and not implemented here.
+**Status:** `IMPLEMENTED` / `VERIFIED`; **merged at `2f544a62`** via PR #491
+(2026-11-16, full CI green: 13 of 13 checks). The clean/smudge-filter residual is
+`OPEN` and is **not** accepted. The wider containment proposal (M1 + G3 + G4) is
+**not approved** and not implemented.
 
 **Revision:** `origin/main` at `c55b42ff` (2026-11-16), darwin arm64, Go 1.27.1,
 Git 2.50.1 (Apple Git-155).
@@ -148,8 +148,8 @@ cargo-audit + OSV integration job, installer/plugin packaging, the Windows
 CodeQL analyses (runs
 [43924409662](https://github.com/imhttran/agentic-sop/actions/runs/43924409662),
 [43924403486](https://github.com/imhttran/agentic-sop/actions/runs/43924403486)).
-That makes the CI evidence real rather than local-only; the change is still
-**unmerged**.
+That makes the CI evidence real rather than local-only. The change is merged at
+`2f544a62` (PR #491).
 
 Scanner, pinned adapters, after the change:
 

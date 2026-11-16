@@ -40,7 +40,7 @@ Semgrep+Gitleaks+OSV integration, installer packaging, Windows, tagged
 acceptance, CodeQL; runs
 [43924409662](https://github.com/imhttran/agentic-sop/actions/runs/43924409662),
 [43924403486](https://github.com/imhttran/agentic-sop/actions/runs/43924403486)).
-The change is **unmerged**.
+The code change is **merged at `2f544a62`** (PR #491).
 
 ```
 go build ./...                                                             # ok
@@ -117,7 +117,7 @@ findings 101, suppressed 84, unsuppressed 17, blocking 1
 - **Verified in this pass:** pinned scanners re-run to `COMPLETE` coverage; the
   binary pin refused an unpinned binary (fail-closed); a scanner failure produced
   `verdict FAIL`, never `PASS`; baseline fingerprints are unique and unexpired.
-- **Implemented in this pass (local, unmerged):** git invocation hardening and a
+- **Implemented in this pass (merged at `2f544a62`):** git invocation hardening and a
   labelled clean-filter residual — see
   [git-output-integrity.md](git-output-integrity.md).
 - **Remaining gaps:** no committed execution-time pin for cargo-audit, Semgrep,
@@ -162,7 +162,7 @@ findings 101, suppressed 84, unsuppressed 17, blocking 1
   fail-closed refusal where no backend exists (Windows); the override requires
   `SOP_AGENT_RUN_COMMAND_UNSANDBOXED_ACK`; control variables are dropped from
   model-controlled child environments; a per-run throwaway build cache.
-- **Implemented in this pass (PR #491, unmerged):** every SOP-run git command now
+- **Implemented in this pass (merged at `2f544a62`, PR #491):** every SOP-run git command now
   carries `-c core.fsmonitor=false` and, for `diff`,
   `--no-ext-diff --no-textconv`, and inherits a filtered environment. Measured:
   this blocks `diff.external`, `GIT_EXTERNAL_DIFF`, `core.fsmonitor`, and
@@ -231,12 +231,12 @@ findings 101, suppressed 84, unsuppressed 17, blocking 1
 
 ## Implemented in this pass
 
-| Change                                            | Files                                                                          | Status                                |
-| ------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------- |
-| Git invocation hardening + clean-filter labelling | `internal/toolharness/git_integrity.go`, `harness.go`, `git_integrity_test.go` | PR #491; CI 13/13 green; **unmerged** |
-| Evidence: git output integrity                    | `docs/reports/owasp-llm/git-output-integrity.md`                               | PR #491; **unmerged**                 |
-| This acceptance report                            | `docs/reports/owasp-llm/acceptance-report-2026-11-16.md`                       | PR #492 (chained); **unmerged**       |
-| Plan of record                                    | `docs/plans/PLAN-OWASP-LLM-E2E-REMEDIATION.md`                                 | PR #492 (chained); **unmerged**       |
+| Change                                            | Files                                                                          | Status                                         |
+| ------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------- |
+| Git invocation hardening + clean-filter labelling | `internal/toolharness/git_integrity.go`, `harness.go`, `git_integrity_test.go` | merged at `2f544a62` (PR #491); CI 13/13 green |
+| Evidence: git output integrity                    | `docs/reports/owasp-llm/git-output-integrity.md`                               | merged at `2f544a62` (PR #491)                 |
+| This acceptance report                            | `docs/reports/owasp-llm/acceptance-report-2026-11-16.md`                       | this documentation PR                          |
+| Plan of record                                    | `docs/plans/PLAN-OWASP-LLM-E2E-REMEDIATION.md`                                 | this documentation PR                          |
 
 ## Decisions requiring operator approval
 
@@ -255,9 +255,11 @@ findings 101, suppressed 84, unsuppressed 17, blocking 1
 
 ## Honest limitations of this report
 
-- Nothing is merged. The git hardening is PR #491 (CI green) and this
-  reconciliation is PR #492, chained on #491. Both await review and a merge
-  decision.
+- The code change is merged at `2f544a62` (PR #491) with full CI green. This
+  document and its sibling reconciliation files land in a follow-up documentation
+  PR. PR #492 had been merged into the `security/git-output-integrity` branch
+  rather than `main`, so the docs were not on `main` when #491 merged; this PR
+  corrects that.
 - Full CI was not run locally; it passed on the PR head for #491. The docs PR
   itself is documentation-only.
 - Live-provider campaigns were not re-run; the campaign evidence cited is the

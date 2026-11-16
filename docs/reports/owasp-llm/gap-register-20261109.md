@@ -38,7 +38,7 @@ with the recorded 101/84/17/1 result and 84 unique, unexpired baseline entries;
 an unpinned Gitleaks binary failed closed. PRs #488/#489 and the
 `TestPersistedRepoIndexReadersVerifyRows` guard were re-verified. The unresolved
 LLM03/LLM06 review P2 (Git helpers can alter or suppress git output under
-containment) has a local, **unmerged** hardening and a new open residual:
+containment) has a merged hardening (PR #491, `2f544a62`) and a new open residual:
 [git-output-integrity.md](git-output-integrity.md). No baseline entry, residual
 disposition, `security.mode`, or `required_categories` changed. Consolidated view:
 [acceptance-report-2026-11-16.md](acceptance-report-2026-11-16.md).

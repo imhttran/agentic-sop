@@ -3,8 +3,8 @@
 **As of:** `main` at `c55b42ff` (2026-11-16), through PR #489. The approved D4
 baseline is merged; the D4-5 `run_command` residual remains unaccepted and
 blocking; enforcement stays report-only. This pass adds no merged change — it
-records a verification sweep and one local, unmerged hardening (git output
-integrity), and restates the decisions that remain open. See
+records a verification sweep and one merged hardening (PR #491, `2f544a62`) for git
+output integrity, and restates the decisions that remain open. See
 [acceptance-report-2026-11-16.md](acceptance-report-2026-11-16.md).
 
 This statement answers one question for each of the ten OWASP LLM risks: what
@@ -227,7 +227,7 @@ unique entries, 84 matched, 0 expired. Fail-closed was demonstrated: with an
 unpinned Gitleaks binary the `secrets` category reported `FAILED` and the verdict
 stayed `FAIL`; it never produced a `PASS`.
 
-**Local, unmerged hardening — git output integrity.** The unresolved review
+**Merged hardening — git output integrity (PR #491, `2f544a62`).** The unresolved review
 finding _"sandboxing contains configured Git helpers but does not guarantee
 unmodified Git output"_ is addressed without changing sandbox policy. Every
 SOP-run git command now carries `-c core.fsmonitor=false` (and, for `diff`,
@@ -236,7 +236,7 @@ execution-injection variables. Measured on Git 2.50.1, this blocks `diff.externa
 `GIT_EXTERNAL_DIFF`, `core.fsmonitor`, and textconv. A clean filter still executes
 (git has no switch) and is now **labelled** in the tool result rather than
 presented as raw. See [git-output-integrity.md](git-output-integrity.md). This is PR
-#491: full CI passed (13 of 13 checks) and it is **unmerged**. No baseline change.
+#491, merged at `2f544a62` with full CI green (13 of 13 checks). No baseline change.
 
 **Still blocked on the operator:** M1 + G3 + G4 (mandatory isolation for every
 model-reachable exec, sandboxed git, `.git` write deny) and the clean-filter
@@ -310,7 +310,7 @@ fingerprint policy. Neither is implemented.
     because the override does nothing. The PR #441 P2 recorded in #442 is fixed
     and pinned by `TestIsolationDecisionUnsupportedPlatforms` and, at runtime on
     Windows, `TestRunCommandIsolationOnWindowsRefuses`.
-  - (Local, unmerged, 2026-11-16) Every SOP-run git command is hardened so the
+  - (Merged 2026-11-16 at `2f544a62`, PR #491) Every SOP-run git command is hardened so the
     repository cannot make git launch a program: `-c core.fsmonitor=false`
     globally and `--no-ext-diff --no-textconv` for `diff`, plus a git child
     environment stripped of execution-injection variables. This covers `git_status`,

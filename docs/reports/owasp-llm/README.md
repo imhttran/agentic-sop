@@ -76,8 +76,8 @@ re-ran the pinned scanners and the packages behind each category; the full CI
 suite was not run. Result: scanner coverage `COMPLETE`, verdict `FAIL`, 101
 findings / 84 suppressed / 17 unsuppressed / 1 blocking — unchanged, and
 fail-closed was demonstrated with an unpinned Gitleaks binary. PRs #488/#489 and
-the persisted-index guard were re-verified. One local, **unmerged** hardening
-addresses the LLM03/LLM06 review P2 about Git helper output:
+the persisted-index guard were re-verified. One hardening, merged at `2f544a62`
+(PR #491), addresses the LLM03/LLM06 review P2 about Git helper output:
 [git-output-integrity.md](git-output-integrity.md). Consolidated view and
 remaining decisions: [acceptance-report-2026-11-16.md](acceptance-report-2026-11-16.md).
 

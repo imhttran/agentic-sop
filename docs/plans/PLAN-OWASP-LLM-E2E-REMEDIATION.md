@@ -31,16 +31,16 @@ acceptance.
 
 ## Work items, dependencies, acceptance criteria
 
-| # | Work item | Depends on | Acceptance criteria | Status |
-| --- | --- | --- | --- | --- |
-| W1 | Git output integrity: harden every SOP-run git invocation; label the non-neutralizable clean-filter case | none | canary tests fail before the change and pass after; scan unchanged at 101/84/17/1; fingerprints still detect changes | `IMPLEMENTED` / `VERIFIED` locally |
-| W2 | Verify supply-chain scanners end to end | none | pinned adapters run to `COMPLETE`; an unpinned binary fails closed; a scanner failure can never yield `PASS`; baseline fingerprints unique and unexpired | `VERIFIED` |
-| W3 | Verify the two merged LLM04 integrity fixes (#488, #489) and the index-reader guard | none | source + focused tests confirm the controls; no unaccepted defect found | `VERIFIED` |
-| W4 | Bounded verification of the remaining categories against their recorded evidence | none | focused package tests pass; residuals restated honestly | `VERIFIED` |
-| W5 | Reconcile README, coverage statement, gap register, evidence matrix to the verified state | W1–W4 | every claim is traceable to a file, test, or command in this pass; unmerged work is labelled unmerged | `DONE` |
-| W6 | M1 + G3 + G4: mandatory isolation for every model-reachable exec; deny `.git` writes | **operator authorization** | sandbox audit on every model-reachable exec; git tools refuse where no backend exists; `.git` writes refused | `BLOCKED` — awaiting approval |
-| W7 | Clean-filter fingerprint policy | **operator decision** | a stated choice between fail-closed-with-compatibility-cost and label-only | `BLOCKED` — awaiting decision |
-| W8 | Scanner enforcement (`report-only` → required categories) | **operator decision** | an explicit `mode` / `required_categories` change with its own authorization | `BLOCKED` — not requested |
+| #   | Work item                                                                                                | Depends on                 | Acceptance criteria                                                                                                                                      | Status                                                     |
+| --- | -------------------------------------------------------------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| W1  | Git output integrity: harden every SOP-run git invocation; label the non-neutralizable clean-filter case | none                       | canary tests fail before the change and pass after; scan unchanged at 101/84/17/1; fingerprints still detect changes                                     | `IMPLEMENTED` / `VERIFIED`; merged at `2f544a62` (PR #491) |
+| W2  | Verify supply-chain scanners end to end                                                                  | none                       | pinned adapters run to `COMPLETE`; an unpinned binary fails closed; a scanner failure can never yield `PASS`; baseline fingerprints unique and unexpired | `VERIFIED`                                                 |
+| W3  | Verify the two merged LLM04 integrity fixes (#488, #489) and the index-reader guard                      | none                       | source + focused tests confirm the controls; no unaccepted defect found                                                                                  | `VERIFIED`                                                 |
+| W4  | Bounded verification of the remaining categories against their recorded evidence                         | none                       | focused package tests pass; residuals restated honestly                                                                                                  | `VERIFIED`                                                 |
+| W5  | Reconcile README, coverage statement, gap register, evidence matrix to the verified state                | W1–W4                      | every claim is traceable to a file, test, or command in this pass; unmerged work is labelled unmerged                                                    | `DONE`                                                     |
+| W6  | M1 + G3 + G4: mandatory isolation for every model-reachable exec; deny `.git` writes                     | **operator authorization** | sandbox audit on every model-reachable exec; git tools refuse where no backend exists; `.git` writes refused                                             | `BLOCKED` — awaiting approval                              |
+| W7  | Clean-filter fingerprint policy                                                                          | **operator decision**      | a stated choice between fail-closed-with-compatibility-cost and label-only                                                                               | `BLOCKED` — awaiting decision                              |
+| W8  | Scanner enforcement (`report-only` → required categories)                                                | **operator decision**      | an explicit `mode` / `required_categories` change with its own authorization                                                                             | `BLOCKED` — not requested                                  |
 
 ## Sequence
 
@@ -64,11 +64,11 @@ acceptance.
 
 ## Verification gates
 
-| Gate | Command | Used by |
-| --- | --- | --- |
-| build | `go build ./...` | all |
-| vet | `go vet ./internal/toolharness/` | W1 |
-| focused tests | `go test ./internal/toolharness/ -count=1` and the packages named in the acceptance report | W1–W4 |
-| architecture guards | `go test ./internal/archtest/ -count=1` | W3, LLM10 process-group guard |
-| scanner | `sop security scan` with pinned adapters on `PATH` | W2 |
-| full CI | repository CI workflow | W5 closeout (NOT RUN in this pass) |
+| Gate                | Command                                                                                    | Used by                            |
+| ------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------- |
+| build               | `go build ./...`                                                                           | all                                |
+| vet                 | `go vet ./internal/toolharness/`                                                           | W1                                 |
+| focused tests       | `go test ./internal/toolharness/ -count=1` and the packages named in the acceptance report | W1–W4                              |
+| architecture guards | `go test ./internal/archtest/ -count=1`                                                    | W3, LLM10 process-group guard      |
+| scanner             | `sop security scan` with pinned adapters on `PATH`                                         | W2                                 |
+| full CI             | repository CI workflow                                                                     | W5 closeout (NOT RUN in this pass) |
