@@ -2514,7 +2514,10 @@ func applicableDecisionItems(d deps) []sopctx.Item {
 	}
 	head, dirty := repoState(dir)
 	repository := verifcache.RepositoryIdentity(head, dirty, "")
-	store := loadDecisionStore(dir)
+	store, err := loadDecisionStore(dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "run: %v\n", err)
+	}
 
 	var items []sopctx.Item
 	for _, scope := range []decisionmemory.Scope{

@@ -202,3 +202,16 @@ func listedID(t *testing.T, out, decision string) string {
 	}
 	return m[1]
 }
+
+// TestMemoryListWarnsOnUnreadableStore proves the read path reports an unreadable
+// decision store on stderr instead of silently applying nothing (OWASPA-001).
+func TestMemoryListWarnsOnUnreadableStore(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeFileT(t, dir, ".agent-sdlc/context/decisions.json", `{"schema":"unknown-future"}`)
+	code, out, errOut := runCLI(t, dir, "memory", "list")
+	if code != exitOK || !strings.Contains(out, "0 applicable decision") || !strings.Contains(errOut, "cannot be fully loaded") {
+		t.Errorf("list: code=%d stdout=%s stderr=%s", code, out, errOut)
+	}
+
+}
