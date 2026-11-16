@@ -205,8 +205,16 @@ waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-ga
 - D4-5 remains open. PRs #484/#486 merge the investigation and corrected
   M1+G3+G4 proposal: mandatory sandboxing for model-controlled commands and Git
   subprocesses, plus a `.git` write deny. This is documentation only—not approved
-  or implemented. Review still has an unresolved P2: sandboxing contains configured
-  Git helpers but does not disable their ability to alter or suppress Git output.
+  or implemented. The 2026-11-16 pass adds a local, **unmerged** hardening for the
+  review's P2 that sandboxing contains configured Git helpers but does not disable
+  their ability to alter or suppress Git output: every SOP-run git command is
+  hardened (`-c core.fsmonitor=false`, `--no-ext-diff --no-textconv` for `diff`) and
+  its environment is stripped of git execution-injection variables, which was
+  measured to block `diff.external`, `GIT_EXTERNAL_DIFF`, `core.fsmonitor`, and
+  textconv. A clean filter still executes and is now labelled, not trusted. That
+  change is PR #491 with full CI green (13 of 13 checks) and is **unmerged**. See
+  [git-output-integrity.md](docs/reports/owasp-llm/git-output-integrity.md) and the
+  [acceptance report](docs/reports/owasp-llm/acceptance-report-2026-11-16.md).
 - Every `exec.CommandContext` subprocess path binds process-group termination,
   enforced by an architecture guard. Token budgeting remains opt-in and is not a
   monetary cap.

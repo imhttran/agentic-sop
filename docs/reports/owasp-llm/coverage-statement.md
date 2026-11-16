@@ -1,8 +1,11 @@
 # OWASP LLM Top 10 — coverage statement
 
-**As of:** `main` at `7c6f4f26` (2026-11-14, through PR #486).
-Scanner enforcement remains report-only. The approved D4 baseline is merged;
-the D4-5 `run_command` residual remains unaccepted and blocking.
+**As of:** `main` at `c55b42ff` (2026-11-16), through PR #489. The approved D4
+baseline is merged; the D4-5 `run_command` residual remains unaccepted and
+blocking; enforcement stays report-only. This pass adds no merged change — it
+records a verification sweep and one local, unmerged hardening (git output
+integrity), and restates the decisions that remain open. See
+[acceptance-report-2026-11-16.md](acceptance-report-2026-11-16.md).
 
 This statement answers one question for each of the ten OWASP LLM risks: what
 SOP covers, where the evidence is, and what it does not cover, with the reason.
@@ -16,18 +19,18 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 
 ## Summary
 
-| OWASP 2025 | Repo plan / label | Risk                                                  | Coverage                                                                                                                                                                                                                                                                                                                                                          | Main remaining gap                                                                                                                                                                                                                                                               |
-| ---------- | ----------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| LLM01      | Plan 02 / LLM01   | Prompt Injection                                      | Covered (controls + bounded live campaigns)                                                                                                                                                                                                                                                                                                                       | Two models on macOS, one on Linux, one run per case; no universal claim                                                                                                                                                                                                          |
-| LLM02      | Plan 03 / LLM02   | Sensitive Information Disclosure                      | Covered for the user prompt and tool results (trace + macOS/Linux live campaigns); bounded evidence acceptance `RECORDED`; C1 unknown-format redaction `IMPLEMENTED` opt-in (PRs #361/#362/#364) with bounded Linux live `PASS`; focused C1 hardlink verification `PASS` for 4 scoped cases; Option C Phase 1 hardlink-alias denial `VERIFIED` on Linux and macOS | Not general DLP; four pre-C1 Linux residual exposures; hardlink aliases outside the identity registry (outside-workspace origins, Windows) with one pre-Option-C unlisted-value residual; Plan 03 acceptance `RECORDED` 16/16 (2026-11-12); C1 disabled by default; broader coverage `OPEN` |
-| LLM03      | Plan 04 / LLM04   | Supply Chain                                          | Partial; scanner integrity and per-platform pins are merged; the approved D4 baseline is merged at PR #482 (84 entries, 84 suppressed)                                                                                                                                                                                                                              | One `run_command` finding remains blocking and unaccepted under D4-5 R2; enforcement stays report-only. PRs #484/#486 merge the investigation and corrected M1+G3+G4 containment proposal, but no remediation is approved or implemented. Review still has an unresolved P2: sandboxing contains configured Git helpers but does not guarantee unmodified Git output. Publisher signatures remain deferred.       |
-| LLM04      | Plan 05 / LLM05   | Data and Model Poisoning                              | Partial                                                                                                                                                                                                                                                                                                                                                           | Integrity proves bytes, not benign content; provider training external                                                                                                                                                                                                           |
-| LLM05      | Plan 10 / LLM10   | Improper Output Handling                              | Covered for SOP's sinks                                                                                                                                                                                                                                                                                                                                           | Third-party rendering (terminal, IDE, Slack) external                                                                                                                                                                                                                            |
-| LLM06      | Plan 01 / LLM03   | Excessive Agency                                      | Covered (policy) + default-on sandbox on macOS and Linux                                                                                                                                                                                                                                                                                                          | Windows B1 refuses every override value and is fixed since PR #441's P2; cold build cache per run; residual hardlink, parent-environment and host-to-sandbox socket exposure                                                                                                                                                                                                                                 |
-| LLM07      | Plan 08 / LLM08   | System Prompt Leakage (repo: Hidden Context Exposure) | Partial                                                                                                                                                                                                                                                                                                                                                           | Prompt secrecy is not claimed by design                                                                                                                                                                                                                                          |
-| LLM08      | Plan 09 / LLM09   | Vector and Embedding Weaknesses                       | Covered for the shipped (disabled-by-default) path                                                                                                                                                                                                                                                                                                                | One live producer run (2026-11-12, `rag-template-rust`, PostgreSQL 17 + pgvector, `nomic-embed-text`): isolation, scope, positive controls and a poisoned chunk observed; `TIMEOUT` and cancellation not observed live                                                                                                                                                                                                                                     |
-| LLM09      | Plan 07 / LLM07   | Misinformation                                        | Partial, by scope                                                                                                                                                                                                                                                                                                                                                 | Factual correctness of model output is out of scope                                                                                                                                                                                                                              |
-| LLM10      | Plan 06 / LLM06   | Unbounded Consumption                                 | Covered for time/output bounds, selected process-group termination, and opt-in token budgets                                                                                                                                                                                                                                                                      | No dollar cap (no pricing data); every `exec.CommandContext` subprocess path binds a process group (guard-enforced; not on Windows)                                                                                                                                              |
+| OWASP 2025 | Repo plan / label | Risk                                                  | Coverage                                                                                                                                                                                                                                                                                                                                                          | Main remaining gap                                                                                                                                                                                                                                                                                                                                                                                          |
+| ---------- | ----------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| LLM01      | Plan 02 / LLM01   | Prompt Injection                                      | Covered (controls + bounded live campaigns)                                                                                                                                                                                                                                                                                                                       | Two models on macOS, one on Linux, one run per case; no universal claim                                                                                                                                                                                                                                                                                                                                     |
+| LLM02      | Plan 03 / LLM02   | Sensitive Information Disclosure                      | Covered for the user prompt and tool results (trace + macOS/Linux live campaigns); bounded evidence acceptance `RECORDED`; C1 unknown-format redaction `IMPLEMENTED` opt-in (PRs #361/#362/#364) with bounded Linux live `PASS`; focused C1 hardlink verification `PASS` for 4 scoped cases; Option C Phase 1 hardlink-alias denial `VERIFIED` on Linux and macOS | Not general DLP; four pre-C1 Linux residual exposures; hardlink aliases outside the identity registry (outside-workspace origins, Windows) with one pre-Option-C unlisted-value residual; Plan 03 acceptance `RECORDED` 16/16 (2026-11-12); C1 disabled by default; broader coverage `OPEN`                                                                                                                 |
+| LLM03      | Plan 04 / LLM04   | Supply Chain                                          | Partial; scanner integrity and per-platform pins are merged; the approved D4 baseline is merged at PR #482 (84 entries, 84 suppressed)                                                                                                                                                                                                                            | One `run_command` finding remains blocking and unaccepted under D4-5 R2; enforcement stays report-only. PRs #484/#486 merge the investigation and corrected M1+G3+G4 containment proposal, but no remediation is approved or implemented. Review still has an unresolved P2: sandboxing contains configured Git helpers but does not guarantee unmodified Git output. Publisher signatures remain deferred. |
+| LLM04      | Plan 05 / LLM05   | Data and Model Poisoning                              | Partial                                                                                                                                                                                                                                                                                                                                                           | Integrity proves bytes, not benign content; provider training external                                                                                                                                                                                                                                                                                                                                      |
+| LLM05      | Plan 10 / LLM10   | Improper Output Handling                              | Covered for SOP's sinks                                                                                                                                                                                                                                                                                                                                           | Third-party rendering (terminal, IDE, Slack) external                                                                                                                                                                                                                                                                                                                                                       |
+| LLM06      | Plan 01 / LLM03   | Excessive Agency                                      | Covered (policy) + default-on sandbox on macOS and Linux                                                                                                                                                                                                                                                                                                          | Windows B1 refuses every override value and is fixed since PR #441's P2; cold build cache per run; residual hardlink, parent-environment and host-to-sandbox socket exposure                                                                                                                                                                                                                                |
+| LLM07      | Plan 08 / LLM08   | System Prompt Leakage (repo: Hidden Context Exposure) | Partial                                                                                                                                                                                                                                                                                                                                                           | Prompt secrecy is not claimed by design                                                                                                                                                                                                                                                                                                                                                                     |
+| LLM08      | Plan 09 / LLM09   | Vector and Embedding Weaknesses                       | Covered for the shipped (disabled-by-default) path                                                                                                                                                                                                                                                                                                                | One live producer run (2026-11-12, `rag-template-rust`, PostgreSQL 17 + pgvector, `nomic-embed-text`): isolation, scope, positive controls and a poisoned chunk observed; `TIMEOUT` and cancellation not observed live                                                                                                                                                                                      |
+| LLM09      | Plan 07 / LLM07   | Misinformation                                        | Partial, by scope                                                                                                                                                                                                                                                                                                                                                 | Factual correctness of model output is out of scope                                                                                                                                                                                                                                                                                                                                                         |
+| LLM10      | Plan 06 / LLM06   | Unbounded Consumption                                 | Covered for time/output bounds, selected process-group termination, and opt-in token budgets                                                                                                                                                                                                                                                                      | No dollar cap (no pricing data); every `exec.CommandContext` subprocess path binds a process group (guard-enforced; not on Windows)                                                                                                                                                                                                                                                                         |
 
 ## Per risk
 
@@ -215,6 +218,30 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 > when a full-workspace scan observed every adapter the baseline relies on, so
 > changed-files, partial, failed, disabled and indeterminate scans stay silent.
 
+**Verification pass (2026-11-16, `origin/main` `c55b42ff`).** The pinned adapters
+were re-run from a clean worktree: Gitleaks 8.30.1 (pinned binary `ba52fb1b…`),
+Semgrep 1.183.0 (`rules_identity d90ff1b1…`), OSV-Scanner 2.7.0. Result: coverage
+`COMPLETE`, verdict `FAIL`, **101 findings, 84 suppressed, 17 unsuppressed, 1
+blocking** — identical to the recorded baseline. Baseline fingerprints are 84
+unique entries, 84 matched, 0 expired. Fail-closed was demonstrated: with an
+unpinned Gitleaks binary the `secrets` category reported `FAILED` and the verdict
+stayed `FAIL`; it never produced a `PASS`.
+
+**Local, unmerged hardening — git output integrity.** The unresolved review
+finding _"sandboxing contains configured Git helpers but does not guarantee
+unmodified Git output"_ is addressed without changing sandbox policy. Every
+SOP-run git command now carries `-c core.fsmonitor=false` (and, for `diff`,
+`--no-ext-diff --no-textconv`), and inherits an environment stripped of git
+execution-injection variables. Measured on Git 2.50.1, this blocks `diff.external`,
+`GIT_EXTERNAL_DIFF`, `core.fsmonitor`, and textconv. A clean filter still executes
+(git has no switch) and is now **labelled** in the tool result rather than
+presented as raw. See [git-output-integrity.md](git-output-integrity.md). This is PR
+#491: full CI passed (13 of 13 checks) and it is **unmerged**. No baseline change.
+
+**Still blocked on the operator:** M1 + G3 + G4 (mandatory isolation for every
+model-reachable exec, sandboxed git, `.git` write deny) and the clean-filter
+fingerprint policy. Neither is implemented.
+
 ### LLM04 Data and Model Poisoning — partial
 
 - **Covered:**
@@ -225,6 +252,14 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   - Recovery by reindexing and by removing decision-memory entries.
 
   Evidence: [llm05-poisoning.md](llm05-poisoning.md).
+
+- **Re-verified 2026-11-16:** PR #488 labels RAG evidence without `chunk_hash` as
+  `chunk=unverified (no chunk_hash)` in the model context and counts it in
+  `rag.json` (`TestUnverifiedEvidenceLabelled`); PR #489 makes a full decision
+  store refuse `memory add` instead of evicting a record and lists stale ids for
+  retirement (`TestMemoryAddRefusesWhenStoreFull`, `TestMemoryListShowsStaleIDs`).
+  The persisted-index guard `TestPersistedRepoIndexReadersVerifyRows` passes in
+  `internal/archtest`. No unaccepted defect was found in either fix.
 
 - **Not covered, and why:**
   - A digest proves the bytes are unchanged, not that the content is benign, so
@@ -275,6 +310,12 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     because the override does nothing. The PR #441 P2 recorded in #442 is fixed
     and pinned by `TestIsolationDecisionUnsupportedPlatforms` and, at runtime on
     Windows, `TestRunCommandIsolationOnWindowsRefuses`.
+  - (Local, unmerged, 2026-11-16) Every SOP-run git command is hardened so the
+    repository cannot make git launch a program: `-c core.fsmonitor=false`
+    globally and `--no-ext-diff --no-textconv` for `diff`, plus a git child
+    environment stripped of execution-injection variables. This covers `git_status`,
+    `git_diff`, and the per-turn fingerprint calls, and is independent of the
+    sandbox. Evidence: [git-output-integrity.md](git-output-integrity.md).
 
   Evidence: [llm03-agency.md](llm03-agency.md),
   [seatbelt-evidence.md](../security-shift-left/seatbelt-evidence.md#run_command-opt-in-sandbox-llm03).
@@ -296,6 +337,11 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   - The sandbox wraps `run_command` only. Validation commands
     (`internal/testrunner`, `sh -c`), security scanners, and the `git`/`gh` sinks
     are not sandboxed and this row makes no claim about them.
+  - Git output is hardened but not trustworthy: a clean filter still executes on
+    `status` and `diff` and can transform or under-report content. Making it fail
+    closed would disable mutation detection on `git-lfs` repositories, so the
+    choice is an operator decision. Containment (M1 + G3 + G4) remains unapproved,
+    so git runs unsandboxed and the Semgrep finding stays blocking.
   - With the sandbox on, the repository's own suite passes on macOS (87-91 s
     in-sandbox against 86 s unsandboxed, no failures) and has no sandbox-caused
     failures on Linux arm64 in a container (two container artifacts remain). Tests
@@ -417,6 +463,23 @@ These cannot be closed by code in this repository:
    acceptance, and the Option-D subprocess hardlink alias is accepted within its
    bounded scope. Tracking:
    [PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md](../../plans/PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md).
+5. **M1 + G3 + G4 authorization (2026-11-16).** Mandatory isolation for every
+   model-reachable execution (`run_command`, `git_status`, `git_diff`, and the
+   per-turn fingerprints), with refusal where no backend exists, plus a `.git`
+   write deny. This changes the approved override and removes `git_status`/
+   `git_diff` on Windows and on Linux hosts without working user namespaces. Exact
+   wording:
+   [PROPOSAL-LLM03-D4-5-MANDATORY-ISOLATION.md](../../plans/PROPOSAL-LLM03-D4-5-MANDATORY-ISOLATION.md)
+   §11. Not implemented; the Semgrep finding stays blocking until it is.
+6. **Clean-filter fingerprint policy (2026-11-16).** A repository-configured clean
+   filter still runs and can transform or suppress git's reported output. The
+   current local change labels the output. Failing the fingerprint closed would
+   disable mutation detection on every `git-lfs` repository — a behaviour change to
+   an approved control — so it needs a decision. See
+   [git-output-integrity.md](git-output-integrity.md).
+7. **Scanner enforcement.** Moving off `report-only` and setting
+   `required_categories` is unchanged and still an operator decision
+   ([PROPOSAL-SCANNER-PIN-POLICY.md](../../plans/PROPOSAL-SCANNER-PIN-POLICY.md)).
 
 ## Code follow-ups worth doing
 
