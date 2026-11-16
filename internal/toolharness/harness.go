@@ -436,8 +436,19 @@ func SummarizeRequest(name string, args map[string]any) string {
 
 // git runs a fixed, read-only git command. The subcommand is allow-listed by
 // construction, so git inspection cannot be turned into a destructive operation.
+// The argv is hardened (git_integrity.go) so the repository cannot make git
+// launch a program, and a result that a repository-configured filter could have
+// transformed is labelled instead of trusted.
 func (h *Harness) git(ctx context.Context, args ...string) (string, error) {
-	return h.exec(ctx, append([]string{"git"}, args...))
+	result, succeeded, err := h.execWithStatus(ctx, h.root, append([]string{"git"}, hardenedGitArgs(args)...), gitChildEnv())
+	if err != nil {
+		return result, err
+	}
+	if !succeeded {
+		return result, nil
+	}
+	paths := gitTouchedPaths(result)
+	return result + filterOutputNote(h.activeGitFilters(ctx, paths)), nil
 }
 
 // restoreFile returns one file to the content it had when this invocation first
@@ -488,8 +499,9 @@ func (h *Harness) WorkingTreeChanged(ctx context.Context) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, h.cfg.CommandTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", "status", "--porcelain")
+	cmd := exec.CommandContext(ctx, "git", hardenedGitArgs([]string{"status", "--porcelain"})...)
 	cmd.Dir = h.root
+	cmd.Env = gitChildEnv()
 	out, err := cmd.Output()
 	if err != nil {
 		return false, fmt.Errorf("git status: %w", err)
@@ -562,8 +574,9 @@ func (h *Harness) execFingerprintCmd(ctx context.Context, args ...string) (strin
 	ctx, cancel := context.WithTimeout(ctx, h.cfg.CommandTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := exec.CommandContext(ctx, "git", hardenedGitArgs(args)...)
 	cmd.Dir = h.root
+	cmd.Env = gitChildEnv()
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	if err := cmd.Run(); err != nil {
@@ -907,12 +920,12 @@ func hasDirOverride(argv []string) bool {
 // and stderr. A non-zero exit is reported in the result (the model should see
 // failing tests); only a timeout is a tool error.
 func (h *Harness) exec(ctx context.Context, argv []string) (string, error) {
-	result, _, err := h.execWithStatus(ctx, h.root, argv)
+	result, _, err := h.execWithStatus(ctx, h.root, argv, nil)
 	return result, err
 }
 
-func (h *Harness) execWithStatus(ctx context.Context, dir string, argv []string) (string, bool, error) {
-	result, succeeded, _, _, err := h.execCaptured(ctx, dir, argv, nil)
+func (h *Harness) execWithStatus(ctx context.Context, dir string, argv, env []string) (string, bool, error) {
+	result, succeeded, _, _, err := h.execCaptured(ctx, dir, argv, env)
 	return result, succeeded, err
 }
 
