@@ -2,6 +2,7 @@ package toolharness
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -80,29 +81,95 @@ func gitChildEnv() []string {
 // working tree cannot turn detection into an unbounded command line.
 const maxFilterProbePaths = 100
 
-// activeGitFilters reports the clean/smudge filter drivers the repository applies
-// to paths, sorted and de-duplicated. It is the one git execution mechanism with
-// no disabling switch: the driver name is chosen by the repository, so git offers
-// no global flag to turn filters off (measured: a `filter.<driver>.clean` still
-// runs with every documented hardening flag).
+// activeGitFilters reports the clean/smudge filter drivers that actually run for
+// paths, sorted and de-duplicated. It is the one git execution mechanism with no
+// disabling switch: the driver name is chosen by the repository, so git offers no
+// global flag to turn filters off (measured: a `filter.<driver>.clean` still runs
+// with every documented hardening flag).
+//
+// A driver counts as active only when both halves are present: an attribute
+// assigns it to a path (`filter=<name>`) *and* a `filter.<name>.clean|smudge|
+// process` command is configured. An attribute reference alone runs nothing — a
+// `.gitattributes` naming `filter=lfs` with git-lfs absent or unconfigured leaves
+// `git status` working normally — so reporting it would be a false positive.
 //
 // Detection is deliberately best-effort: a probe failure returns no names, and a
 // caller must not read that as proof that no filter is configured. The result is
 // used to label git output, never to justify trusting it.
 func (h *Harness) activeGitFilters(ctx context.Context, paths []string) []string {
+	referenced := h.attributeFilterNames(ctx, paths)
+	if len(referenced) == 0 {
+		return nil
+	}
+	configured := h.configuredFilterNames(ctx)
+	active := make([]string, 0, len(referenced))
+	for _, name := range referenced {
+		if configured[name] {
+			active = append(active, name)
+		}
+	}
+	if len(active) == 0 {
+		return nil
+	}
+	return active
+}
+
+// attributeFilterNames returns the filter drivers that `.gitattributes` assigns to
+// the given paths, whether or not a driver command is configured for them.
+func (h *Harness) attributeFilterNames(ctx context.Context, paths []string) []string {
 	paths = boundedPaths(paths, maxFilterProbePaths)
 	if len(paths) == 0 {
 		return nil
 	}
 	args := append([]string{"check-attr", "-z", "filter", "--"}, paths...)
+	out, ok := h.gitProbe(ctx, args)
+	if !ok {
+		return nil
+	}
+	return parseFilterAttrs(out)
+}
+
+// configuredFilterNames returns the set of driver names that have an executable
+// filter command configured. `filter.<name>.required` and descriptive keys do not
+// count; only clean, smudge and process run a program.
+func (h *Harness) configuredFilterNames(ctx context.Context) map[string]bool {
+	out, ok := h.gitProbe(ctx, []string{"config", "--get-regexp", `^filter\..*\.(clean|smudge|process)$`})
+	if !ok {
+		return nil
+	}
+	names := make(map[string]bool)
+	for _, line := range strings.Split(string(out), "\n") {
+		key, _, _ := strings.Cut(strings.TrimSpace(line), " ")
+		// key is filter.<name>.<clean|smudge|process>
+		rest, found := strings.CutPrefix(key, "filter.")
+		if !found {
+			continue
+		}
+		i := strings.LastIndex(rest, ".")
+		if i <= 0 {
+			continue
+		}
+		names[rest[:i]] = true
+	}
+	return names
+}
+
+// gitProbe runs a read-only git query with the same hardening as every other
+// SOP-run git command and reports whether it succeeded. A non-zero exit (for
+// example `git config --get-regexp` with no matches) is not an error.
+func (h *Harness) gitProbe(ctx context.Context, args []string) ([]byte, bool) {
 	cmd := exec.CommandContext(ctx, "git", hardenedGitArgs(args)...)
 	cmd.Dir = h.root
 	cmd.Env = gitChildEnv()
 	out, err := cmd.Output()
 	if err != nil {
-		return nil
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			return out, false
+		}
+		return nil, false
 	}
-	return parseFilterAttrs(out)
+	return out, true
 }
 
 // parseFilterAttrs reads `git check-attr -z filter` output, which is a flat

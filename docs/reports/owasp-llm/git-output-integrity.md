@@ -68,10 +68,12 @@ core.fsmonitor=false` globally, plus `--no-ext-diff --no-textconv` for `diff`
   flags do not know about. It is **not** a credential scrub for git children and
   does not claim to be one.
 - `activeGitFilters` probes `git check-attr -z filter -- <paths>` for the paths a
-  result named, and `filterOutputNote` appends a labelled line to the tool result
-  when a driver is applied: the content is repository-transformed and "is not
-  guaranteed to match the files on disk". The label is a statement of reduced
-  trust, not a fix.
+  result named and intersects that with the drivers that have a
+  `filter.<name>.clean|smudge|process` command configured, so a `.gitattributes`
+  that names a driver nothing implements is not labelled. `filterOutputNote` then
+  appends a labelled line to the tool result when a driver actually runs: the
+  content is repository-transformed and "is not guaranteed to match the files on
+  disk". The label is a statement of reduced trust, not a fix.
 
 Applied at `git`, `WorkingTreeChanged`, and `execFingerprintCmd`.
 
@@ -99,8 +101,10 @@ Applied at `git`, `WorkingTreeChanged`, and `execFingerprintCmd`.
    bytes. Only the label tells the model so.
 3. Detection is bounded (100 paths per probe, only the paths git already
    reported), best-effort (a probe failure reports no driver and must not be read
-   as "no filter"), and covers `filter` only — not a future git execution
-   mechanism.
+   as "no filter"), and requires both halves of a filter — an attribute assignment
+   and a configured `clean`/`smudge`/`process` command. An attribute that names a
+   driver nothing implements runs nothing and is not labelled. It covers `filter`
+   only — not a future git execution mechanism.
 4. The OS sandbox residuals recorded elsewhere (pre-existing hardlink aliases,
    the macOS `kern.procargs2` parent-environment read, host-to-sandbox Unix
    sockets) are unchanged.
@@ -112,19 +116,21 @@ pairs a **positive control** — the canary is proven to run under plain `git` �
 the assertion that the harness path does not run it. A "no marker" assertion alone
 would pass on a broken canary and is not used.
 
-| Test                                             | Asserts                                                                |
-| ------------------------------------------------ | ---------------------------------------------------------------------- |
-| `TestHardenedGitArgsNeutralisesHelperMechanisms` | argv shape for `status`, `diff`, `diff HEAD -- .`                      |
-| `TestGitChildEnvDropsInjectionVariables`         | injection variables dropped, unrelated ones kept                       |
-| `TestParseFilterAttrs`                           | `check-attr -z` parsing; "unspecified"/"unset" ignored                 |
-| `TestGitTouchedPathsHandlesStatusAndDiff`        | strict path extraction from porcelain and diff headers                 |
-| `TestGitStatusDoesNotRunRepositoryFsmonitor`     | `core.fsmonitor` canary: plain `status` runs it, `git_status` does not |
-| `TestGitDiffDoesNotRunExternalDiffDriver`        | `diff.external` canary                                                 |
-| `TestGitDiffDoesNotRunTextconvDriver`            | textconv canary                                                        |
-| `TestGitDiffDropsExternalDiffEnvironment`        | `GIT_EXTERNAL_DIFF` canary                                             |
-| `TestGitOutputLabelsActiveCleanFilter`           | the residual is labelled on `status` and `diff`                        |
-| `TestGitOutputUnlabelledWithoutFilters`          | negative control: no notice on an ordinary repository                  |
-| `TestFingerprintStillObservableWithHardening`    | fingerprints still detect a real change                                |
+| Test                                                            | Asserts                                                                                                 |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `TestHardenedGitArgsNeutralisesHelperMechanisms`                | argv shape for `status`, `diff`, `diff HEAD -- .`                                                       |
+| `TestGitChildEnvDropsInjectionVariables`                        | injection variables dropped, unrelated ones kept                                                        |
+| `TestParseFilterAttrs`                                          | `check-attr -z` parsing; "unspecified"/"unset" ignored                                                  |
+| `TestGitTouchedPathsHandlesStatusAndDiff`                       | strict path extraction from porcelain and diff headers                                                  |
+| `TestGitStatusDoesNotRunRepositoryFsmonitor`                    | `core.fsmonitor` canary: plain `status` runs it, `git_status` does not                                  |
+| `TestGitDiffDoesNotRunExternalDiffDriver`                       | `diff.external` canary                                                                                  |
+| `TestGitDiffDoesNotRunTextconvDriver`                           | textconv canary                                                                                         |
+| `TestGitDiffDropsExternalDiffEnvironment`                       | `GIT_EXTERNAL_DIFF` canary                                                                              |
+| `TestGitOutputLabelsActiveCleanFilter`                          | the residual is labelled on `status` and `diff`                                                         |
+| `TestGitOutputUnlabelledWithoutFilters`                         | negative control: no notice on an ordinary repository                                                   |
+| `TestGitOutputUnlabelledWhenAttributeNamesAnUnconfiguredDriver` | an attribute naming a driver nothing implements is not labelled (fails on the attribute-only behaviour) |
+| `TestConfiguredFilterNames`                                     | the configuration probe counts `clean`/`smudge`/`process`, not `required`                               |
+| `TestFingerprintStillObservableWithHardening`                   | fingerprints still detect a real change                                                                 |
 
 Positive control for the change itself: with `hardenedGitArgs` reverted to a
 pass-through, `TestGitStatusDoesNotRunRepositoryFsmonitor`,
