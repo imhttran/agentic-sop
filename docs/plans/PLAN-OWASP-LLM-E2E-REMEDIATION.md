@@ -41,7 +41,7 @@ acceptance.
 | W5  | Reconcile README, coverage statement, gap register, evidence matrix to the verified state                | W1–W4                                           | every claim is traceable to a file, test, or command in this pass; unmerged work is labelled unmerged                                                    | `DONE`                                                                 |
 | W6  | M1 + G3 + G4: mandatory isolation for every model-reachable exec; deny `.git` writes                     | **operator authorization** (granted 2026-11-16, option B) | sandbox audit on every model-reachable exec; git tools refuse where no backend exists; `.git` writes refused; sandbox-enabled Linux job proves containment | `IMPLEMENTED` / `VERIFIED` macOS + Linux (`pass=446 fail=0 sandbox_skip=0`) |
 | W7  | Clean-filter fingerprint policy (Option C)                                                               | **operator decision** (granted 2026-11-16)      | verified git-lfs accepted; any other configured driver fails closed and is labelled                                                                      | `IMPLEMENTED` / `VERIFIED`                                             |
-| W8  | Scanner enforcement (`report-only` → required categories)                                                | **operator decision** (deferred 2026-11-16)     | an explicit `mode` / `required_categories` change with its own authorization; packet: [PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md](PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md) | `STAGE 1 IMPLEMENTED` (PR #503); Stage 2 (`dependencies`) pending                                                             |
+| W8  | Scanner enforcement (`report-only` → required categories)                                                | **Stage 1 authorized 2026-11-16; Stage 2 needs a separate decision** | an explicit `mode` / `required_categories` change with its own authorization; packet: [PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md](PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md) | `STAGE 1 IMPLEMENTED` (PR #503); Stage 2 (`dependencies`) pending                                                             |
 
 ## Sequence
 
@@ -51,7 +51,7 @@ acceptance.
    git-output finding.
 3. W4: confirm the remaining categories.
 4. W5: reconcile documentation last so it describes the verified state.
-5. W8 stays deferred on a decision; a blocker in it must not gate other work.
+5. W8 Stage 1 is implemented; Stage 2 (`dependencies`) remains deferred pending its own authorization and must not gate other work.
 
 ## Guardrails for anyone executing this plan
 
