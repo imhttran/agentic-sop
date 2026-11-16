@@ -38,7 +38,7 @@ acceptance.
 | W3  | Verify the two merged LLM04 integrity fixes (#488, #489) and the index-reader guard                      | none                                            | source + focused tests confirm the controls; no unaccepted defect found                                                                                  | `VERIFIED`                                                             |
 | W4  | Bounded verification of the remaining categories against their recorded evidence                         | none                                            | focused package tests pass; residuals restated honestly                                                                                                  | `VERIFIED`                                                             |
 | W5  | Reconcile README, coverage statement, gap register, evidence matrix to the verified state                | W1–W4                                           | every claim is traceable to a file, test, or command in this pass; unmerged work is labelled unmerged                                                    | `DONE`                                                                 |
-| W6  | M1 + G3 + G4: mandatory isolation for every model-reachable exec; deny `.git` writes                     | **operator authorization** (granted 2026-11-16) | sandbox audit on every model-reachable exec; git tools refuse where no backend exists; `.git` writes refused                                             | `BLOCKED` — CI runner has no `bubblewrap`; needs a CI-backend decision |
+| W6  | M1 + G3 + G4: mandatory isolation for every model-reachable exec; deny `.git` writes                     | **operator authorization** (granted 2026-11-16, option B) | sandbox audit on every model-reachable exec; git tools refuse where no backend exists; `.git` writes refused; sandbox-enabled Linux job proves containment | `IMPLEMENTED` / `VERIFIED` on macOS; Linux containment `NOT_RUN` until `sandbox-linux` runs |
 | W7  | Clean-filter fingerprint policy (Option C)                                                               | **operator decision** (granted 2026-11-16)      | verified git-lfs accepted; any other configured driver fails closed and is labelled                                                                      | `IMPLEMENTED` / `VERIFIED`                                             |
 | W8  | Scanner enforcement (`report-only` → required categories)                                                | **operator decision** (deferred 2026-11-16)     | an explicit `mode` / `required_categories` change with its own authorization                                                                             | `DEFERRED`                                                             |
 
@@ -50,7 +50,7 @@ acceptance.
    git-output finding.
 3. W4: confirm the remaining categories.
 4. W5: reconcile documentation last so it describes the verified state.
-5. W6–W8 stay blocked on decisions; they must not gate W1–W5.
+5. W8 stays deferred on a decision; a blocker in it must not gate other work.
 
 ## Guardrails for anyone executing this plan
 

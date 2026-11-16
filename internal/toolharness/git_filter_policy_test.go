@@ -53,6 +53,7 @@ func withGitLFSOnPath(t *testing.T, dir string) {
 // --- verified git-lfs: accepted, and mutation detection survives ---------------
 
 func TestVerifiedGitLFSFilterIsAccepted(t *testing.T) {
+	needSandbox(t)
 	requirePOSIXShell(t)
 	repo := t.TempDir()
 	bin := t.TempDir() // outside the repository
@@ -99,6 +100,7 @@ func TestVerifiedGitLFSFilterIsAccepted(t *testing.T) {
 // for the repository-wide decision: the config exists, but nothing selects it, so
 // an unrelated repository must not be labelled or fail closed.
 func TestGlobalGitLFSConfigLeavesUnrelatedRepositoriesTrusted(t *testing.T) {
+	needSandbox(t)
 	requirePOSIXShell(t)
 	repo := t.TempDir()
 	gitInitRepo(t, repo)
@@ -124,6 +126,7 @@ func TestGlobalGitLFSConfigLeavesUnrelatedRepositoriesTrusted(t *testing.T) {
 // --- unverified driver: fail closed, and never silently trusted ----------------
 
 func TestUnverifiedFilterFailsClosed(t *testing.T) {
+	needSandbox(t)
 	repo := t.TempDir()
 	gitInitRepo(t, repo)
 	commitRepoFile(t, repo, "f.txt", "x: y\n")
@@ -160,6 +163,7 @@ func TestUnverifiedFilterFailsClosed(t *testing.T) {
 // path-accurate label would be absent and the model would silently trust the
 // result. The repository-wide decision must still mark it.
 func TestUnverifiedFilterIsLabelledWithoutAttributeSelection(t *testing.T) {
+	needSandbox(t)
 	repo := t.TempDir()
 	gitInitRepo(t, repo)
 	commitRepoFile(t, repo, "f.txt", "x: y\n")

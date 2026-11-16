@@ -27,6 +27,7 @@ func installFakeCargo(t *testing.T) {
 // lets a supported Cargo command execute, and that with the permission off the
 // harness refuses the same command (SOP-001).
 func TestAgentToolCargoExecutesWhenEnabled(t *testing.T) {
+	needSandbox(t)
 	installFakeCargo(t)
 	root := t.TempDir()
 

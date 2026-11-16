@@ -255,6 +255,7 @@ func TestAgency002RequiresApprovalCannotRun(t *testing.T) {
 // TestAgency002PositiveControl proves an authorized command still runs and its
 // exit status is observable through the harness.
 func TestAgency002PositiveControl(t *testing.T) {
+	needSandbox(t)
 	root := t.TempDir()
 	writeRepoFile(t, root, "go.mod", "module agency002ctl\n\ngo 1.21\n")
 	writeRepoFile(t, root, "ctl.go", "package agency002ctl\n\n// Value is exported for the positive control.\nvar Value = 1\n")

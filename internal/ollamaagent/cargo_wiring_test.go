@@ -14,6 +14,7 @@ import (
 // toolharness unit test covers the policy itself; this test covers the production
 // plumbing that previously dropped the flag.
 func TestHarnessPassesCargoAgentToolPermission(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	script := filepath.Join(dir, "cargo")
 	if err := os.WriteFile(script, []byte("#!/bin/sh\necho fake-cargo-output\n"), 0o755); err != nil {

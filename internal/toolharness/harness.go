@@ -12,7 +12,6 @@
 package toolharness
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -99,8 +98,9 @@ type Config struct {
 	// bounded and truncation-marked). It is how a caller that opts a task into raw
 	// output owns that evidence; it never changes the tool result.
 	EvidenceSink func(CommandEvidence)
-	// IsolateCommands, when true, runs run_command inside the OS sandbox (see
-	// IsolationEnv). It fails closed when no backend is available.
+	// IsolateCommands is deprecated and has no effect: isolation is mandatory for
+	// every model-reachable execution (M1 + G3 + G4). It is retained so existing
+	// construction sites keep compiling; there is no value that disables the sandbox.
 	IsolateCommands bool
 }
 
@@ -437,10 +437,14 @@ func SummarizeRequest(name string, args map[string]any) string {
 // git runs a fixed, read-only git command. The subcommand is allow-listed by
 // construction, so git inspection cannot be turned into a destructive operation.
 // The argv is hardened (git_integrity.go) so the repository cannot make git
-// launch a program, and a result that a repository-configured filter could have
-// transformed is labelled instead of trusted.
+// launch a program, and the whole call runs inside the OS sandbox (G3): a
+// repository-configured helper therefore cannot reach the host even when the
+// hardening does not know about it. A result a filter could have transformed is
+// labelled rather than trusted (git_filter_policy.go).
 func (h *Harness) git(ctx context.Context, args ...string) (string, error) {
-	result, succeeded, err := h.execWithStatus(ctx, h.root, append([]string{"git"}, hardenedGitArgs(args)...), gitChildEnv())
+	result, succeeded, _, _, detail, err := h.execIsolated(ctx, h.root,
+		append([]string{"git"}, hardenedGitArgs(args)...), filterGitInjectionEnv)
+	h.isolation = detail
 	if err != nil {
 		return result, err
 	}
@@ -499,19 +503,25 @@ func (h *Harness) WorkingTreeChanged(ctx context.Context) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, h.cfg.CommandTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", hardenedGitArgs([]string{"status", "--porcelain"})...)
-	cmd.Dir = h.root
-	cmd.Env = gitChildEnv()
-	out, err := cmd.Output()
+	_, succeeded, output, _, _, err := h.execIsolated(ctx, h.root,
+		append([]string{"git"}, hardenedGitArgs([]string{"status", "--porcelain"})...), filterGitInjectionEnv)
 	if err != nil {
+		if errors.Is(err, errIsolationUnavailable) {
+			// No usable sandbox on this host: the tree cannot be inspected at all, so
+			// report the stricter answer instead of claiming nothing changed.
+			return true, nil
+		}
 		return false, fmt.Errorf("git status: %w", err)
+	}
+	if !succeeded {
+		return false, fmt.Errorf("git status: non-zero exit: %s", strings.TrimSpace(output))
 	}
 	// Fail closed: a filter SOP cannot verify may hide a change, so report the
 	// stricter answer rather than claiming nothing changed.
 	if unverified := h.unverifiedFilterDrivers(ctx); len(unverified) > 0 {
 		return true, nil
 	}
-	return hasSourceChange(string(out)), nil
+	return hasSourceChange(output), nil
 }
 
 // maxFingerprintFileBytes bounds how much of an untracked file's content feeds
@@ -578,7 +588,7 @@ func (h *Harness) ChangedSince(ctx context.Context, baseline string) (bool, erro
 		return true, nil
 	}
 	now, err := h.WorkingTreeFingerprint(ctx)
-	if errors.Is(err, errGitOutputUntrusted) {
+	if errors.Is(err, errGitOutputUntrusted) || errors.Is(err, errIsolationUnavailable) {
 		return true, nil
 	}
 	if err != nil {
@@ -593,15 +603,12 @@ func (h *Harness) execFingerprintCmd(ctx context.Context, args ...string) (strin
 	ctx, cancel := context.WithTimeout(ctx, h.cfg.CommandTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", hardenedGitArgs(args)...)
-	cmd.Dir = h.root
-	cmd.Env = gitChildEnv()
-	var buf bytes.Buffer
-	cmd.Stdout = &buf
-	if err := cmd.Run(); err != nil {
+	_, _, output, _, _, err := h.execIsolated(ctx, h.root,
+		append([]string{"git"}, hardenedGitArgs(args)...), filterGitInjectionEnv)
+	if err != nil {
 		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
 	}
-	return buf.String(), nil
+	return output, nil
 }
 
 // hashUntracked folds one untracked path's size and bounded content prefix into
@@ -676,22 +683,8 @@ func (h *Harness) runCommandWithStatus(ctx context.Context, args map[string]any)
 	if err := h.checkCommandIn(root, argv); err != nil {
 		return "", false, err
 	}
-	run := argv
-	var env []string
-	if h.isolationRequested() {
-		var cleanup func()
-		if run, env, h.isolation, cleanup, err = isolate(root.path, argv); err != nil {
-			return "", false, err
-		}
-		defer cleanup()
-	} else {
-		// The operator disabled the sandbox, but the child must still not inherit
-		// SOP's own credentials: a model-authored command would otherwise read them
-		// straight from the environment. Isolation-off keeps the inherited
-		// environment minus credential-named and credential-shaped entries.
-		env, _ = scrubbedEnvironment()
-	}
-	result, succeeded, raw, exit, err := h.execCaptured(ctx, root.path, run, env)
+	result, succeeded, raw, exit, detail, err := h.execIsolated(ctx, root.path, argv, nil)
+	h.isolation = detail
 	if err == nil && noTestsMatched(argv, result) {
 		result += "\n" + noTestMatchDiagnostic
 	}
@@ -933,6 +926,25 @@ func hasDirOverride(argv []string) bool {
 		}
 	}
 	return false
+}
+
+// execIsolated runs argv inside the OS sandbox and returns the captured result.
+// Every model-reachable execution path uses it: run_command, the git tools, and
+// the per-turn fingerprint calls. A host without a usable backend refuses here —
+// the caller reports the refusal and nothing runs. filterEnv, when set, narrows
+// the sandbox's scrubbed environment further (used to drop git injection
+// variables); it can only remove entries.
+func (h *Harness) execIsolated(ctx context.Context, dir string, argv []string, filterEnv func([]string) []string) (result string, succeeded bool, output string, exit int, detail string, err error) {
+	wrapped, env, detail, cleanup, err := isolate(dir, argv)
+	if err != nil {
+		return "", false, "", -1, "", err
+	}
+	defer cleanup()
+	if filterEnv != nil {
+		env = filterEnv(env)
+	}
+	result, succeeded, output, exit, err = h.execCaptured(ctx, dir, wrapped, env)
+	return result, succeeded, output, exit, detail, err
 }
 
 // exec runs argv in the repository root with a bounded timeout, capturing stdout

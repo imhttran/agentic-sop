@@ -154,6 +154,7 @@ func TestObservedMutationUnavailableNeverCredits(t *testing.T) {
 }
 
 func TestObservedCommandPartialFailure(t *testing.T) {
+	needSandbox(t)
 	root := t.TempDir()
 	writeRepoFile(t, root, "valid.go", "package a\nvar x=1\n")
 	writeRepoFile(t, root, "invalid.go", "this is not Go")
@@ -179,6 +180,7 @@ func TestObservedCommandPartialFailure(t *testing.T) {
 }
 
 func TestObservedCommandIgnoresAuditWrites(t *testing.T) {
+	needSandbox(t)
 	root := t.TempDir()
 	writeRepoFile(t, root, "a.go", "package a\n")
 	path := filepath.Join(root, "tool-audit.jsonl")
@@ -202,6 +204,7 @@ func TestObservedCommandIgnoresAuditWrites(t *testing.T) {
 }
 
 func TestObservedMutationAfterSnapshotFailure(t *testing.T) {
+	needSandbox(t)
 	if runtime.GOOS == "windows" {
 		t.Skip("fixture requires a POSIX shell and FIFO")
 	}

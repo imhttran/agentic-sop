@@ -21,6 +21,7 @@ const (
 // variants of the search and copy bypasses. The synthetic canary is a
 // disposable placeholder, not a credential.
 func TestLLM02LinuxPositiveControlsAndSymlinkDenial(t *testing.T) {
+	needSandbox(t)
 	root := t.TempDir()
 	write := func(name, content string) {
 		t.Helper()

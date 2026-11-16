@@ -242,11 +242,12 @@ findings 101, suppressed 84, unsuppressed 17, blocking 1
 
 ## Decisions requiring operator approval
 
-1. **M1 + G3 + G4 — approved 2026-11-16, blocked on the CI backend.** The
-   authorization is recorded; implementation is held because the GitHub
-   `ubuntu-latest` image ships no `bubblewrap`, so mandatory isolation would refuse
-   every execution on CI. A CI-backend decision is required
-   ([DECISION-PACKET-OWASP-LLM-W6-W8.md](../../plans/DECISION-PACKET-OWASP-LLM-W6-W8.md)).
+1. **M1 + G3 + G4 — implemented 2026-11-16 (option B).** Isolation is mandatory for
+   every model-reachable execution and the operator override is gone. Sandbox-
+   dependent tests skip on a host with no runnable backend and run in the new
+   `sandbox-linux` CI job with `SOP_SANDBOX_REQUIRED=1`. macOS is verified; Linux
+   containment is `NOT_RUN` until that job runs
+   ([execution-boundary-w6.md](execution-boundary-w6.md)).
 2. **Clean-filter fingerprint policy — decided (2026-11-16).** Option C, the verified
    git-lfs policy, is approved and implemented in this PR. It is no longer an open
    decision.

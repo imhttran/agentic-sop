@@ -8,6 +8,7 @@ import (
 )
 
 func TestEvidenceSinkCapturesRawCommandOutput(t *testing.T) {
+	needSandbox(t)
 	dir := t.TempDir()
 	writeFixture(t, dir+"/go.mod", "module fixture\n\ngo 1.21\n")
 	writeFixture(t, dir+"/p.go", "package fixture\n")

@@ -15,6 +15,7 @@ import (
 )
 
 func TestPhasedVerifiedMutation(t *testing.T) {
+	needSandboxAvailable(t)
 	for _, capability := range []agent.Capability{agent.Implement, agent.Fix} {
 		for _, tc := range []struct {
 			name, tool string
@@ -115,6 +116,7 @@ func TestPhasedObservationFailureCannotEarnMutation(t *testing.T) {
 }
 
 func TestPhasedPartialCommandFailureDoesNotEarnProgress(t *testing.T) {
+	needSandboxAvailable(t)
 	for _, capability := range []agent.Capability{agent.Implement, agent.Fix} {
 		t.Run(string(capability), func(t *testing.T) {
 			dir := t.TempDir()

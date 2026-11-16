@@ -184,10 +184,13 @@ acceptance criteria were accepted; no acceptance decision exists.
    mandatory isolation for every model-reachable execution plus a `.git` write
    deny — was **authorized on 2026-11-16**
    ([PROPOSAL-LLM03-D4-5-MANDATORY-ISOLATION.md](../../plans/PROPOSAL-LLM03-D4-5-MANDATORY-ISOLATION.md)
-   §11) but is **not implemented**: the GitHub `ubuntu-latest` runner image ships no
-   `bubblewrap`, so mandatory isolation would refuse every execution on CI and fail
-   the acceptance criterion. A CI-backend decision is required
-   ([DECISION-PACKET-OWASP-LLM-W6-W8.md](../../plans/DECISION-PACKET-OWASP-LLM-W6-W8.md)).
+   §11) and **implemented** under option B: the override and acknowledgement are
+   removed, and every model-reachable execution is sandboxed or refused. Because
+   the ordinary runner ships no `bubblewrap`, sandbox-dependent tests skip there
+   (66 skips) and a new `sandbox-linux` job runs them with
+   `SOP_SANDBOX_REQUIRED=1` so a skip is a failure. Linux containment is `NOT_RUN`
+   until that job runs
+   ([execution-boundary-w6.md](execution-boundary-w6.md)).
    (b) The **clean-filter fingerprint policy** is **decided and implemented** as
    Option C: a verified git-lfs filter keeps normal mutation detection; any other
    configured driver makes git output untrusted and fingerprints fail closed to

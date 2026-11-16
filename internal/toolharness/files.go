@@ -490,6 +490,13 @@ func (h *Harness) resolveIn(root authorizedRoot, raw string, access accessClass)
 	if access == accessWrite && h.inStateDir(real) {
 		return resolvedPath{}, fmt.Errorf("%w: %s is SOP state and cannot be written by model tools", ErrProtectedPath, raw)
 	}
+	// Git metadata is a second instruction channel (G4). A repository-configured
+	// filter, external diff driver, fsmonitor hook, or alias makes git execute a
+	// program; `run_command` is sandboxed, so the model must not be able to author
+	// that configuration through the file tools. Reading it stays allowed.
+	if access == accessWrite && isGitMetadataPath(rel) {
+		return resolvedPath{}, fmt.Errorf("%w: %s is git metadata and is read-only to model tools", ErrProtectedPath, raw)
+	}
 	return resolvedPath{abs: real, rel: rel, requested: requested, root: root.path}, nil
 }
 
@@ -517,6 +524,18 @@ func (h *Harness) isProtectedReal(abs string) bool {
 		return false
 	}
 	return os.SameFile(info, dbInfo)
+}
+
+// isGitMetadataPath reports whether rel names a `.git` entry, at any depth. A
+// submodule's `.git` is a file rather than a directory, so matching the segment
+// (not a fixed prefix) covers both. `.github` and similar names are unaffected.
+func isGitMetadataPath(rel string) bool {
+	for _, seg := range strings.Split(filepath.ToSlash(filepath.Clean(rel)), "/") {
+		if seg == ".git" {
+			return true
+		}
+	}
+	return false
 }
 
 // isStatePath reports whether rel names SOP's runtime state directory. Model

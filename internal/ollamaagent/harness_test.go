@@ -182,6 +182,7 @@ func TestRunShowsRuntimeVisibilityAtStartup(t *testing.T) {
 }
 
 func TestRunReconcilesClaimedChangeWithNoChange(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	gitInit(t, dir)
 	// The model claims a change but the working tree is clean: observed reality wins.
@@ -299,6 +300,7 @@ func TestRunTracesModelReportedFailure(t *testing.T) {
 // nothing is surfaced as a retryable needs_human, so SOP requeues instead of
 // blocking a flaky "explored and gave up" attempt.
 func TestRunNoChangeFailureIsRetryable(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	gitInit(t, dir)
 	t.Setenv(agent.EnvOllamaBaseURL, "")
@@ -2247,6 +2249,7 @@ func TestRunEnsuresProseBecomeStructuredOutcome(t *testing.T) {
 }
 
 func TestRunWrapsProseInOutcomeWithNoChanges(t *testing.T) {
+	needSandboxAvailable(t)
 	dir := t.TempDir()
 	gitInit(t, dir)
 	// The model returns prose but makes no changes: wraps as completed with changes_expected=false

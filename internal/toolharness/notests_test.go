@@ -29,6 +29,7 @@ func TestNoTestsMatchedDetection(t *testing.T) {
 // TestTargetedGoTestZeroMatchIsSurfaced proves a targeted go test that matched no
 // tests annotates its result, so exit 0 cannot be read as a passing selected suite.
 func TestTargetedGoTestZeroMatchIsSurfaced(t *testing.T) {
+	needSandbox(t)
 	dir := t.TempDir()
 	writeFixture(t, dir+"/go.mod", "module fixture\n\ngo 1.21\n")
 	writeFixture(t, dir+"/only_test.go", "package fixture\n\nimport \"testing\"\n\nfunc TestPresent(t *testing.T) {}\n")
