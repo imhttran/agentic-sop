@@ -192,10 +192,12 @@ waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-ga
 - Slack rendering was observed. A plain `@here` can notify the bound channel;
   the operator chose to document this as a residual rather than change the encoder.
 - LLM03 scanner-integrity code and per-platform pins are merged. The D4 baseline
-  approvals were implemented on 2026-11-13 and enforcement remains report-only:
-  the full-workspace baseline is 101 findings, 84 suppressed, 17 unsuppressed and
-  1 blocking. The single blocker is the deliberately unaccepted `run_command`
-  residual (D4-5 R2). PRs #471–#482 provide the approval packet, the
+  approvals were implemented on 2026-11-13. **W8 stage 1 is active (2026-11-16):**
+  `security.mode: required` with `required_categories: [sast, secrets]`, backed by
+  the `TestModelReachableExecIsIsolated` guard. The clean-tree scan is 98 findings,
+  82 suppressed, 16 unsuppressed and **0 blocking** with coverage `COMPLETE` and
+  verdict `PASS`. The `run_command` sink is covered by one expiring entry
+  (2027-03-31), not accepted; `dependencies` is not required (Stage 2). PRs #471–#482 provide the approval packet, the
   investigations, the M1/M3 hardening, the acknowledged run_command override, the
   Semgrep 1.183.0 alignment, and the approved baseline. The stale-baseline
   diagnostic now reports only after a complete workspace scan, so partial,

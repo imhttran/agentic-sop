@@ -6,6 +6,14 @@ added, and no residual is accepted by this document.**
 **Predecessors:** W1–W7 merged and verified. W8 was deferred by the operator on
 2026-11-16; this packet is the decision material for enabling it.
 
+> **Stage 1 implemented (2026-11-16, PR #503, merged at `e24c8108`).** The operator
+> authorized §13 for stage 1 only: `security.mode: required`,
+> `required_categories: [sast, secrets]`, three stale entries retired, one expiring
+> entry added, and the `internal/archtest` guard landed first. Verified on the
+> merged revision: verdict `PASS`, coverage `COMPLETE`, 98 findings / 82 suppressed
+> / 16 unsuppressed / 0 blocking, 0 execution failures. Stage 2 (`dependencies`)
+> remains unauthorized and the OSV provisioning prerequisite is unchanged.
+
 **Companion evidence:**
 [PROPOSAL-SCANNER-PIN-POLICY.md](PROPOSAL-SCANNER-PIN-POLICY.md) (items 2–5),
 [DECISION-PACKET-OWASP-LLM-W6-W8.md](DECISION-PACKET-OWASP-LLM-W6-W8.md),

@@ -20,8 +20,9 @@ acceptance.
 
 ## Constraints (unchanged from the approved policy)
 
-- `security.mode` stays `report-only`; `required_categories` stays empty until
-  separately authorized.
+- `security.mode` is `required` for `sast` + `secrets` since W8 stage 1
+  (2026-11-16); `dependencies`, publisher signatures and Windows pins stay out
+  until separately authorized.
 - The approved `run_command` isolation policy and its operator override are not
   changed without explicit authorization.
 - No baseline entry is added, suppressed, or removed without approval.
@@ -40,7 +41,7 @@ acceptance.
 | W5  | Reconcile README, coverage statement, gap register, evidence matrix to the verified state                | W1–W4                                           | every claim is traceable to a file, test, or command in this pass; unmerged work is labelled unmerged                                                    | `DONE`                                                                 |
 | W6  | M1 + G3 + G4: mandatory isolation for every model-reachable exec; deny `.git` writes                     | **operator authorization** (granted 2026-11-16, option B) | sandbox audit on every model-reachable exec; git tools refuse where no backend exists; `.git` writes refused; sandbox-enabled Linux job proves containment | `IMPLEMENTED` / `VERIFIED` macOS + Linux (`pass=446 fail=0 sandbox_skip=0`) |
 | W7  | Clean-filter fingerprint policy (Option C)                                                               | **operator decision** (granted 2026-11-16)      | verified git-lfs accepted; any other configured driver fails closed and is labelled                                                                      | `IMPLEMENTED` / `VERIFIED`                                             |
-| W8  | Scanner enforcement (`report-only` → required categories)                                                | **operator decision** (deferred 2026-11-16)     | an explicit `mode` / `required_categories` change with its own authorization; packet: [PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md](PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md) | `READY FOR DECISION`                                                             |
+| W8  | Scanner enforcement (`report-only` → required categories)                                                | **operator decision** (deferred 2026-11-16)     | an explicit `mode` / `required_categories` change with its own authorization; packet: [PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md](PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md) | `STAGE 1 IMPLEMENTED` (PR #503); Stage 2 (`dependencies`) pending                                                             |
 
 ## Sequence
 
