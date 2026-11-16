@@ -99,6 +99,41 @@ completed secrets adapter must provision the pinned release binary.
 | Windows                               | not run                                                                                                                                                                                           | NOT_RUN | Copying and executing a pinned scanner on Windows is not verified here.                                                      |
 | noexec temp mount                     | not measured                                                                                                                                                                                      | NOT_RUN | Documented fail-closed behavior: the staged copy cannot start and the adapter reports `ErrUnavailable`. Not reproduced here. |
 
+## Baseline history — W8 stage 1 (2026-11-16)
+
+Stage 1 activation of the scanner gate (see
+[PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md](../../plans/PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md))
+retired three baseline entries that no longer matched any finding, and added one.
+The retired records are preserved here verbatim so their approval history survives
+the removal. The baseline is now 82 entries.
+
+### Retired (match nothing at any current revision)
+
+All three were `dangerous-exec-command` in
+`internal/toolharness/isolation_test.go`, owner `imhttran`, expiring
+`2027-06-30T00:00:00Z`. Their original reason was: *"Test-only harness helper that
+starts a sandbox or probes isolation; it cannot run in production. D4-3 group B,
+reviewed 2026-11-13."*
+
+| Fingerprint | Retired because |
+| --- | --- |
+| `semgrep:11ef53417d1b9eedc8e24e1593bdfa38b6d8df035e3265fce7c61bff2aa3e5c2` | W6 (PR #499) rewrote the probe helper to name the backend literally, so the rule no longer fires there |
+| `semgrep:765bec591c74b4bc0a7bfbee12daaeb711a7123391832670c4d7d8d2a99d9f28` | same |
+| `semgrep:fbedd5f6a2ed946cd639a20ce584f6ab65c3788767ea09cbb60e2c08294313b2` | same |
+
+An entry that suppresses a finding which cannot occur is not protection; it is an
+inaccurate statement about the code that makes a future real finding easier to
+miss.
+
+### Added
+
+| Fingerprint | Path | Expiry | Justification |
+| --- | --- | --- | --- |
+| `semgrep:3dcf22239e8d13ec5dcc3baab9b377f8f0e56ec5576ea07652217384910fea00` | `internal/toolharness/harness.go` | `2027-03-31` | The single model-reachable exec sink; every caller goes through `execIsolated`, and `TestModelReachableExecIsIsolated` fails the build if a bypass is introduced |
+
+The added entry is not a risk acceptance: the call site stays visible in the scan
+output as suppressed, expires on its own, and is backed by an executable guard.
+
 ## Provider model provenance is outside SOP
 
 A scanner binary or rules pin proves the bytes SOP executes or reads, not where a

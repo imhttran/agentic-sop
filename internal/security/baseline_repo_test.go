@@ -23,17 +23,32 @@ const (
 	residualFingerprint = "semgrep:3076a05322acb6e35b02c87144da3b8a6dfbe8eac96a7679614c4d5402973771"
 
 	digestGroupA   = "4596c8ccc60f4d1b58d8ce3e9195d1455089dd320fdb4b5fe00ebdbf9fab1ef9"
-	digestGroupB   = "2e5f765470497c31239a3203c5a4d40023e76a7f602ed847d21479727bec9b03"
+	digestGroupB   = "05ccd5ac13301e9fff226294f2d26acb4058e290156f64d4c5921273c5cbf382"
 	digestGroupC   = "b61b105f2838651008a731a2e89ef3902e76b6ea1c579fc245ec069776d094bc"
-	digestApproved = "d24bd19fef574619cf6f2fc392ef6acd0b2dde2df92ba53c7bfa76fe60224c31"
+	digestApproved = "c1628c3e1fb496a3f9eac0b42892041cbcce2084b088a4001701097ca0a72180"
+
+	// w8Fingerprint is the W8 stage 1 entry for the single model-reachable exec
+	// sink (internal/toolharness/harness.go). It is not a D4 approval: it is
+	// justified by the archtest guard TestModelReachableExecIsIsolated and expires
+	// earlier than the D4 groups.
+	w8Fingerprint = "semgrep:3dcf22239e8d13ec5dcc3baab9b377f8f0e56ec5576ea07652217384910fea00"
 )
 
-// groupBFingerprints are the five approved test-only Semgrep HIGH findings. They
-// cannot be selected by expiry or rule alone because pre-existing entries share
-// both, so the exact set is pinned here.
+// groupBFingerprints are the two remaining approved test-only Semgrep HIGH
+// findings. They cannot be selected by expiry or rule alone because pre-existing
+// entries share both, so the exact set is pinned here. W8 retired three further
+// Group B entries that no longer matched any finding; see w8RetiredFingerprints.
 var groupBFingerprints = []string{
 	"semgrep:ccb4bb42ca610fd2963268b516385bba795ee7c294c4ad0f7968bcd03d25725c",
 	"semgrep:fab835e9941bb1ad0ab32bf7e51f0a1f30944f2d500ba43cf844b247c4c35718",
+}
+
+// w8RetiredFingerprints are the three Group B entries retired by W8 stage 1. They
+// matched nothing after W6 rewrote the probe helper to name the backend literally.
+// Their approval history is preserved in
+// docs/reports/owasp-llm/llm03-scanner-integrity-evidence.md; they must never come
+// back silently.
+var w8RetiredFingerprints = []string{
 	"semgrep:11ef53417d1b9eedc8e24e1593bdfa38b6d8df035e3265fce7c61bff2aa3e5c2",
 	"semgrep:fbedd5f6a2ed946cd639a20ce584f6ab65c3788767ea09cbb60e2c08294313b2",
 	"semgrep:765bec591c74b4bc0a7bfbee12daaeb711a7123391832670c4d7d8d2a99d9f28",
@@ -110,13 +125,13 @@ func findingsForCategory(findings []Finding, c Category) []Finding {
 
 func TestRepoBaselineApprovedGroups(t *testing.T) {
 	b := loadRepoBaseline(t)
-	if len(b.Entries) != 84 {
-		t.Fatalf("baseline entries = %d, want 84 (40 retained + 44 approved)", len(b.Entries))
+	if len(b.Entries) != 82 {
+		t.Fatalf("baseline entries = %d, want 82 (41 retained + 41 approved)", len(b.Entries))
 	}
 
 	approved := approvedEntries(b)
-	if len(approved) != 44 {
-		t.Fatalf("D4-approved entries = %d, want 44", len(approved))
+	if len(approved) != 41 {
+		t.Fatalf("D4-approved entries = %d, want 41 (44 minus the three W8 retirements)", len(approved))
 	}
 	var fps []string
 	for _, e := range approved {
@@ -174,17 +189,15 @@ func TestRepoBaselineApprovedGroups(t *testing.T) {
 		t.Fatalf("group B digest = %s, want %s", got, digestGroupB)
 	}
 
-	// Group C: every production entry expires earlier and is tagged D4-4.
+	// Group C: every D4-4 production entry expires earlier than Groups A and B.
 	var groupC []string
 	for _, e := range b.Entries {
-		if e.ExpiresAt.Equal(prodExpiry) {
-			groupC = append(groupC, e.Fingerprint)
-			if !strings.Contains(e.Reason, "D4-4") {
-				t.Errorf("production entry %s is not tagged D4-4", e.Fingerprint)
-			}
-			if strings.HasSuffix(e.Path, "_test.go") {
-				t.Errorf("production entry %s points at a test file", e.Fingerprint)
-			}
+		if !e.ExpiresAt.Equal(prodExpiry) || !strings.Contains(e.Reason, "D4-4") {
+			continue
+		}
+		groupC = append(groupC, e.Fingerprint)
+		if strings.HasSuffix(e.Path, "_test.go") {
+			t.Errorf("production entry %s points at a test file", e.Fingerprint)
 		}
 	}
 	if len(groupC) != 12 {
@@ -192,6 +205,25 @@ func TestRepoBaselineApprovedGroups(t *testing.T) {
 	}
 	if got := fingerprintSetDigest(groupC); got != digestGroupC {
 		t.Fatalf("group C digest = %s, want %s", got, digestGroupC)
+	}
+
+	// The W8 entry is separate from Groups A-D: production, expiring 2027-03-31,
+	// and justified by the executable isolation guard rather than a D4 review.
+	w8, ok := byFingerprint[w8Fingerprint]
+	if !ok {
+		t.Fatalf("the W8 exec-sink entry %s is missing", w8Fingerprint)
+	}
+	if !w8.ExpiresAt.Equal(prodExpiry) {
+		t.Errorf("W8 entry expires %s, want %s", w8.ExpiresAt, prodExpiry)
+	}
+	if w8.Path != "internal/toolharness/harness.go" {
+		t.Errorf("W8 entry path = %q, want internal/toolharness/harness.go", w8.Path)
+	}
+	if !strings.Contains(w8.Reason, "TestModelReachableExecIsIsolated") {
+		t.Errorf("W8 entry must name the isolation guard that justifies it")
+	}
+	if strings.Contains(w8.Reason, "D4-") {
+		t.Errorf("W8 entry must not claim a D4 approval")
 	}
 }
 
@@ -206,24 +238,46 @@ func TestRepoBaselineRetiredEntriesAreGone(t *testing.T) {
 			t.Errorf("retired entry %s is still present", fp)
 		}
 	}
+	for _, fp := range w8RetiredFingerprints {
+		if have[fp] {
+			t.Errorf("W8-retired entry %s is still present", fp)
+		}
+	}
 }
 
-func TestRepoBaselineLeavesGroupDAndGroupEUnsuppressed(t *testing.T) {
+// W8 stage 1 changed the D4-5 answer: the model-reachable exec sink is now
+// covered by one expiring entry backed by an executable guard. This test pins that
+// only that fingerprint is suppressed at that path, that the obsolete pre-W6
+// fingerprint stays absent, and that Group E is still omitted.
+func TestRepoBaselineCoversOnlyTheGuardedExecSink(t *testing.T) {
 	b := loadRepoBaseline(t)
 	have := make(map[string]bool, len(b.Entries))
 	rules := make(map[string]int, len(b.Entries))
+	execSinkEntries := 0
 	for _, e := range b.Entries {
 		have[e.Fingerprint] = true
 		rules[e.RuleID]++
+		if e.Path == "internal/toolharness/harness.go" && e.RuleID == "dangerous-exec-command" {
+			execSinkEntries++
+			if e.Fingerprint != w8Fingerprint {
+				t.Errorf("harness.go suppression %s is not the reviewed W8 entry", e.Fingerprint)
+			}
+			if !e.ExpiresAt.Equal(prodExpiry) {
+				t.Errorf("W8 entry expires %s, want %s", e.ExpiresAt, prodExpiry)
+			}
+		}
+	}
+	if execSinkEntries != 1 {
+		t.Fatalf("baseline suppresses %d harness.go dangerous-exec-command findings, want exactly the W8 entry", execSinkEntries)
 	}
 	if have[residualFingerprint] {
-		t.Fatalf("the run_command residual is baselined; D4-5 is R2 and must stay open")
+		t.Fatalf("the obsolete pre-W6 residual fingerprint is baselined; it must stay absent")
 	}
 
 	// Group E is omitted. Any approved MEDIUM finding would change this census,
 	// and the Group-E-only rules must not appear at all.
 	want := map[string]int{
-		"dangerous-exec-command":            43, // 26 pre-existing + 5 B + 12 C
+		"dangerous-exec-command":            41, // 26 pre-existing + 2 B + 12 C + 1 W8
 		"no-direct-write-to-responsewriter": 3,  // pre-existing only
 		"cookie-missing-secure":             3,  // pre-existing only
 		"open-redirect":                     3,
@@ -327,6 +381,9 @@ func TestRepoBaselineExpiriesReturnFindings(t *testing.T) {
 		findings = append(findings, Finding{Fingerprint: e.Fingerprint, RuleID: e.RuleID, Path: e.Path, Severity: SeverityHigh})
 	}
 
+	// The W8 entry expires with Group C, so it must be re-reviewed by 2027-03-31.
+	findings = append(findings, Finding{Fingerprint: w8Fingerprint, RuleID: "dangerous-exec-command", Path: "internal/toolharness/harness.go", Severity: SeverityHigh})
+
 	afterC := time.Date(2027, 4, 15, 0, 0, 0, 0, time.UTC)
 	out, diagnostics := b.Apply(findings, afterC)
 	suppressed := 0
@@ -335,8 +392,13 @@ func TestRepoBaselineExpiriesReturnFindings(t *testing.T) {
 			suppressed++
 		}
 	}
-	if suppressed != 32 {
-		t.Fatalf("suppressed after Group C expiry = %d, want 32 (Groups A and B)", suppressed)
+	if suppressed != 29 {
+		t.Fatalf("suppressed after Group C expiry = %d, want 29 (Groups A and B)", suppressed)
+	}
+	for _, f := range out {
+		if f.Fingerprint == w8Fingerprint && f.Suppressed {
+			t.Errorf("the W8 exec-sink entry still suppressed after its expiry")
+		}
 	}
 	if !strings.Contains(strings.Join(diagnostics, " "), "expired") {
 		t.Errorf("expected expired-entry diagnostics, got %v", diagnostics)
