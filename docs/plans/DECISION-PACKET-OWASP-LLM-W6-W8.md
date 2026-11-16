@@ -121,7 +121,8 @@ All prerequisites are open:
 5. **An explicit decision about the `run_command` fingerprint**: leave it blocking,
    or record a justified baseline entry. A suppression is itself a policy change.
 
-**Recommendation: do not activate required mode now.** Sequence Decision 1 → re-scan
+**Recommendation (superseded by the operator's stage-1 authorization on
+2026-11-16; see the status summary): do not activate required mode now.** Sequence Decision 1 → re-scan
 → require `sast` + `secrets` → add `dependencies` after item 3. Keep `report-only`,
 `fail_on`, and `required_categories: []` unchanged until then.
 
@@ -135,8 +136,8 @@ ignore it.
 | ----------------- | -------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------- |
 | 1 — M1+G3+G4      | Approve as written, **keep** the W1 hardening flags      | Approved 2026-11-16, option B | **Implemented and VERIFIED** on macOS + Linux |
 | 2 — Clean filter  | Option C (verified-LFS allowlist, fail closed otherwise) | Approved 2026-11-16           | **Implemented**                                                      |
-| 3 — Required mode | Defer; sequence after Decision 1                         | Deferred                      | Not started; `report-only` unchanged                                 |
+| 3 — Required mode | Defer; sequence after Decision 1                         | Authorized 2026-11-16 (stage 1) | **Stage 1 implemented** (PR #503); `dependencies` deferred |
 
-W6 and W7 are implemented. W8 remains deferred, so `security.mode: report-only`,
-`required_categories: []`, and the single blocking `dangerous-exec-command`
-finding are unchanged.
+W6, W7 and W8 stage 1 are implemented. `security.mode: required` with
+`required_categories: [sast, secrets]`; the `dangerous-exec-command` sink is
+covered by one expiring, guarded entry. Stage 2 (`dependencies`) remains deferred.

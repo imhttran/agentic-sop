@@ -134,6 +134,23 @@ miss.
 The added entry is not a risk acceptance: the call site stays visible in the scan
 output as suppressed, expires on its own, and is backed by an executable guard.
 
+### Verified activation (2026-11-16, merged `e24c8108`)
+
+Clean tree, pinned adapters (Gitleaks 8.30.1, Semgrep 1.183.0, OSV-Scanner 2.7.0,
+cargo-audit 0.22.2 reporting no applicable Rust content):
+
+```
+verdict PASS, coverage COMPLETE, 0 execution failures
+findings 98, suppressed 82, unsuppressed 16, blocking 0
+mode required, required_mode ready=true, verdict PASS
+```
+
+Negative controls exercised before merge: the entry removed ⇒ `FAIL` with 1
+blocking (exit 1); the entry expired ⇒ `FAIL`, suppressed 82 → 81; a newly
+introduced dynamic exec ⇒ `FAIL` with that path blocking. Baseline audit: 82
+entries, 0 stale, 0 suppressions without an approved entry, every entry carrying
+owner, reason and expiry.
+
 ## Provider model provenance is outside SOP
 
 A scanner binary or rules pin proves the bytes SOP executes or reads, not where a

@@ -251,8 +251,10 @@ findings 101, suppressed 84, unsuppressed 17, blocking 1
 2. **Clean-filter fingerprint policy — decided (2026-11-16).** Option C, the verified
    git-lfs policy, is approved and implemented in this PR. It is no longer an open
    decision.
-3. **Scanner enforcement.** Deferred by the operator on 2026-11-16. `report-only`
-   and `required_categories: []` are unchanged.
+3. **Scanner enforcement.** Implemented 2026-11-16 as W8 stage 1 (PR #503):
+   `mode: required` with `required_categories: [sast, secrets]`, an
+   `internal/archtest` isolation guard, three stale entries retired and one
+   expiring entry added. `dependencies` remains out of required mode.
 4. **Baseline / residual acceptance.** No entry was added, suppressed, or removed.
    Accepting the D4-5 residual instead of fixing it remains `Reject` per the
    packet.

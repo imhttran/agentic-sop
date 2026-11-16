@@ -132,8 +132,9 @@ The single blocking finding is the acknowledged `dangerous-exec-command` call si
 in `harness.go`; containment mitigates behaviour, not the call site, and it is not
 suppressed. Three baseline entries became **stale** because the tests they
 referenced were removed or rewritten by this change (the retired override tests);
-no entry was added, edited, or removed. `security.mode` stays `report-only` and
-`required_categories` stays empty (W8 deferred).
+no entry was added, edited, or removed at the time of that change. (W8 stage 1
+later enabled `required` for `sast` + `secrets` and added one guarded entry; see
+PR #503.)
 
 ## 7. Residuals and compatibility
 
