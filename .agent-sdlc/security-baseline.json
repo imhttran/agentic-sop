@@ -554,30 +554,6 @@
       "expires_at": "2027-06-30T00:00:00Z"
     },
     {
-      "fingerprint": "semgrep:11ef53417d1b9eedc8e24e1593bdfa38b6d8df035e3265fce7c61bff2aa3e5c2",
-      "rule_id": "dangerous-exec-command",
-      "path": "internal/toolharness/isolation_test.go",
-      "reason": "Test-only harness helper that starts a sandbox or probes isolation; it cannot run in production. D4-3 group B, reviewed 2026-11-13.",
-      "owner": "imhttran",
-      "expires_at": "2027-06-30T00:00:00Z"
-    },
-    {
-      "fingerprint": "semgrep:765bec591c74b4bc0a7bfbee12daaeb711a7123391832670c4d7d8d2a99d9f28",
-      "rule_id": "dangerous-exec-command",
-      "path": "internal/toolharness/isolation_test.go",
-      "reason": "Test-only harness helper that starts a sandbox or probes isolation; it cannot run in production. D4-3 group B, reviewed 2026-11-13.",
-      "owner": "imhttran",
-      "expires_at": "2027-06-30T00:00:00Z"
-    },
-    {
-      "fingerprint": "semgrep:fbedd5f6a2ed946cd639a20ce584f6ab65c3788767ea09cbb60e2c08294313b2",
-      "rule_id": "dangerous-exec-command",
-      "path": "internal/toolharness/isolation_test.go",
-      "reason": "Test-only harness helper that starts a sandbox or probes isolation; it cannot run in production. D4-3 group B, reviewed 2026-11-13.",
-      "owner": "imhttran",
-      "expires_at": "2027-06-30T00:00:00Z"
-    },
-    {
       "fingerprint": "semgrep:60898e80cd5c2bc481c1929520ff2a58292a4bd4bc50d06cce1553701a9b7781",
       "rule_id": "dangerous-exec-command",
       "path": "internal/agent/command.go",
@@ -670,6 +646,14 @@
       "rule_id": "dangerous-exec-command",
       "path": "internal/testrunner/command.go",
       "reason": "project validation config; the command is intentional and no untrusted text is interpolated into it. D4-4 group C, reviewed 2026-11-13.",
+      "owner": "imhttran",
+      "expires_at": "2027-03-31T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:3dcf22239e8d13ec5dcc3baab9b377f8f0e56ec5576ea07652217384910fea00",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/toolharness/harness.go",
+      "reason": "Structurally controlled by mandatory isolation (M1+G3+G4, verified on macOS and Linux). Every model-reachable execution reaches this call only through execIsolated, which builds the OS sandbox and refuses when no backend can be built. The internal/archtest guard TestModelReachableExecIsIsolated fails if a bypass is introduced; re-review at expiry or if that guard changes.",
       "owner": "imhttran",
       "expires_at": "2027-03-31T00:00:00Z"
     }
