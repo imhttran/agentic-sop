@@ -80,6 +80,12 @@ backend, measured with a temporary backend-suppression hook:
 Skips are honest, not silent: `needSandbox` and `needSandboxAvailable` skip with
 `no runnable sandbox backend`, and both **fail** when `SOP_SANDBOX_REQUIRED=1`.
 
+`SandboxRunnable` deliberately checks more than "the backend binary exists": it
+probes that the backend starts **and** runs one trivial command through the same
+`isolate()` production path the harness uses. A host where the binary exists but
+the production mount set fails therefore skips rather than failing a test that
+expects execution.
+
 ## 5. Sandbox-enabled Linux verification
 
 `scripts/checks/sandbox-integration.sh` plus the `sandbox-linux` CI job:

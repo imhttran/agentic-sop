@@ -75,6 +75,8 @@ if [ "$skips" -ne "$sandbox_skips" ]; then
 fi
 
 if [ "$status" -ne 0 ]; then
+  echo "sandbox-integration: failing tests:" >&2
+  grep -e '^--- FAIL' -e '^    --- FAIL' "$log" >&2 || true
   echo "sandbox-integration: FAILED; last 60 lines of the run:" >&2
   tail -60 "$log" >&2
   exit "$status"

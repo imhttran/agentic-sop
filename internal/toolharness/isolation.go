@@ -84,6 +84,43 @@ func SandboxRunnable() error {
 	if err != nil {
 		return fmt.Errorf("%w: %s cannot start here: %v", errIsolationUnavailable, name, err)
 	}
+	return probeProductionInvocation(name)
+}
+
+// probeProductionInvocation runs one trivial command through the same isolate()
+// path the harness uses. The backend probe above only proves the binary starts;
+// it does not prove the production mount set works on this host. Without this,
+// a caller would treat "binary present" as "commands run here" and a test that
+// expects execution would fail instead of skipping.
+func probeProductionInvocation(name string) error {
+	root, err := os.MkdirTemp("", "sop-sandbox-probe-")
+	if err != nil {
+		return fmt.Errorf("%w: cannot create probe root: %v", errIsolationUnavailable, err)
+	}
+	defer os.RemoveAll(root)
+
+	wrapped, env, _, cleanup, err := isolate(root, []string{"true"})
+	if err != nil {
+		return fmt.Errorf("%w: production sandbox argv unavailable: %v", errIsolationUnavailable, err)
+	}
+	defer cleanup()
+
+	var cmd *exec.Cmd
+	// Name the program literally, as the probe above does, so this stays a
+	// reviewed exec site rather than a new dynamic one.
+	switch name {
+	case "seatbelt":
+		cmd = exec.Command("sandbox-exec", wrapped[1:]...)
+	case "bubblewrap":
+		cmd = exec.Command("bwrap", wrapped[1:]...)
+	default:
+		return fmt.Errorf("%w: no argv builder for backend %q", errIsolationUnavailable, name)
+	}
+	cmd.Dir = root
+	cmd.Env = env
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%w: the sandbox cannot run a command here: %v (%s)", errIsolationUnavailable, err, strings.TrimSpace(string(out)))
+	}
 	return nil
 }
 
