@@ -1,8 +1,7 @@
 # Execution boundary — M1 + G3 + G4 (W6)
 
-**Status:** `IMPLEMENTED` / `VERIFIED` on `darwin arm64` (real Seatbelt backend).
-**Linux containment verification is `NOT_RUN` until the new `sandbox-linux` CI job
-runs**, so W6 is not yet fully verified.
+**Status:** `IMPLEMENTED` / `VERIFIED` on `darwin arm64` (real Seatbelt backend) and
+on `ubuntu-22.04` with real bubblewrap. Merged at `1e611304` via PR #499.
 **Authorization:** operator decision 2026-11-16 (option B, with mandatory
 sandbox-enabled integration verification), amending
 [PROPOSAL-LLM03-D4-5-MANDATORY-ISOLATION.md](../../plans/PROPOSAL-LLM03-D4-5-MANDATORY-ISOLATION.md) §11
@@ -103,7 +102,10 @@ Coverage: `run_command` (including `go test`/`go build`/`go vet`),
 `git_status`, `git_diff`, and the per-turn fingerprints all execute under real
 bubblewrap containment.
 
-**This job has not run yet.** Until it does, Linux containment is `NOT_RUN`.
+**First run (2026-11-16, PR #499, run `43954680761`):** `pass=446 fail=0 skip=3
+sandbox_skip=0` in 6m46s. Linux containment is `VERIFIED`. The three non-sandbox
+skips are reported by the job and are unrelated to the boundary (the macOS keychain
+probe and live-tagged tests).
 
 ## 6. Verification performed
 
@@ -115,6 +117,11 @@ go test ./internal/ollamaagent/ -count=1                        # ok 126.3s
 go test ./internal/cli/ -count=1                                # ok  65.0s
 go test ./internal/archtest/ -count=1                           # ok
 ```
+
+CI on PR #499: 14 of 14 checks pass, including
+`sandbox-backed execution boundary (Linux)`: `pass=446 fail=0 skip=3
+sandbox_skip=0` (run
+[43954680761](https://github.com/imhttran/agentic-sop/actions/runs/43954680761)).
 
 All on darwin arm64 with the real Seatbelt backend. The macOS sandbox tests that
 previously ran policy-only now run contained and pass.

@@ -245,8 +245,8 @@ findings 101, suppressed 84, unsuppressed 17, blocking 1
 1. **M1 + G3 + G4 — implemented 2026-11-16 (option B).** Isolation is mandatory for
    every model-reachable execution and the operator override is gone. Sandbox-
    dependent tests skip on a host with no runnable backend and run in the new
-   `sandbox-linux` CI job with `SOP_SANDBOX_REQUIRED=1`. macOS is verified; Linux
-   containment is `NOT_RUN` until that job runs
+   `sandbox-linux` CI job with `SOP_SANDBOX_REQUIRED=1`. macOS and Linux are both
+   verified (`pass=446 fail=0 skip=3 sandbox_skip=0`)
    ([execution-boundary-w6.md](execution-boundary-w6.md)).
 2. **Clean-filter fingerprint policy — decided (2026-11-16).** Option C, the verified
    git-lfs policy, is approved and implemented in this PR. It is no longer an open

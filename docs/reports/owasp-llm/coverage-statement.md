@@ -5,8 +5,8 @@ baseline is merged; the D4-5 `run_command` residual remains unaccepted and
 blocking; enforcement stays report-only. Merged earlier: the git output hardening
 (PR #491, `2f544a62`) and the filter-detection accuracy fix (PR #494, `6c9500e4`).
 **W7 (clean-filter policy) and W6 (mandatory isolation for every model-reachable
-execution) are implemented**; Linux containment verification for W6 is `NOT_RUN`
-until the new `sandbox-linux` job runs. See
+execution) are implemented and merged**, with Linux containment verified by the
+`sandbox-linux` job. See
 [acceptance-report-2026-11-16.md](acceptance-report-2026-11-16.md).
 
 This statement answers one question for each of the ten OWASP LLM risks: what
@@ -343,11 +343,11 @@ acceptance criterion. It is **not implemented** pending a CI-backend decision; s
     `git_status`, `git_diff` **and** working-tree change detection; the agent loop
     still runs but cannot verify changes. This is the compatibility trade the
     operator accepted with option B.
-  - Platform coverage: macOS arm64 is `VERIFIED` against a real Seatbelt backend.
-    Linux containment is `NOT_RUN` until the new `sandbox-linux` CI job runs; that
-    job installs bubblewrap on Ubuntu 22.04 (which permits unprivileged user
-    namespaces without changing the host's AppArmor policy) and runs the affected
-    suites with `SOP_SANDBOX_REQUIRED=1`, so a skip is a failure.
+  - Platform coverage: macOS arm64 is `VERIFIED` against a real Seatbelt backend,
+    and Linux is `VERIFIED` by the `sandbox-linux` job on Ubuntu 22.04 (which
+    permits unprivileged user namespaces without changing the host's AppArmor
+    policy). Its first run on PR #499 reported `pass=446 fail=0 skip=3
+    sandbox_skip=0` with `SOP_SANDBOX_REQUIRED=1`, so no sandbox test skipped.
   - **A green ordinary CI job is not evidence of this row.** On the ordinary
     runner 66 sandbox-dependent tests skip (30 `toolharness`, 36 `ollamaagent`),
     plus 22 unrelated skips. The skip counts and reasons are reported in
@@ -491,10 +491,10 @@ These cannot be closed by code in this repository:
    the per-turn fingerprints), with refusal where no backend exists, plus a `.git`
    write deny. The override and acknowledgement are removed. Sandbox-dependent
    tests skip on a host with no runnable backend and run in the `sandbox-linux` CI
-   job with `SOP_SANDBOX_REQUIRED=1`. Linux containment is `NOT_RUN` until that job
-   runs; see [execution-boundary-w6.md](execution-boundary-w6.md). The Semgrep
-   finding stays blocking because containment mitigates behaviour, not the call
-   site.
+   job with `SOP_SANDBOX_REQUIRED=1`; its first run reported `pass=446 fail=0
+   skip=3 sandbox_skip=0`, so Linux containment is `VERIFIED`. See
+   [execution-boundary-w6.md](execution-boundary-w6.md). The Semgrep finding stays
+   blocking because containment mitigates behaviour, not the call site.
 6. **Clean-filter fingerprint policy — decided (2026-11-16).** Option C, the verified
    git-lfs policy, is approved and implemented: a verified git-lfs filter keeps
    normal mutation detection; any other configured driver makes git output untrusted

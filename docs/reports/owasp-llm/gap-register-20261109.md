@@ -188,8 +188,8 @@ acceptance criteria were accepted; no acceptance decision exists.
    removed, and every model-reachable execution is sandboxed or refused. Because
    the ordinary runner ships no `bubblewrap`, sandbox-dependent tests skip there
    (66 skips) and a new `sandbox-linux` job runs them with
-   `SOP_SANDBOX_REQUIRED=1` so a skip is a failure. Linux containment is `NOT_RUN`
-   until that job runs
+   `SOP_SANDBOX_REQUIRED=1` so a skip is a failure. Linux containment is `VERIFIED`
+   by its first run (`pass=446 fail=0 skip=3 sandbox_skip=0`)
    ([execution-boundary-w6.md](execution-boundary-w6.md)).
    (b) The **clean-filter fingerprint policy** is **decided and implemented** as
    Option C: a verified git-lfs filter keeps normal mutation detection; any other
