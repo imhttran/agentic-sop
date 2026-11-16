@@ -96,8 +96,8 @@ expects execution.
   fails loudly if it cannot start.
 - Runs `internal/toolharness` and `internal/ollamaagent` with
   `SOP_SANDBOX_REQUIRED=1`, so a sandbox skip becomes a failure.
-- Prints `pass/fail/skip/sandbox_skip` counts and refuses to report OK when a
-  sandbox skip occurred.
+- Prints `pass/fail/skip/sandbox_skip` counts, names any failing tests, and
+  refuses to report OK when a sandbox skip occurred.
 
 Coverage: `run_command` (including `go test`/`go build`/`go vet`),
 `git_status`, `git_diff`, and the per-turn fingerprints all execute under real

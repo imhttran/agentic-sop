@@ -11,11 +11,16 @@ import (
 )
 
 // installFakeCargo puts a fake `cargo` executable first on PATH so a Cargo run is
-// observable without a real Rust toolchain. It returns nothing; the caller's
-// environment is restored by t.Setenv.
-func installFakeCargo(t *testing.T) {
+// observable without a real Rust toolchain. The script lives under the harness
+// root, not the host temp dir: bubblewrap mounts a private /tmp, so a program in
+// the host temp dir is invisible inside the sandbox. Only the root and the
+// sandbox's own temp are visible there.
+func installFakeCargo(t *testing.T, root string) {
 	t.Helper()
-	dir := t.TempDir()
+	dir := filepath.Join(root, ".testbin")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("create fake bin dir: %v", err)
+	}
 	script := filepath.Join(dir, "cargo")
 	if err := os.WriteFile(script, []byte("#!/bin/sh\necho fake-cargo-output\n"), 0o755); err != nil {
 		t.Fatalf("write fake cargo: %v", err)
@@ -28,8 +33,8 @@ func installFakeCargo(t *testing.T) {
 // harness refuses the same command (SOP-001).
 func TestAgentToolCargoExecutesWhenEnabled(t *testing.T) {
 	needSandbox(t)
-	installFakeCargo(t)
 	root := t.TempDir()
+	installFakeCargo(t, root)
 
 	on := New(root, Config{CommandTimeout: 30 * time.Second, MaxOutputBytes: 1 << 16, CargoAgentToolEnabled: true}, nil)
 	out, err := on.Run(context.Background(), ToolRunCommand, map[string]any{"command": "cargo build"})
