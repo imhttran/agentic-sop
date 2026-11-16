@@ -10,8 +10,8 @@ Git 2.50.1 (Apple Git-155).
 
 This report addresses the review finding recorded against
 [PROPOSAL-LLM03-D4-5-MANDATORY-ISOLATION.md](../../plans/PROPOSAL-LLM03-D4-5-MANDATORY-ISOLATION.md):
-*"sandboxing contains configured Git helpers but does not guarantee unmodified Git
-output."* Sandbox containment bounds what a helper can reach; it does not stop a
+_"sandboxing contains configured Git helpers but does not guarantee unmodified Git
+output."_ Sandbox containment bounds what a helper can reach; it does not stop a
 helper from returning whatever it chooses, and it never runs at all on the
 operator override. This change does not rely on containment for output integrity.
 
@@ -21,9 +21,9 @@ Git executes programs named by repository configuration and by the ambient
 environment whenever it reads the working tree. SOP reaches git on two paths, both
 of which inherited SOP's full environment and passed no hardening options:
 
-| Path | Caller | Subcommand |
-| --- | --- | --- |
-| model-facing tools | `ToolGitStatus`, `ToolGitDiff` | `git status`, `git diff` |
+| Path                 | Caller                                                         | Subcommand                    |
+| -------------------- | -------------------------------------------------------------- | ----------------------------- |
+| model-facing tools   | `ToolGitStatus`, `ToolGitDiff`                                 | `git status`, `git diff`      |
 | per-turn observation | `WorkingTreeFingerprint`, `ChangedSince`, `WorkingTreeChanged` | `git status`, `git diff HEAD` |
 
 The model can write `.git/config` and `.gitattributes`, and the operator override
@@ -37,13 +37,13 @@ Each row was measured on Git 2.50.1 with a harmless `#!/bin/sh` canary that appe
 to a marker file. "Bare" is `git status`/`git diff` with no options; "hardened" is
 the argv SOP now builds.
 
-| Vector | Where it is configured | Bare | Hardened | Switch |
-| --- | --- | --- | --- | --- |
-| external diff driver | `diff.external` | executes | blocked | `--no-ext-diff` |
-| external diff driver | `GIT_EXTERNAL_DIFF` env | executes | blocked | `--no-ext-diff` |
-| fsmonitor hook | `core.fsmonitor` | executes on `status` | blocked | `-c core.fsmonitor=false` |
-| textconv driver | `diff.<driver>.textconv` + `diff=` attribute | executes | blocked | `--no-textconv` |
-| **clean filter** | `filter.<driver>.clean` + `filter=` attribute | executes | **still executes** | none exists |
+| Vector               | Where it is configured                        | Bare                 | Hardened           | Switch                    |
+| -------------------- | --------------------------------------------- | -------------------- | ------------------ | ------------------------- |
+| external diff driver | `diff.external`                               | executes             | blocked            | `--no-ext-diff`           |
+| external diff driver | `GIT_EXTERNAL_DIFF` env                       | executes             | blocked            | `--no-ext-diff`           |
+| fsmonitor hook       | `core.fsmonitor`                              | executes on `status` | blocked            | `-c core.fsmonitor=false` |
+| textconv driver      | `diff.<driver>.textconv` + `diff=` attribute  | executes             | blocked            | `--no-textconv`           |
+| **clean filter**     | `filter.<driver>.clean` + `filter=` attribute | executes             | **still executes** | none exists               |
 
 The last row is the residual: git exposes no global switch to disable a filter
 driver, because the driver name is chosen by the repository. `-c
@@ -56,7 +56,7 @@ boundary.
 `internal/toolharness/git_integrity.go`:
 
 - `hardenedGitArgs` builds the argv for every SOP-run git command: `-c
-  core.fsmonitor=false` globally, plus `--no-ext-diff --no-textconv` for `diff`
+core.fsmonitor=false` globally, plus `--no-ext-diff --no-textconv` for `diff`
   (`git status` rejects those two as unknown options — measured). The leading
   `git` is omitted so each caller passes the literal program name and the harness
   keeps one policy-reviewed `exec.CommandContext` site instead of multiplying it.
@@ -112,19 +112,19 @@ pairs a **positive control** — the canary is proven to run under plain `git` �
 the assertion that the harness path does not run it. A "no marker" assertion alone
 would pass on a broken canary and is not used.
 
-| Test | Asserts |
-| --- | --- |
-| `TestHardenedGitArgsNeutralisesHelperMechanisms` | argv shape for `status`, `diff`, `diff HEAD -- .` |
-| `TestGitChildEnvDropsInjectionVariables` | injection variables dropped, unrelated ones kept |
-| `TestParseFilterAttrs` | `check-attr -z` parsing; "unspecified"/"unset" ignored |
-| `TestGitTouchedPathsHandlesStatusAndDiff` | strict path extraction from porcelain and diff headers |
-| `TestGitStatusDoesNotRunRepositoryFsmonitor` | `core.fsmonitor` canary: plain `status` runs it, `git_status` does not |
-| `TestGitDiffDoesNotRunExternalDiffDriver` | `diff.external` canary |
-| `TestGitDiffDoesNotRunTextconvDriver` | textconv canary |
-| `TestGitDiffDropsExternalDiffEnvironment` | `GIT_EXTERNAL_DIFF` canary |
-| `TestGitOutputLabelsActiveCleanFilter` | the residual is labelled on `status` and `diff` |
-| `TestGitOutputUnlabelledWithoutFilters` | negative control: no notice on an ordinary repository |
-| `TestFingerprintStillObservableWithHardening` | fingerprints still detect a real change |
+| Test                                             | Asserts                                                                |
+| ------------------------------------------------ | ---------------------------------------------------------------------- |
+| `TestHardenedGitArgsNeutralisesHelperMechanisms` | argv shape for `status`, `diff`, `diff HEAD -- .`                      |
+| `TestGitChildEnvDropsInjectionVariables`         | injection variables dropped, unrelated ones kept                       |
+| `TestParseFilterAttrs`                           | `check-attr -z` parsing; "unspecified"/"unset" ignored                 |
+| `TestGitTouchedPathsHandlesStatusAndDiff`        | strict path extraction from porcelain and diff headers                 |
+| `TestGitStatusDoesNotRunRepositoryFsmonitor`     | `core.fsmonitor` canary: plain `status` runs it, `git_status` does not |
+| `TestGitDiffDoesNotRunExternalDiffDriver`        | `diff.external` canary                                                 |
+| `TestGitDiffDoesNotRunTextconvDriver`            | textconv canary                                                        |
+| `TestGitDiffDropsExternalDiffEnvironment`        | `GIT_EXTERNAL_DIFF` canary                                             |
+| `TestGitOutputLabelsActiveCleanFilter`           | the residual is labelled on `status` and `diff`                        |
+| `TestGitOutputUnlabelledWithoutFilters`          | negative control: no notice on an ordinary repository                  |
+| `TestFingerprintStillObservableWithHardening`    | fingerprints still detect a real change                                |
 
 Positive control for the change itself: with `hardenedGitArgs` reverted to a
 pass-through, `TestGitStatusDoesNotRunRepositoryFsmonitor`,
@@ -141,6 +141,16 @@ go test ./internal/ollamaagent/ -count=1                        # ok  25.5s
 go test ./internal/agent/ ./internal/commandpolicy/ ./internal/security/ -count=1   # ok
 ```
 
+Full CI on the pull-request head `f0d8d399` passed **13 of 13** checks: the
+`fmt, vet, build, test` job, the race detector, the real Semgrep + Gitleaks +
+cargo-audit + OSV integration job, installer/plugin packaging, the Windows
+`install.ps1` job, the tagged evidence and operator acceptance checks, and the
+CodeQL analyses (runs
+[43924409662](https://github.com/imhttran/agentic-sop/actions/runs/43924409662),
+[43924403486](https://github.com/imhttran/agentic-sop/actions/runs/43924403486)).
+That makes the CI evidence real rather than local-only; the change is still
+**unmerged**.
+
 Scanner, pinned adapters, after the change:
 
 ```
@@ -155,10 +165,10 @@ call site and no suppression.
 
 ## 6. Operator decisions this work surfaces
 
-| # | Decision | Why it cannot be settled here |
-| --- | --- | --- |
-| 1 | Approve M1 + G3 + G4 (sandbox every model-reachable exec; deny `.git` writes) | It changes the approved override and removes `git_status`/`git_diff` where no backend exists. Exact wording is in the proposal §11. |
-| 2 | Decide the clean-filter fingerprint policy | Making fingerprints fail closed on a configured filter would disable mutation detection on `git-lfs` repositories. That is a behaviour change to an approved control. |
+| #   | Decision                                                                      | Why it cannot be settled here                                                                                                                                         |
+| --- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Approve M1 + G3 + G4 (sandbox every model-reachable exec; deny `.git` writes) | It changes the approved override and removes `git_status`/`git_diff` where no backend exists. Exact wording is in the proposal §11.                                   |
+| 2   | Decide the clean-filter fingerprint policy                                    | Making fingerprints fail closed on a configured filter would disable mutation detection on `git-lfs` repositories. That is a behaviour change to an approved control. |
 
 Until item 1 is approved, `git` remains unsandboxed and the Semgrep finding remains
 blocking. Until item 2 is decided, residual 1 above stays open and unaccepted.
