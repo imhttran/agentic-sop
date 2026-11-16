@@ -421,6 +421,9 @@ a decision recorded under another state is reported as stale and is never applie
 leaves the file unchanged. `add` and `remove` refuse to overwrite a `decisions.json`
 that is malformed, has another schema, or holds invalid records, so earlier decisions
 are never silently lost; move the file aside or repair it first.
+`add` also refuses when the store is full (128 records by default) instead of evicting an
+older decision; retire one with `remove` first. `list` shows the ids of stale decisions
+so they can be removed too.
 
 The artifacts live under `.agent-sdlc/context/`. Default behavior is unchanged: no
 cache is consulted and no memory is applied unless these flags are used.

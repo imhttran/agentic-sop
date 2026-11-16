@@ -171,3 +171,21 @@ func TestUnmarshalStrictRefusesWhatUnmarshalDrops(t *testing.T) {
 		t.Errorf("valid store: len=%d err=%v", s.Len(), err)
 	}
 }
+
+func TestHas(t *testing.T) {
+	s := New(2)
+	r := rec("t1")
+	if s.Has(r.ID()) {
+		t.Error("empty store must not have the record")
+	}
+	if _, err := s.Add(r); err != nil {
+		t.Fatal(err)
+	}
+	if !s.Has(r.ID()) || s.Has("nope") {
+		t.Error("Has must be true only for a stored id")
+	}
+	var nilStore *Store
+	if nilStore.Has(r.ID()) {
+		t.Error("nil store has nothing")
+	}
+}

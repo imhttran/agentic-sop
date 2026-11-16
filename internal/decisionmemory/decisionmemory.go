@@ -159,6 +159,15 @@ func (s *Store) Remove(id string) bool {
 	return true
 }
 
+// Has reports whether a record with the given ID is stored.
+func (s *Store) Has(id string) bool {
+	if s == nil {
+		return false
+	}
+	_, ok := s.records[id]
+	return ok
+}
+
 // Len is the number of retained records.
 func (s *Store) Len() int {
 	if s == nil {

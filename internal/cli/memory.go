@@ -83,14 +83,21 @@ func runMemoryAdd(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "memory add: %v\n", err)
 		return exitError
 	}
-	rec, err := store.Add(decisionmemory.Record{
+	candidate := decisionmemory.Record{
 		Decision:   decision,
 		Scope:      scope,
 		Reason:     reason,
 		Evidence:   evidence,
 		Repository: verifcache.RepositoryIdentity(head, dirty, ""),
 		Source:     source,
-	})
+	}
+	// Store.Add evicts the smallest-ID record when full, which would silently lose an
+	// operator's decision. Refuse instead; re-adding an existing record is a no-op.
+	if store.Len() >= store.Limit() && !store.Has(candidate.ID()) {
+		fmt.Fprintf(stderr, "memory add: the decision store is full (%d records); retire one with `sop memory remove --id <id>` (ids are shown by `sop memory list`) and retry\n", store.Limit())
+		return exitError
+	}
+	rec, err := store.Add(candidate)
 	if err != nil {
 		fmt.Fprintf(stderr, "memory add: %v\n", err)
 		return exitError
@@ -127,13 +134,14 @@ func runMemoryList(args []string, stdout, stderr io.Writer, d deps) int {
 	repository := verifcache.RepositoryIdentity(head, dirty, "")
 
 	store := loadDecisionStore(dir)
-	applicable, stale := 0, 0
+	applicable := 0
+	var stale []decisionmemory.Record
 	for _, r := range store.All() {
 		if scope != "" && r.Scope != scope {
 			continue
 		}
 		if r.Repository != repository {
-			stale++
+			stale = append(stale, r)
 			continue
 		}
 		applicable++
@@ -146,8 +154,11 @@ func runMemoryList(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stdout, "    id: %s\n", r.ID())
 	}
 	fmt.Fprintf(stdout, "%d applicable decision(s)\n", applicable)
-	if stale > 0 {
-		fmt.Fprintf(stdout, "%d stale decision(s) from another repository state (not applied)\n", stale)
+	if len(stale) > 0 {
+		fmt.Fprintf(stdout, "%d stale decision(s) from another repository state (not applied)\n", len(stale))
+		for _, r := range stale {
+			fmt.Fprintf(stdout, "    stale id: %s  (%s, source %s)\n", r.ID(), r.Scope, r.Source)
+		}
 	}
 	return exitOK
 }

@@ -116,11 +116,7 @@ func TestMemoryRemoveByID(t *testing.T) {
 		}
 	}
 	_, out, _ := runCLI(t, dir, "memory", "list")
-	m := regexp.MustCompile(`repository  drop\n(?:    .*\n)*?    id: ([0-9a-f]{64})\n`).FindStringSubmatch(out)
-	if m == nil {
-		t.Fatalf("no id listed for the drop decision: %s", out)
-	}
-	dropID := m[1]
+	dropID := listedID(t, out, "drop")
 
 	path := decisionStorePath(dir)
 	before, _ := os.ReadFile(path)
@@ -138,4 +134,71 @@ func TestMemoryRemoveByID(t *testing.T) {
 	if strings.Contains(out, "repository  drop") || !strings.Contains(out, "repository  keep") || !strings.Contains(out, "1 applicable decision") {
 		t.Errorf("after remove, list = %q", out)
 	}
+}
+
+// TestMemoryAddRefusesWhenStoreFull proves a full store never silently evicts an existing
+// decision: add fails with the file unchanged, re-adding an existing record is still
+// allowed, and removing one by id (stale ids are listed) frees a slot.
+func TestMemoryAddRefusesWhenStoreFull(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeFileT(t, dir, ".agent-sdlc/context/decisions.json", `{"schema":"decisionmemory/1","limit":2,"records":[]}`)
+	for _, d := range []string{"alpha", "beta"} {
+		if code, out, errOut := runCLI(t, dir, "memory", "add", "--decision", d, "--reason", "r"); code != exitOK {
+			t.Fatalf("add %s: code=%d stdout=%s stderr=%s", d, code, out, errOut)
+		}
+	}
+	path := decisionStorePath(dir)
+	before, _ := os.ReadFile(path)
+
+	code, _, errOut := runCLI(t, dir, "memory", "add", "--decision", "gamma", "--reason", "r")
+	if code != exitError || !strings.Contains(errOut, "store is full") {
+		t.Errorf("add to a full store: code=%d stderr=%s, want exitError store is full", code, errOut)
+	}
+	if after, _ := os.ReadFile(path); string(after) != string(before) {
+		t.Errorf("a refused add changed the file")
+	}
+	if code, _, errOut := runCLI(t, dir, "memory", "add", "--decision", "alpha", "--reason", "r"); code != exitOK {
+		t.Errorf("re-adding an existing record must still succeed: code=%d stderr=%s", code, errOut)
+	}
+
+	_, out, _ := runCLI(t, dir, "memory", "list")
+	betaID := listedID(t, out, "beta")
+	if code, _, errOut := runCLI(t, dir, "memory", "remove", "--id", betaID); code != exitOK {
+		t.Fatalf("remove: code=%d stderr=%s", code, errOut)
+	}
+	if code, _, errOut := runCLI(t, dir, "memory", "add", "--decision", "gamma", "--reason", "r"); code != exitOK {
+		t.Errorf("add after freeing a slot: code=%d stderr=%s", code, errOut)
+	}
+}
+
+// TestMemoryListShowsStaleIDs proves a stale decision can be retired: list prints its id.
+func TestMemoryListShowsStaleIDs(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	store := decisionmemory.New(0)
+	stale, err := store.Add(decisionmemory.Record{Decision: "old", Scope: decisionmemory.ScopeProject, Reason: "r", Repository: "other-state", Source: "s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := saveDecisionStore(dir, store); err != nil {
+		t.Fatal(err)
+	}
+	_, out, _ := runCLI(t, dir, "memory", "list")
+	if !strings.Contains(out, "stale id: "+stale.ID()) {
+		t.Fatalf("stale id not listed: %s", out)
+	}
+	if code, _, errOut := runCLI(t, dir, "memory", "remove", "--id", stale.ID()); code != exitOK {
+		t.Errorf("remove stale: code=%d stderr=%s", code, errOut)
+	}
+}
+
+// listedID returns the id that `memory list` printed for the applicable decision.
+func listedID(t *testing.T, out, decision string) string {
+	t.Helper()
+	m := regexp.MustCompile(`repository  ` + regexp.QuoteMeta(decision) + `\n(?:    .*\n)*?    id: ([0-9a-f]{64})\n`).FindStringSubmatch(out)
+	if m == nil {
+		t.Fatalf("no id listed for %s: %s", decision, out)
+	}
+	return m[1]
 }
