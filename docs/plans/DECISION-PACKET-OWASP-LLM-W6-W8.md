@@ -133,7 +133,7 @@ ignore it.
 
 | Decision          | Recommendation                                           | Operator decision             | State                                                                |
 | ----------------- | -------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------- |
-| 1 — M1+G3+G4      | Approve as written, **keep** the W1 hardening flags      | Approved 2026-11-16, option B | **Implemented** (Linux containment `NOT_RUN` until the new job runs) |
+| 1 — M1+G3+G4      | Approve as written, **keep** the W1 hardening flags      | Approved 2026-11-16, option B | **Implemented and VERIFIED** on macOS + Linux |
 | 2 — Clean filter  | Option C (verified-LFS allowlist, fail closed otherwise) | Approved 2026-11-16           | **Implemented**                                                      |
 | 3 — Required mode | Defer; sequence after Decision 1                         | Deferred                      | Not started; `report-only` unchanged                                 |
 
