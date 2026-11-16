@@ -120,6 +120,18 @@ security:
         linux/arm64: 4061ef4c021ed3c47f203b818f337e351336cc5cd67c0274fc36bd1dfc728dd7
         darwin/amd64: e82c5df7ab0a42dff29a1cd0660711447b56b4c0483ff66ad8634df10fd81a45
         darwin/arm64: d4926ef8da134332543be276dff157e4c170f99ad91fc48e89448a8816bdf70b
+    - id: cargo-audit
+      category: dependencies
+      protocol: builtin
+      command: [cargo-audit]
+      languages: [rust]
+      version: "0.22.2"
+      # Executable digests of the cargo-audit 0.22.2 binary extracted from the
+      # tarballs pinned in scripts/security/cargo-audit-manifest.json. Only the two
+      # platforms the manifest supports are pinned; other platforms run unpinned.
+      binary_sha256_by_platform:
+        linux/amd64: 473b9a71e5cb5bde22f69c32f749c9b83931287d92dc36b91cb04f6705640ef2
+        darwin/arm64: 33fbe81adca1b794f4ffe98574d59b0ebe6fcfdb310976fafed98a094c795111
   evaluation:
     # Kept out of the routine scan path: an enabled evaluation adds ~121 s to
     # every task's quality-stage scan (SEC-LEFT-001 artifact: 121006 ms of
