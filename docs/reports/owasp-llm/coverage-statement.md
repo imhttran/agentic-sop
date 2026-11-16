@@ -503,7 +503,10 @@ These cannot be closed by code in this repository:
    [git-output-integrity.md](git-output-integrity.md#option-c--verified-git-lfs-filter-policy-w7-approved-2026-11-16).
 7. **Scanner enforcement.** Moving off `report-only` and setting
    `required_categories` is unchanged and still an operator decision
-   ([PROPOSAL-SCANNER-PIN-POLICY.md](../../plans/PROPOSAL-SCANNER-PIN-POLICY.md)).
+   ([PROPOSAL-SCANNER-PIN-POLICY.md](../../plans/PROPOSAL-SCANNER-PIN-POLICY.md)). A
+   decision-ready W8 packet with the proposed config, the baseline operations, the
+   prerequisites and the rollback is
+   [PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md](../../plans/PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md).
 
 ## Code follow-ups worth doing
 
