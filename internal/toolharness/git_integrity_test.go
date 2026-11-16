@@ -49,6 +49,17 @@ func requirePOSIXShell(t *testing.T) {
 	}
 }
 
+// isolateGitConfig points git at empty global and system configuration for the
+// duration of a test. Without it these tests depend on the host: a machine with
+// git-lfs installed configures `filter.lfs.*` globally, so "no driver configured"
+// is false there. The harness's own git children inherit this environment, so the
+// probes under test see the same isolated configuration.
+func isolateGitConfig(t *testing.T) {
+	t.Helper()
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+}
+
 func commitRepoFile(t *testing.T, dir, name, content string) {
 	t.Helper()
 	writeRepoFile(t, dir, name, content)
@@ -320,6 +331,66 @@ func TestGitOutputUnlabelledWithoutFilters(t *testing.T) {
 	}
 	if strings.Contains(out, "filter driver(s)") {
 		t.Errorf("unexpected filter notice on an ordinary repository: %q", out)
+	}
+}
+
+// TestGitOutputUnlabelledWhenAttributeNamesAnUnconfiguredDriver pins the accuracy
+// of the label. A `.gitattributes` can assign `filter=lfs` while no `filter.lfs.*`
+// command is configured and git-lfs is not installed; git then runs nothing and
+// `status` works normally. Labelling that would tell the model its output was
+// transformed when it was not.
+func TestGitOutputUnlabelledWhenAttributeNamesAnUnconfiguredDriver(t *testing.T) {
+	isolateGitConfig(t)
+	dir := t.TempDir()
+	gitInitRepo(t, dir)
+	commitRepoFile(t, dir, "f.txt", "x: y\n")
+	writeRepoFile(t, dir, ".gitattributes", "f.txt filter=lfs diff=lfs merge=lfs -text\n")
+	writeRepoFile(t, dir, "f.txt", "x: z\n")
+
+	// Precondition: the attribute is present but no driver command is configured.
+	if out, err := exec.Command("git", "-C", dir, "check-attr", "filter", "--", "f.txt").Output(); err != nil || !strings.Contains(string(out), "lfs") {
+		t.Fatalf("precondition: check-attr = %q err=%v, want an lfs attribute", out, err)
+	}
+	if err := exec.Command("git", "-C", dir, "config", "--get", "filter.lfs.clean").Run(); err == nil {
+		t.Fatal("precondition: filter.lfs.clean is configured despite the isolated git config")
+	}
+
+	h := newTestHarness(t, dir, nil)
+	out, err := h.Run(context.Background(), ToolGitStatus, nil)
+	if err != nil {
+		t.Fatalf("git_status: %v (%s)", err, out)
+	}
+	if strings.Contains(out, "filter driver(s)") {
+		t.Errorf("labelled a filter that no configured driver runs: %q", out)
+	}
+}
+
+// TestConfiguredFilterNames covers the configuration probe directly, so the
+// attribute/config intersection is testable without a working filter script.
+func TestConfiguredFilterNames(t *testing.T) {
+	isolateGitConfig(t)
+	dir := t.TempDir()
+	gitInitRepo(t, dir)
+	commitRepoFile(t, dir, "f.txt", "x: y\n")
+
+	h := newTestHarness(t, dir, nil)
+	ctx := context.Background()
+	if got := h.configuredFilterNames(ctx); len(got) != 0 {
+		t.Errorf("fresh repo configured filters = %v, want none", got)
+	}
+
+	runGit(t, dir, "config", "filter.cf.clean", "/bin/cat")
+	runGit(t, dir, "config", "filter.proc.process", "/bin/cat")
+	runGit(t, dir, "config", "filter.lfs.required", "true") // not an executable key
+
+	got := h.configuredFilterNames(ctx)
+	for _, want := range []string{"cf", "proc"} {
+		if !got[want] {
+			t.Errorf("configuredFilterNames missing %q: %v", want, got)
+		}
+	}
+	if got["lfs"] {
+		t.Errorf("filter.<name>.required must not count as an executable driver: %v", got)
 	}
 }
 
