@@ -54,6 +54,12 @@ func requirePOSIXShell(t *testing.T) {
 // git-lfs installed configures `filter.lfs.*` globally, so "no driver configured"
 // is false there. The harness's own git children inherit this environment, so the
 // probes under test see the same isolated configuration.
+//
+// A host can also carry a *dangling* filter configuration — `filter.lfs.*` present
+// with no git-lfs binary — which the W7 policy correctly treats as unverifiable and
+// therefore untrusted. Tests that assert trustworthy behaviour on an ordinary
+// repository must isolate the configuration rather than encode an assumption about
+// which of those two host shapes they run on.
 func isolateGitConfig(t *testing.T) {
 	t.Helper()
 	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
@@ -319,6 +325,7 @@ func TestGitOutputLabelsActiveCleanFilter(t *testing.T) {
 // TestGitOutputUnlabelledWithoutFilters is the negative control for the label: an
 // ordinary repository must not carry the notice, so the label stays meaningful.
 func TestGitOutputUnlabelledWithoutFilters(t *testing.T) {
+	isolateGitConfig(t)
 	dir := t.TempDir()
 	gitInitRepo(t, dir)
 	commitRepoFile(t, dir, "f.txt", "x: y\n")
@@ -397,6 +404,7 @@ func TestConfiguredFilterNames(t *testing.T) {
 // TestFingerprintStillObservableWithHardening proves the hardening did not break
 // the per-turn fingerprint: a real change is still detected.
 func TestFingerprintStillObservableWithHardening(t *testing.T) {
+	isolateGitConfig(t)
 	dir := t.TempDir()
 	gitInitRepo(t, dir)
 	commitRepoFile(t, dir, "f.txt", "x: y\n")
