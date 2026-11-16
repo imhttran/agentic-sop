@@ -434,7 +434,8 @@ Further limits:
 - Retrieval query isolation is not covered here. It is handed to Plan 09
   (`docs/plans/PLAN-09-SOP-LLM09-Vector-and-Embedding-Weaknesses.md`).
 - Decision memory has no integrity check on `decisions.json`; it is trusted only as
-  advisory context. Removal (`GAP-7`) and the overwrite refusal (`GAP-6`) are fixed.
+  advisory context. Removal (`GAP-7`), the overwrite refusal (`GAP-6`) and the
+  full-store refusal (`GAP-8`) are fixed.
 - The provider owns model training and weight provenance. SOP cannot verify either
   from this repository.
 
@@ -469,6 +470,8 @@ Focused commands for the fixed and recovery contracts:
 | `go test ./internal/memindex -run TestReindexProvenance -count=1` | 0 | PASS — all four `TestReindexProvenance*` tests ran and passed |
 | `go test ./internal/repoindex -count=1` | 0 | PASS — index identity tests passed |
 | `go test ./internal/cli -run 'TestMemoryAddRefusesUnreadableStore\|TestMemoryRemoveByID' -count=1` | 0 | PASS — GAP-6 overwrite refused with bytes unchanged (unknown schema, malformed JSON, invalid record); GAP-7 removal by id and unknown id rejected |
+| `go test ./internal/cli -run 'TestMemoryAddRefusesWhenStoreFull\|TestMemoryListShowsStaleIDs' -count=1` | 0 | PASS — GAP-8 full-store add refused with bytes unchanged, an existing record re-added, a slot freed by `memory remove`, stale ids listed |
+| `go test ./internal/cli -run TestUnverifiedEvidenceLabelled -count=1` | 0 | PASS — GAP-5 evidence without `chunk_hash` is labelled unverified and a verified item is not |
 
 Required checks for POISON-003:
 
