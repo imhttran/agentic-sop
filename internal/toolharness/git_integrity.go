@@ -3,7 +3,6 @@ package toolharness
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"sort"
@@ -211,16 +210,9 @@ func boundedPaths(paths []string, limit int) []string {
 	return out
 }
 
-// filterOutputNote is the line appended to a git tool result when the repository
-// applies a clean/smudge filter, so the model and the audit trail see that the
-// output is repository-transformed rather than raw working-tree content.
-func filterOutputNote(names []string) string {
-	if len(names) == 0 {
-		return ""
-	}
-	return fmt.Sprintf("\n[git output: repository-configured filter driver(s) %s transformed this content; it is not guaranteed to match the files on disk]",
-		strings.Join(names, ", "))
-}
+// filterOutputNote is superseded by gitOutputNote (git_filter_policy.go), which
+// distinguishes a verified git-lfs filter from one whose integrity SOP cannot
+// establish.
 
 // gitTouchedPaths extracts the paths a git tool result mentions, so the filter
 // probe can name real paths. Porcelain status lines and diff file headers are both

@@ -448,7 +448,7 @@ func (h *Harness) git(ctx context.Context, args ...string) (string, error) {
 		return result, nil
 	}
 	paths := gitTouchedPaths(result)
-	return result + filterOutputNote(h.activeGitFilters(ctx, paths)), nil
+	return result + gitOutputNote(h.gitOutputIntegrityOf(ctx, paths)), nil
 }
 
 // restoreFile returns one file to the content it had when this invocation first
@@ -506,6 +506,11 @@ func (h *Harness) WorkingTreeChanged(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("git status: %w", err)
 	}
+	// Fail closed: a filter SOP cannot verify may hide a change, so report the
+	// stricter answer rather than claiming nothing changed.
+	if unverified := h.unverifiedFilterDrivers(ctx); len(unverified) > 0 {
+		return true, nil
+	}
 	return hasSourceChange(string(out)), nil
 }
 
@@ -524,6 +529,13 @@ func (h *Harness) WorkingTreeFingerprint(ctx context.Context) (string, error) {
 	porcelain, err := h.execFingerprintCmd(ctx, "status", "--porcelain")
 	if err != nil {
 		return "", err
+	}
+	// Fail closed before hashing. A repository-configured filter that is not a
+	// verified git-lfs configuration can transform the reported diff and can hide a
+	// change from porcelain, so the decision is repository-wide and does not depend
+	// on the paths porcelain happened to report.
+	if unverified := h.unverifiedFilterDrivers(ctx); len(unverified) > 0 {
+		return "", fmt.Errorf("%w: driver(s) %s", errGitOutputUntrusted, strings.Join(unverified, ", "))
 	}
 	diff, err := h.execFingerprintCmd(ctx, "diff", "HEAD", "--", ".", ":(exclude)"+stateDirRel+"/")
 	if err != nil {
@@ -557,11 +569,18 @@ func (h *Harness) WorkingTreeFingerprint(ctx context.Context) (string, error) {
 // attributed to the intervening work; an identical tree reports false. A blank
 // baseline (no fingerprint could be taken) is treated as "unknown" and reports
 // true, the stricter choice for a mutating capability's completed outcome.
+//
+// When the fingerprint is untrusted because a repository-configured filter cannot
+// be verified, the result is also true: a filter can hide a change, so SOP must
+// never claim a task changed nothing on evidence it cannot establish.
 func (h *Harness) ChangedSince(ctx context.Context, baseline string) (bool, error) {
 	if strings.TrimSpace(baseline) == "" {
 		return true, nil
 	}
 	now, err := h.WorkingTreeFingerprint(ctx)
+	if errors.Is(err, errGitOutputUntrusted) {
+		return true, nil
+	}
 	if err != nil {
 		return false, err
 	}

@@ -1,7 +1,7 @@
 # OWASP LLM Top 10 — acceptance report (2026-11-16)
 
 **Repository:** `imhttran/agentic-sop`
-**Revision:** `origin/main` at `c55b42ff` (2026-11-16), darwin arm64, Go 1.27.1,
+**Revision:** `origin/main` at `6c9500e4` (2026-11-16), darwin arm64, Go 1.27.1,
 Git 2.50.1.
 **Scope of this report:** a verification-and-remediation pass over all ten OWASP
 2025 LLM categories. It records what was verified from source and tests, what was
@@ -207,14 +207,14 @@ findings 101, suppressed 84, unsuppressed 17, blocking 1
 
 - **Controls:** decision evidence is bound to real command output and reviewed
   repository content; a `go test -run` selection that matched no tests is flagged
-  so exit 0 is not read as passing. Git output that a repository-configured filter
-  transformed is now labelled rather than presented as raw.
+  so exit 0 is not read as passing. Git output is hardened, and the clean-filter
+  policy (W7, implemented 2026-11-16) means a filter SOP cannot verify makes
+  fingerprints fail closed to "changed" rather than letting a filter hide work.
 - **Remaining gaps:** SOP does not check that model prose is factually correct. A
-  hostile clean filter could still under-report changes to a working-tree
-  fingerprint — see the clean-filter residual in
-  [git-output-integrity.md](git-output-integrity.md) — which needs an operator
-  decision because closing it would disable mutation detection on `git-lfs`
-  repositories.
+  _verified_ git-lfs filter still runs and still transforms content; verification
+  establishes which program runs, not that its output is benign. A verified filter
+  can therefore still under-report, and a repository configuring an unused
+  unverified driver loses mutation detection (conservative direction).
 - **Classification:** `PARTIAL` by scope.
 
 ### LLM10 — Unbounded Consumption · `VERIFIED` (bounded)
@@ -231,24 +231,27 @@ findings 101, suppressed 84, unsuppressed 17, blocking 1
 
 ## Implemented in this pass
 
-| Change                                            | Files                                                                          | Status                                         |
-| ------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------- |
-| Git invocation hardening + clean-filter labelling | `internal/toolharness/git_integrity.go`, `harness.go`, `git_integrity_test.go` | merged at `2f544a62` (PR #491); CI 13/13 green |
-| Evidence: git output integrity                    | `docs/reports/owasp-llm/git-output-integrity.md`                               | merged at `2f544a62` (PR #491)                 |
-| This acceptance report                            | `docs/reports/owasp-llm/acceptance-report-2026-11-16.md`                       | this documentation PR                          |
-| Plan of record                                    | `docs/plans/PLAN-OWASP-LLM-E2E-REMEDIATION.md`                                 | this documentation PR                          |
+| Change                                            | Files                                                                                  | Status                                         |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Git invocation hardening + clean-filter labelling | `internal/toolharness/git_integrity.go`, `harness.go`, `git_integrity_test.go`         | merged at `2f544a62` (PR #491); CI 13/13 green |
+| Filter-detection accuracy fix                     | `internal/toolharness/git_integrity.go`, `git_integrity_test.go`                       | merged at `6c9500e4` (PR #494); CI 13/13 green |
+| W7 Option C: verified git-lfs filter policy       | `internal/toolharness/git_filter_policy.go`, `git_filter_policy_test.go`, `harness.go` | this PR (W7)                                   |
+| Evidence: git output integrity                    | `docs/reports/owasp-llm/git-output-integrity.md`                                       | merged at `2f544a62`, extended by this PR (W7) |
+| This acceptance report                            | `docs/reports/owasp-llm/acceptance-report-2026-11-16.md`                               | this PR (W7)                                   |
+| Plan of record                                    | `docs/plans/PLAN-OWASP-LLM-E2E-REMEDIATION.md`                                         | merged; W6/W7 status updated in this PR        |
 
 ## Decisions requiring operator approval
 
-1. **M1 + G3 + G4** (mandatory sandbox for every model-reachable exec; sandbox
-   git; deny `.git` writes). Wording is in
-   [PROPOSAL-LLM03-D4-5-MANDATORY-ISOLATION.md](../../plans/PROPOSAL-LLM03-D4-5-MANDATORY-ISOLATION.md)
-   §11. Not implied by anything here.
-2. **Clean-filter fingerprint policy.** Fail closed when a repository configures a
-   filter (safer, but disables mutation detection on `git-lfs` repositories), or
-   keep the label-only behaviour recorded here.
-3. **Scanner enforcement.** Whether to move off `report-only` and set
-   `required_categories`. Unchanged in this pass.
+1. **M1 + G3 + G4 — approved 2026-11-16, blocked on the CI backend.** The
+   authorization is recorded; implementation is held because the GitHub
+   `ubuntu-latest` image ships no `bubblewrap`, so mandatory isolation would refuse
+   every execution on CI. A CI-backend decision is required
+   ([DECISION-PACKET-OWASP-LLM-W6-W8.md](../../plans/DECISION-PACKET-OWASP-LLM-W6-W8.md)).
+2. **Clean-filter fingerprint policy — decided (2026-11-16).** Option C, the verified
+   git-lfs policy, is approved and implemented in this PR. It is no longer an open
+   decision.
+3. **Scanner enforcement.** Deferred by the operator on 2026-11-16. `report-only`
+   and `required_categories: []` are unchanged.
 4. **Baseline / residual acceptance.** No entry was added, suppressed, or removed.
    Accepting the D4-5 residual instead of fixing it remains `Reject` per the
    packet.

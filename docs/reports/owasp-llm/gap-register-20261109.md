@@ -180,16 +180,20 @@ acceptance criteria were accepted; no acceptance decision exists.
    isolation remain unobserved or `NOT_RUN`. The Linux notification sink and the
    macOS/Linux arm64 task-input re-runs are recorded. Run the remaining
    extensions only if a specific claim requires that evidence.
-   4b. **Execution-boundary decisions (2026-11-16).** Two decisions are open and
-   neither is implemented: (a) **M1 + G3 + G4** — mandatory isolation for every
-   model-reachable execution plus a `.git` write deny, which changes the approved
-   override and removes `git_status`/`git_diff` where no backend exists
+   4b. **Execution-boundary decisions (2026-11-16).** (a) **M1 + G3 + G4** —
+   mandatory isolation for every model-reachable execution plus a `.git` write
+   deny — was **authorized on 2026-11-16**
    ([PROPOSAL-LLM03-D4-5-MANDATORY-ISOLATION.md](../../plans/PROPOSAL-LLM03-D4-5-MANDATORY-ISOLATION.md)
-   §11); and (b) the **clean-filter fingerprint policy** — fail closed on a
-   configured filter (disables mutation detection on `git-lfs` repositories) or
-   keep the label-only behaviour in
-   [git-output-integrity.md](git-output-integrity.md). The Semgrep finding stays
-   blocking until (a) is decided.
+   §11) but is **not implemented**: the GitHub `ubuntu-latest` runner image ships no
+   `bubblewrap`, so mandatory isolation would refuse every execution on CI and fail
+   the acceptance criterion. A CI-backend decision is required
+   ([DECISION-PACKET-OWASP-LLM-W6-W8.md](../../plans/DECISION-PACKET-OWASP-LLM-W6-W8.md)).
+   (b) The **clean-filter fingerprint policy** is **decided and implemented** as
+   Option C: a verified git-lfs filter keeps normal mutation detection; any other
+   configured driver makes git output untrusted and fingerprints fail closed to
+   "changed"
+   ([git-output-integrity.md](git-output-integrity.md#option-c--verified-git-lfs-filter-policy-w7-approved-2026-11-16)).
+   The Semgrep finding stays blocking until (a) lands.
 
 Decided and implemented: per-row index digests (option A, schema 2), RAG `chunk_hash` (option A), and scanner pins (option B), see rows 1–3; and **LLM08 model-input credential policy A+B** (decision memory `f891d5cbe5dd578addbba83ee95b47c35752970219b4d0ad6d3fc2be254a741c`), with independent Linux `amd64` deterministic and live tool-path verification of the five LLM02 paths. C1 unknown-format redaction is implemented opt-in and merged in PRs #361/#362/#364 (decision memory `e233daee7645d770d0813713b82523e4272d0b6ccb03c3e5974e5f434f0debe1`; final code `85a754d4`), with deterministic macOS verification at `d69e9f63`, Linux deterministic verification recorded `PASS` at campaign baseline `5ff526a`, a bounded Linux live `PASS` for 12 scoped cases with one bounded residual (PR #370, `c5df5f0`), a focused C1 hardlink verification `PASS` for 4 scoped cases with one unlisted residual (PR #373, `ed1ba11`), and the repository configuration disabled. The A+B policy decision remains closed; the residual limits are recorded in the Plan 08 report. LLM02 Option C Phase 1 hardlink identity enforcement is implemented and verified on Linux (decision-memory repository `a01d2007e600ff5b4fa76eebb0eb8a8e6644efaeb68183beb66c14d0a462a2db`, implementation `4911f916`, artifact `fcc621ef…`; macOS `VERIFIED` by attempt 3, artifact `llm02-option-c-phase1-macos-campaign-attempt3.json`, SHA-256 `50cc9e09…`).
 

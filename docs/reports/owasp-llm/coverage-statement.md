@@ -1,10 +1,11 @@
 # OWASP LLM Top 10 — coverage statement
 
-**As of:** `main` at `c55b42ff` (2026-11-16), through PR #489. The approved D4
+**As of:** `main` at `6c9500e4` (2026-11-16), through PR #494. The approved D4
 baseline is merged; the D4-5 `run_command` residual remains unaccepted and
-blocking; enforcement stays report-only. This pass adds no merged change — it
-records a verification sweep and one merged hardening (PR #491, `2f544a62`) for git
-output integrity, and restates the decisions that remain open. See
+blocking; enforcement stays report-only. Merged since the last statement: the git
+output hardening (PR #491, `2f544a62`) and the filter-detection accuracy fix
+(PR #494, `6c9500e4`). The clean-filter policy is decided (Option C) and
+implemented; M1 + G3 + G4 is approved but blocked on a CI-backend decision. See
 [acceptance-report-2026-11-16.md](acceptance-report-2026-11-16.md).
 
 This statement answers one question for each of the ten OWASP LLM risks: what
@@ -238,9 +239,21 @@ execution-injection variables. Measured on Git 2.50.1, this blocks `diff.externa
 presented as raw. See [git-output-integrity.md](git-output-integrity.md). This is PR
 #491, merged at `2f544a62` with full CI green (13 of 13 checks). No baseline change.
 
-**Still blocked on the operator:** M1 + G3 + G4 (mandatory isolation for every
-model-reachable exec, sandboxed git, `.git` write deny) and the clean-filter
-fingerprint policy. Neither is implemented.
+**Approved and implemented — verified git-lfs filter policy (W7, 2026-11-16).**
+The clean-filter question is now decided: only a _verified_ git-lfs configuration is
+accepted (driver named `lfs`, the exact `git lfs install` command, and a `git-lfs`
+binary resolved outside the repository). Any other configured driver makes git
+output untrusted — `git_status`/`git_diff` are labelled "output integrity could not
+be established", and `WorkingTreeFingerprint`/`ChangedSince`/`WorkingTreeChanged`
+fail closed to "changed" so a filter can never make SOP claim a task changed
+nothing. See [git-output-integrity.md](git-output-integrity.md#option-c--verified-git-lfs-filter-policy-w7-approved-2026-11-16).
+
+**W6 is approved but blocked.** M1 + G3 + G4 (mandatory isolation for every
+model-reachable exec, sandboxed git, `.git` write deny) is authorized as of
+2026-11-16, but the CI runner image ships no `bubblewrap`, so mandatory isolation
+would refuse every execution on CI and fail the "`test-fast` stays green"
+acceptance criterion. It is **not implemented** pending a CI-backend decision; see
+[DECISION-PACKET-OWASP-LLM-W6-W8.md](../../plans/DECISION-PACKET-OWASP-LLM-W6-W8.md).
 
 ### LLM04 Data and Model Poisoning — partial
 
@@ -337,11 +350,13 @@ fingerprint policy. Neither is implemented.
   - The sandbox wraps `run_command` only. Validation commands
     (`internal/testrunner`, `sh -c`), security scanners, and the `git`/`gh` sinks
     are not sandboxed and this row makes no claim about them.
-  - Git output is hardened but not trustworthy: a clean filter still executes on
-    `status` and `diff` and can transform or under-report content. Making it fail
-    closed would disable mutation detection on `git-lfs` repositories, so the
-    choice is an operator decision. Containment (M1 + G3 + G4) remains unapproved,
-    so git runs unsandboxed and the Semgrep finding stays blocking.
+  - Git output is hardened and its integrity is decided: a clean filter that SOP
+    cannot verify makes fingerprints fail closed (reported as "changed"), and a
+    verified git-lfs filter keeps normal mutation detection. A clean filter still
+    executes and still transforms content — verification establishes which program
+    runs, not that its output is benign. M1 + G3 + G4 containment remains unapproved
+    for implementation on CI, so git runs unsandboxed and the Semgrep finding stays
+    blocking.
   - With the sandbox on, the repository's own suite passes on macOS (87-91 s
     in-sandbox against 86 s unsandboxed, no failures) and has no sandbox-caused
     failures on Linux arm64 in a container (two container artifacts remain). Tests
@@ -463,20 +478,22 @@ These cannot be closed by code in this repository:
    acceptance, and the Option-D subprocess hardlink alias is accepted within its
    bounded scope. Tracking:
    [PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md](../../plans/PROPOSAL-RUN-COMMAND-RESIDUAL-RISKS.md).
-5. **M1 + G3 + G4 authorization (2026-11-16).** Mandatory isolation for every
-   model-reachable execution (`run_command`, `git_status`, `git_diff`, and the
-   per-turn fingerprints), with refusal where no backend exists, plus a `.git`
-   write deny. This changes the approved override and removes `git_status`/
-   `git_diff` on Windows and on Linux hosts without working user namespaces. Exact
-   wording:
+5. **M1 + G3 + G4 — approved, blocked on the CI backend (2026-11-16).** Mandatory
+   isolation for every model-reachable execution (`run_command`, `git_status`,
+   `git_diff`, and the per-turn fingerprints), with refusal where no backend
+   exists, plus a `.git` write deny. Authorized 2026-11-16 (wording:
    [PROPOSAL-LLM03-D4-5-MANDATORY-ISOLATION.md](../../plans/PROPOSAL-LLM03-D4-5-MANDATORY-ISOLATION.md)
-   §11. Not implemented; the Semgrep finding stays blocking until it is.
-6. **Clean-filter fingerprint policy (2026-11-16).** A repository-configured clean
-   filter still runs and can transform or suppress git's reported output. The
-   current local change labels the output. Failing the fingerprint closed would
-   disable mutation detection on every `git-lfs` repository — a behaviour change to
-   an approved control — so it needs a decision. See
-   [git-output-integrity.md](git-output-integrity.md).
+   §11). **Not implemented**: the GitHub `ubuntu-latest` image ships no `bubblewrap`,
+   so mandatory isolation would refuse every execution on CI and fail the
+   "`test-fast` stays green" criterion. A CI-backend decision is required; see
+   [DECISION-PACKET-OWASP-LLM-W6-W8.md](../../plans/DECISION-PACKET-OWASP-LLM-W6-W8.md).
+   The Semgrep finding stays blocking until it lands.
+6. **Clean-filter fingerprint policy — decided (2026-11-16).** Option C, the verified
+   git-lfs policy, is approved and implemented: a verified git-lfs filter keeps
+   normal mutation detection; any other configured driver makes git output untrusted
+   and fingerprints fail closed to "changed". The residual is that a verified filter
+   still executes and still transforms content. See
+   [git-output-integrity.md](git-output-integrity.md#option-c--verified-git-lfs-filter-policy-w7-approved-2026-11-16).
 7. **Scanner enforcement.** Moving off `report-only` and setting
    `required_categories` is unchanged and still an operator decision
    ([PROPOSAL-SCANNER-PIN-POLICY.md](../../plans/PROPOSAL-SCANNER-PIN-POLICY.md)).
