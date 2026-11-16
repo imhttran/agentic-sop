@@ -366,6 +366,7 @@ above.
 | GAP-5 | `internal/ragclient` `Evidence.DocumentHash` — the per-item `document_hash` is reported by the retrieval server and is not recomputed or verified by SOP against the returned text | **Fixed for chunk-hashed evidence** (option A of [PROPOSAL-RAG-EVIDENCE-HASH.md](../../plans/PROPOSAL-RAG-EVIDENCE-HASH.md)) — optional `chunk_hash` is recomputed from the exact `text` bytes; a mismatch rejects the whole response (`EVIDENCE_HASH_MISMATCH`), a malformed value is `MALFORMED`, an absent value is unverified (`Evidence.ChunkVerified`). `document_hash` covers the full source and stays unverified. Residual: a producer that omits `chunk_hash` gives unverified evidence | `go test ./internal/ragclient -run 'TestChunkHash|TestDocumentHashIsServerReportedAndNotRecomputed|TestDocumentHashMayBeEmpty' -count=1` |
 | GAP-6 | `internal/cli` `loadDecisionStore` / `saveDecisionStore` — an unreadable `decisions.json` (malformed JSON or an unknown schema) loads as an empty store, and the next `sop memory add` overwrites the file, so the earlier records are lost without a warning | **Fixed** (`loadDecisionStoreForWrite`, via `decisionmemory.UnmarshalStrict`, refuses a malformed, unknown-schema or partly invalid file, exits 1 and leaves the bytes unchanged; reading for context still applies nothing and never writes) | `go test ./internal/cli -run TestMemoryAddRefusesUnreadableStore -count=1`. Pre-fix reproduction: in a disposable git repo, write `{"schema":"unknown-future","records":[{"decision":"keep me"}]}` to `.agent-sdlc/context/decisions.json` and run `sop memory add --decision new --reason r`; before the fix it exited 0 and the file held only the new record |
 | GAP-7 | `internal/cli` `runMemory` / `memoryUsage`, `internal/decisionmemory` `Store` — decision memory has no supported removal or invalidation command, so a poisoned decision record cannot be retired through the CLI | **Fixed** (`sop memory remove --id <id>` via `Store.Remove`; `sop memory list` prints ids; an unknown id exits 1 with the file unchanged) | `go test ./internal/cli -run TestMemoryRemoveByID -count=1`. Pre-fix reproduction: §Recovery and invalidation evidence, Path D |
+| GAP-8 | `decisionmemory.Store.Add` / `internal/cli` `runMemoryAdd` — at the store limit (default 128, or the file's own `limit`) `Add` evicts the smallest-ID record, so `sop memory add` silently dropped an existing decision and exited 0 | **Fixed** (`memory add` refuses with `the decision store is full`, exit 1, file unchanged; re-adding an existing record still succeeds; `memory list` prints stale ids so a full store of stale records can be pruned with `memory remove --id`). `Store.Add` keeps its tested eviction contract (`TestBoundedEviction`) | `go test ./internal/cli -run 'TestMemoryAddRefusesWhenStoreFull\|TestMemoryListShowsStaleIDs' -count=1`. Pre-fix reproduction: a build of `origin/main` with `{"schema":"decisionmemory/1","limit":2,"records":[]}` and three `memory add` calls exited 0 each and left 2 records |
 
 ## Disposition
 
@@ -402,6 +403,10 @@ above.
 - GAP-7 is **fixed** in a follow-up change. `sop memory remove --id <id>` retires
   exactly one record, `sop memory list` prints each record's id, and an unknown id
   fails with the file unchanged (`TestMemoryRemoveByID`).
+- GAP-8 is **fixed** in a follow-up change. `sop memory add` no longer evicts an existing
+  decision when the store is full: it exits 1 and leaves the file unchanged
+  (`TestMemoryAddRefusesWhenStoreFull`). Stale records are listed by id
+  (`TestMemoryListShowsStaleIDs`), so they can be retired with `sop memory remove`.
 - Provider-owned training, fine-tuning and weight loading remain outside direct SOP
   control. They have no disposition of "fixed" here.
 
