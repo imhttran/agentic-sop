@@ -2461,6 +2461,9 @@ func implementContext(ctx context.Context, spec *taskfile.Spec, plan *planner.Pl
 		}
 		rec.EvidenceCount++
 		rec.EvidenceBytes += len(it.Text)
+		if strings.Contains(it.Reason, sopctx.UnverifiedEvidence) {
+			rec.UnverifiedCount++
+		}
 	}
 	rec.UsedInContext = rec.EvidenceCount > 0
 	if rec.Mode == ragModeOptional && rec.Status == ragStatusSucceed && !rec.UsedInContext && rec.Corpus != "" {

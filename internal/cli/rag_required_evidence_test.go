@@ -575,3 +575,40 @@ func mustRun(t *testing.T, dir, id string) *runpkg.Run {
 	}
 	return rn
 }
+
+// GAP-5 residual: evidence without chunk_hash is accepted but labelled
+// unverified in the model context and counted in rag.json; verified evidence is
+// unlabelled.
+func TestUnverifiedEvidenceLabelled(t *testing.T) {
+	ragReqEnv(t)
+	raw := func(context.Context, *taskfile.Spec, string) ([]ragclient.Evidence, error) {
+		return []ragclient.Evidence{
+			{Corpus: "kb", Source: "docs/a.md", Text: "verified", ChunkHash: "sha256:" + strings.Repeat("0", 64), Rank: 1},
+			{Corpus: "kb", Source: "docs/b.md", Text: "unverified", Rank: 2},
+		}, nil
+	}
+	dir := requiredEvidenceGraph(t)
+	a := newReqAgent()
+	if code, stdout, stderr := runWithRawEvidence(t, dir, "diff --git a/x b/x\n", a, raw, "run", "--max-tasks", "1"); code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	reason := func(citation string) string {
+		for _, in := range a.inputs {
+			if _, rest, ok := strings.Cut(in, "### knowledge-rag: "+citation+"\nReason: "); ok {
+				line, _, _ := strings.Cut(rest, "\n")
+				return line
+			}
+		}
+		t.Fatalf("%s not in any agent prompt", citation)
+		return ""
+	}
+	if r := reason("kb/docs/a.md"); strings.Contains(r, sopctx.UnverifiedEvidence) {
+		t.Fatalf("verified item labelled unverified: %q", r)
+	}
+	if r := reason("kb/docs/b.md"); !strings.Contains(r, sopctx.UnverifiedEvidence) {
+		t.Fatalf("unverified item not labelled: %q", r)
+	}
+	if got := readRAGTelemetry(t, dir, "S001")["unverified_count"]; got != float64(1) {
+		t.Fatalf("rag.json unverified_count = %v, want 1", got)
+	}
+}

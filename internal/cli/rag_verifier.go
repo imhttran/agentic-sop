@@ -261,7 +261,10 @@ type ragTelemetry struct {
 	Corpus        string `json:"corpus,omitempty"`
 	EvidenceCount int    `json:"evidence_count"`
 	EvidenceBytes int    `json:"evidence_bytes"`
-	UsedInContext bool   `json:"used_in_context"`
+	// UnverifiedCount is how many used knowledge items carried no chunk_hash
+	// (sopctx.UnverifiedEvidence). They are accepted but flagged (GAP-5).
+	UnverifiedCount int  `json:"unverified_count,omitempty"`
+	UsedInContext   bool `json:"used_in_context"`
 	// PromptIncluded is set only after the compiled prompt is inspected: true when
 	// every selected knowledge citation is present, false when any is missing. It is
 	// nil until then.
