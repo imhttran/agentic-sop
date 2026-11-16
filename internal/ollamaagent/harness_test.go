@@ -90,11 +90,15 @@ func messageText(req ollamaChatRequest) string {
 
 func testConfig(baseURL string) Config {
 	return Config{
-		BaseURL:        baseURL,
-		Model:          DefaultModel,
-		Timeout:        5 * time.Second,
-		MaxToolCalls:   4,
-		CommandTimeout: 10 * time.Second,
+		BaseURL:      baseURL,
+		Model:        DefaultModel,
+		Timeout:      5 * time.Second,
+		MaxToolCalls: 4,
+		// Every sandboxed run starts with a throwaway build cache (an anti-poisoning
+		// control), so a `go test` fixture compiles cold. On a loaded CI runner that
+		// exceeds a small budget; use the production default rather than encoding a
+		// fast-host assumption.
+		CommandTimeout: defaultCommandTimeout,
 		MaxOutputBytes: 1 << 20,
 	}
 }
