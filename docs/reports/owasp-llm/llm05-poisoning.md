@@ -79,7 +79,7 @@ here. Evidence states used in this report:
 | Field | Value |
 | --- | --- |
 | Source | Operator-recorded engineering decisions (`sop memory add --decision --reason [--scope] [--evidence] [--source]`) |
-| Writer | `internal/cli` `runMemoryAdd` (`memory.go`) → `decisionmemory.Store.Add` (`internal/decisionmemory/decisionmemory.go`) → `saveDecisionStore`, which writes `.agent-sdlc/context/decisions.json` with `os.WriteFile` |
+| Writer | `internal/cli` `runMemoryAdd` (`memory.go`) → `decisionmemory.Store.Add` (`internal/decisionmemory/decisionmemory.go`) → `saveDecisionStore`, which writes `.agent-sdlc/context/decisions.json` atomically (temp file, fsync, rename, via `durablefs.WriteFile`) |
 | Source identity | `Record.Source` (default `operator`) and `Record.Repository` = `verifcache.RepositoryIdentity(HEAD, dirty, "")` at the time of recording; `Record.ID()` = SHA-256 over scope, repository, source, decision, reason and sorted evidence |
 | Revision / digest | `Record.ID()` identifies a record's content. The file itself carries no digest or signature, and nothing checks who wrote it. `Store.Add` rejects a record with no decision, scope, reason, repository or source; `Unmarshal` drops invalid records and loads an empty store for an unknown schema |
 | Trust classification | Advisory context. Records become `sopctx.Item`s with `Source: memory` and `Priority: PriorityGeneric` (5), which ranks below task, lifecycle, repository, execution and recovery evidence and above only optional RAG knowledge (6) |
@@ -470,6 +470,7 @@ Focused commands for the fixed and recovery contracts:
 | `go test ./internal/memindex -run TestReindexProvenance -count=1` | 0 | PASS — all four `TestReindexProvenance*` tests ran and passed |
 | `go test ./internal/repoindex -count=1` | 0 | PASS — index identity tests passed |
 | `go test ./internal/cli -run 'TestMemoryAddRefusesUnreadableStore\|TestMemoryRemoveByID' -count=1` | 0 | PASS — GAP-6 overwrite refused with bytes unchanged (unknown schema, malformed JSON, invalid record); GAP-7 removal by id and unknown id rejected |
+| `go test ./internal/cli -run 'TestMemoryListWarnsOnUnreadableStore' -count=1` | 0 | PASS — an unreadable or partly unreadable `decisions.json` is reported on stderr by `memory list` and `run` instead of silently applying nothing; a successful add leaves no temporary file. |
 | `go test ./internal/cli -run 'TestMemoryAddRefusesWhenStoreFull\|TestMemoryListShowsStaleIDs' -count=1` | 0 | PASS — GAP-8 full-store add refused with bytes unchanged, an existing record re-added, a slot freed by `memory remove`, stale ids listed |
 | `go test ./internal/cli -run TestUnverifiedEvidenceLabelled -count=1` | 0 | PASS — GAP-5 evidence without `chunk_hash` is labelled unverified and a verified item is not |
 

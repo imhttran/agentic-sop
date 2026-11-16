@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/decisionmemory"
+	"github.com/imhttran/agentic-sop/internal/durablefs"
 	"github.com/imhttran/agentic-sop/internal/verifcache"
 )
 
@@ -133,7 +134,10 @@ func runMemoryList(args []string, stdout, stderr io.Writer, d deps) int {
 	head, dirty := repoState(dir)
 	repository := verifcache.RepositoryIdentity(head, dirty, "")
 
-	store := loadDecisionStore(dir)
+	store, err := loadDecisionStore(dir)
+	if err != nil {
+		fmt.Fprintf(stderr, "memory list: %v\n", err)
+	}
 	applicable := 0
 	var stale []decisionmemory.Record
 	for _, r := range store.All() {
@@ -233,16 +237,25 @@ func decisionStorePath(dir string) string {
 	return filepath.Join(dir, stateDirName, "context", "decisions.json")
 }
 
-func loadDecisionStore(dir string) *decisionmemory.Store {
-	data, err := os.ReadFile(decisionStorePath(dir))
-	if err != nil {
-		return decisionmemory.New(0)
+// loadDecisionStore is the lenient read path. A missing file is an empty store. Any other
+// failure is returned as an advisory error; the store keeps the readable records.
+func loadDecisionStore(dir string) (*decisionmemory.Store, error) {
+	path := decisionStorePath(dir)
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return decisionmemory.New(0), nil
 	}
-	store, err := decisionmemory.Unmarshal(data)
 	if err != nil {
-		return decisionmemory.New(0)
+		return decisionmemory.New(0), err
 	}
-	return store
+	store, dropped, err := decisionmemory.UnmarshalLenient(data)
+	if err != nil {
+		return decisionmemory.New(0), fmt.Errorf("%s cannot be read (%v)", path, err)
+	}
+	if dropped != nil {
+		return store, fmt.Errorf("%s cannot be fully loaded (%v); only the readable records are applied", path, dropped)
+	}
+	return store, nil
 }
 
 // loadDecisionStoreForWrite loads the store for a command that rewrites it. Unlike
@@ -273,5 +286,5 @@ func saveDecisionStore(dir string, store *decisionmemory.Store) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(path, append(data, '\n'), 0o644)
+	return durablefs.WriteFile(path, append(data, '\n'))
 }

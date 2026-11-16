@@ -228,37 +228,55 @@ func (s *Store) Marshal() ([]byte, error) {
 // Unmarshal loads a store written by Marshal. A store whose schema does not match the
 // current SchemaVersion loads empty rather than applying decisions from an incompatible
 // schema, and invalid records are skipped.
-func Unmarshal(data []byte) (*Store, error) { return decode(data, false) }
+func Unmarshal(data []byte) (*Store, error) {
+	s, _, err := decode(data, false)
+	return s, err
+}
+
+// UnmarshalLenient loads like Unmarshal but also reports, in one pass, the first
+// foreign schema or invalid record it dropped (dropped is nil when nothing was dropped).
+// A non-nil err means the document is not JSON and no store is returned.
+func UnmarshalLenient(data []byte) (s *Store, dropped, err error) { return decode(data, false) }
 
 // UnmarshalStrict is Unmarshal for a caller that will rewrite the store: it fails on
 // another schema or an invalid record instead of dropping it, so a rewrite never
 // silently loses what the file held.
-func UnmarshalStrict(data []byte) (*Store, error) { return decode(data, true) }
+func UnmarshalStrict(data []byte) (*Store, error) {
+	s, _, err := decode(data, true)
+	return s, err
+}
 
-func decode(data []byte, strict bool) (*Store, error) {
+// decode parses once. In strict mode any drop is an error; in lenient mode the first
+// drop is returned as dropped and the readable records are kept.
+func decode(data []byte, strict bool) (s *Store, dropped, err error) {
 	var doc struct {
 		Schema  string   `json:"schema"`
 		Limit   int      `json:"limit"`
 		Records []Record `json:"records"`
 	}
 	if err := json.Unmarshal(data, &doc); err != nil {
-		return nil, fmt.Errorf("decisionmemory: %w", err)
+		return nil, nil, fmt.Errorf("decisionmemory: %w", err)
 	}
-	s := New(doc.Limit)
+	s = New(doc.Limit)
 	if doc.Schema != SchemaVersion {
+		e := fmt.Errorf("decisionmemory: schema %q, not %q", doc.Schema, SchemaVersion)
 		if strict {
-			return nil, fmt.Errorf("decisionmemory: schema %q, not %q", doc.Schema, SchemaVersion)
+			return nil, nil, e
 		}
-		return s, nil
+		return s, e, nil
 	}
 	for i, r := range doc.Records {
 		if err := r.validate(); err != nil {
+			e := fmt.Errorf("record %d: %w", i, err)
 			if strict {
-				return nil, fmt.Errorf("record %d: %w", i, err)
+				return nil, nil, e
+			}
+			if dropped == nil {
+				dropped = e
 			}
 			continue
 		}
 		s.records[r.ID()] = r
 	}
-	return s, nil
+	return s, dropped, nil
 }
