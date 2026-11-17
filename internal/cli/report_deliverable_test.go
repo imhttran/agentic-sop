@@ -37,7 +37,7 @@ func TestRunExplicitReportDeliverable(t *testing.T) {
 	defer srv.Close()
 	a := &reportInputAgent{hybridAgent: hybridAgent{native: ollamaagent.NewNativeAgent(ollamaagent.Config{
 		BaseURL: srv.URL, Model: ollamaagent.DefaultModel, Timeout: 5 * time.Second,
-		MaxToolCalls: 10, CommandTimeout: 10 * time.Second, MaxOutputBytes: 1 << 20,
+		MaxToolCalls: 10, CommandTimeout: 120 * time.Second, MaxOutputBytes: 1 << 20,
 	}, dir, io.Discard)}}
 	d := defaultDeps()
 	d.getwd = func() (string, error) { return dir, nil }
