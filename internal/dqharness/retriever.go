@@ -72,6 +72,8 @@ func (KeywordRetriever) Retrieve(c decisionquality.Case, budget int) ([]decision
 		Limits: retrievalboundary.Limits{
 			MaxResults:  len(c.PreDecisionEvidence),
 			TokenBudget: budget,
+			// shortcut: the 2 s default is the advisory latency budget; an offline eval on a loaded CI runner exceeded it. A breach still fails the run loudly, and results do not change. Revert if the eval gains a latency SLA.
+			TimeBudget: retrievalboundary.MaxTimeBudgetCeiling,
 		},
 	})
 	if err != nil {
