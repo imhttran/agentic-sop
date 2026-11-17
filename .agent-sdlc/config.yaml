@@ -83,6 +83,12 @@ security:
     # other branches), not the checkout under scan; including them duplicates
     # findings and surfaces unrelated fixture manifests.
     - .worktrees
+    # Registered worktrees created by other agent harnesses live under
+    # .claude/worktrees. Same rationale as .worktrees: they are separate checkouts
+    # and can carry negative-test fixtures (for example a Rust manifest with no
+    # Cargo.lock) that are not this repository's dependency obligations. Excluded
+    # narrowly: the rest of .claude (skills, settings) stays in scope.
+    - .claude/worktrees
     # Machine-local historical run evidence, including copied test fixtures.
     # It is preserved for audit but is not active repository source.
     - .sop-evidence
