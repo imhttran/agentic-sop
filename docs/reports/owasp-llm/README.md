@@ -7,7 +7,12 @@ not a compliance certification. A row is never marked fully covered from partial
 evidence: `IMPLEMENTED`, `ENABLED`, `VERIFIED`, `NOT_RUN`, `GAP`, and
 `NOT_APPLICABLE` are separate dimensions, and a missing live test stays visible.
 
-Baseline: `imhttran/agentic-sop` `main` at
+Reconciled for OWASPA-004 (2026-11-17, from `origin/main` at `d61f8dea`): the Plan A
+stages OWASPA-001 (PR #498), OWASPA-002 (PR #502) and OWASPA-003 (PR #506) are merged.
+The LLM01 Linux second-model run (`llm01-campaign-linux-llama32-3b.json`), the LLM08
+live TIMEOUT and cancellation evidence (`llm09-live-rag-owasp-a003.json`), and the
+cargo-audit pins are reflected in the coverage statement. The cargo-audit fail-closed
+control is still open. Baseline: `imhttran/agentic-sop` `main` at
 `0750e8be0cf5f318a173abb34c2b752ac131521c` for the static security work (refreshed
 2026-11-09 UTC). The Plan 03 live follow-up ran at
 `9c32e3d2bccb269aa0246b08158ddad5e8b25066` on
