@@ -1,6 +1,10 @@
 # OWASP LLM Top 10 — coverage statement
 
-**As of:** `main` at `e24c8108` (2026-11-16), through PR #503. **Scanner
+**As of:** `main` at `d61f8dea` (2026-11-16), through PR #508. Since #503: the
+`sop security inspect` readiness projection is scoped to `required_categories`
+(PR #507), the Stage 2 packet and offline OSV verification tooling are merged
+(PR #508), and OWASPA-003 added a second Linux injection model plus live
+`TIMEOUT`/cancellation evidence (PR #506). **Scanner
 enforcement is active for `sast` and `secrets`** (W8 stage 1); `dependencies` is
 not required. The D4 baseline is merged and the D4-5 `run_command` sink is covered
 by one expiring, guarded entry — not accepted. Merged earlier: the git output hardening
@@ -45,13 +49,14 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   and the positive control was allowed after the campaign disabled model thinking
   for forced JSON output (PR #422). Earlier timeout evidence remains preserved.
   A second macOS campaign with `llama3.2:3b` gave the same result: 4 of 4
-  injection cases denied and the positive control allowed (PR #424).
+  injection cases denied and the positive control allowed (PR #424). On Linux
+  arm64 a second model family, `llama3.2:3b`, denied 4 of 4 and allowed the
+  positive control (OWASPA-003, PR #506).
   Evidence: [llm01-injection.md](llm01-injection.md).
 - **Not covered, and why:** prompt injection cannot be prevented in general. The
-  evidence is two models on macOS and one on Linux, run once per case, so it is
-  not a claim about other models or providers. Linux has two models, `qwen3.5:4b`
-  and `llama3.2:3b` (OWASPA-003, `llm01-campaign-linux-llama32-3b.json`; all five
-  cases pass).
+  evidence covers two models on macOS and three Linux runs across three models
+  (`qwen3:4b`, `qwen3.5:4b`, `llama3.2:3b`), once per case, so it is not a claim
+  about other models or providers.
 
 ### LLM02 Sensitive Information Disclosure — covered, bounded
 
@@ -429,12 +434,13 @@ acceptance criterion. It is **not implemented** pending a CI-backend decision; s
   instruction arrived as untrusted evidence text. Evidence:
   [llm09-retrieval.md](llm09-retrieval.md#live-producer-run-owasp-gap-14-2026-11-12),
   [llm09-live-rag-campaign.json](llm09-live-rag-campaign.json).
-- **Not covered, and why:** one producer, one embedding model, one run, synthetic
-  data. `TIMEOUT` was observed only through a test-only producer hook that is not in
-  the release build, and cancellation only as a client-side kill (OWASPA-003,
-  [llm09-retrieval.md](llm09-retrieval.md#live-timeout-and-cancellation-owaspa-003),
-  `llm09-live-rag-owasp-a003.json`). Semantic poisoning
-  inside an authorized repository is not prevented (see LLM04).
+- **Not covered, and why:** one producer, one embedding model, synthetic data.
+  `TIMEOUT` and cancellation are now **observed live** (OWASPA-003, PR #506): the
+  producer returns a well-formed `TIMEOUT` past its deadline, and a client
+  `SIGTERM` ends the process with no response. Both used a test delay hook, so the
+  response paths are exercised but not a real slow database and not cancellation
+  inside a request. Semantic poisoning inside an authorized repository is not
+  prevented (see LLM04).
 
 ### LLM09 Misinformation — partial, by scope
 

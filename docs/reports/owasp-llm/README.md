@@ -107,6 +107,14 @@ expiring entry (2027-03-31) backed by `TestModelReachableExecIsIsolated`.
 `dependencies` is not required. See
 [PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md](../../plans/PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md).
 
+**Evidence refresh (OWASPA-003, PR #506).** A second Linux injection campaign with
+a different model family (`llama3.2:3b`) denied 4 of 4 cases and allowed the
+positive control; the LLM08 live gaps are closed for `TIMEOUT` and client
+cancellation, both under a test delay hook rather than a real slow database. See
+[llm01-injection.md](llm01-injection.md) and
+[llm09-retrieval.md](llm09-retrieval.md). The Plan 02 row below keeps its original
+record.
+
 ## What the Plan 02 Linux row evidences
 
 - The Linux live profile keeps `bwrap --unshare-all` (private mount and network
