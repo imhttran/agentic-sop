@@ -88,6 +88,13 @@ security:
     # and can carry negative-test fixtures (for example a Rust manifest with no
     # Cargo.lock) that are not this repository's dependency obligations. Excluded
     # narrowly: the rest of .claude (skills, settings) stays in scope.
+    #
+    # This is a PATH exclusion, not a worktree-registration check: any directory at
+    # this path is out of scope, whether or not git registers it. That keeps the
+    # scan deterministic across machines and CI, where such checkouts do not exist.
+    # It applies only to SOP security scanning; git, Claude Code and the agent tools
+    # never read security.exclude. Recorded as a bounded limit in the OWASP gap
+    # register.
     - .claude/worktrees
     # Machine-local historical run evidence, including copied test fixtures.
     # It is preserved for audit but is not active repository source.

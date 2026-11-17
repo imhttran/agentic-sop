@@ -186,3 +186,32 @@ func TestExcludedPathDoesNotSatisfyInScopeObligation(t *testing.T) {
 		t.Errorf("the in-scope manifest owns no obligation; obligations = %+v", detection.Obligations)
 	}
 }
+
+// TestClaudeWorktreesExclusionIsPathBased pins the documented semantics: the
+// exclusion matches the path, not git worktree registration. A plain directory at
+// .claude/worktrees is excluded even though nothing registers it, which is what
+// keeps the scan deterministic on machines and CI where no such checkout exists.
+// The cost, recorded in the OWASP gap register, is that content deliberately
+// placed under that path is not scanned.
+func TestClaudeWorktreesExclusionIsPathBased(t *testing.T) {
+	root := t.TempDir() // deliberately not a git repository
+	writeTree(t, root, map[string]string{
+		"go.mod":  "module example.com/parent\n\ngo 1.22\n",
+		"main.go": "package main\n",
+		// Not a registered worktree: just a directory at the excluded path.
+		".claude/worktrees/plain/Cargo.toml": "[package]\nname = \"plain\"\nversion = \"0.1.0\"\n",
+	})
+
+	detection, err := DetectRepositoryScoped(root, repoExcludes(t))
+	if err != nil {
+		t.Fatalf("detect: %v", err)
+	}
+	for _, manifest := range detection.Manifests {
+		if strings.HasPrefix(manifest.Path, ".claude/worktrees/") {
+			t.Errorf("path-based exclusion did not apply to %s", manifest.Path)
+		}
+	}
+	if !detection.HasLanguage(LanguageGo) {
+		t.Errorf("in-scope Go content was not detected: %v", detection.Languages)
+	}
+}
