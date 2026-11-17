@@ -1,21 +1,20 @@
 # Decision packet — W8 Stage 2 (required dependency scanning)
 
-**Status:** proposal, read-only. **No configuration, baseline, or residual change is
-made by this document.** Stage 1 (PR #503) is merged; `dependencies` is still
-**not** required.
+**Status:** AUTHORIZED AND IMPLEMENTED — PR #513, merge `a1a04a18` (2026-11-17).
+This packet was read-only when authored; it is preserved as the decision source. Stage 2 now requires `dependencies`. No baseline or residual disposition changed.
 **Base:** `origin/main` @ `b3722cb1` (2026-11-16), darwin arm64, Go 1.27.1.
 **Predecessors:**
 [PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md](PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md) §8–§11,
 [llm03-scanner-integrity-evidence.md](../reports/owasp-llm/llm03-scanner-integrity-evidence.md).
 
-## 1. Current verified state (Stage 1, merged)
+## 1. Pre-activation verified state (historical)
 
 Clean tree, pinned adapters:
 
 ```
 verdict PASS, coverage COMPLETE, execution failures 0
 findings 98, suppressed 82, unsuppressed 16, blocking 0
-mode required, required_categories [sast, secrets], required_mode ready=true
+mode required, required_categories [sast, secrets], required_mode ready=true  # historical pre-activation state
 baseline 82 entries: 0 stale, 0 suppressions without an approved entry
 ```
 

@@ -20,9 +20,8 @@ acceptance.
 
 ## Constraints (unchanged from the approved policy)
 
-- `security.mode` is `required` for `sast` + `secrets` since W8 stage 1
-  (2026-11-16); `dependencies`, publisher signatures and Windows pins stay out
-  until separately authorized.
+- `security.mode` is `required` for `sast`, `secrets`, and `dependencies` since W8 stage 2
+  (2026-11-17); publisher signatures, the Semgrep execution-time pin, and Windows support stay out.
 - The approved `run_command` isolation policy and its operator override are not
   changed without explicit authorization.
 - No baseline entry is added, suppressed, or removed without approval.
@@ -41,7 +40,7 @@ acceptance.
 | W5  | Reconcile README, coverage statement, gap register, evidence matrix to the verified state                | W1–W4                                           | every claim is traceable to a file, test, or command in this pass; unmerged work is labelled unmerged                                                    | `DONE`                                                                 |
 | W6  | M1 + G3 + G4: mandatory isolation for every model-reachable exec; deny `.git` writes                     | **operator authorization** (granted 2026-11-16, option B) | sandbox audit on every model-reachable exec; git tools refuse where no backend exists; `.git` writes refused; sandbox-enabled Linux job proves containment | `IMPLEMENTED` / `VERIFIED` macOS + Linux (`pass=446 fail=0 sandbox_skip=0`) |
 | W7  | Clean-filter fingerprint policy (Option C)                                                               | **operator decision** (granted 2026-11-16)      | verified git-lfs accepted; any other configured driver fails closed and is labelled                                                                      | `IMPLEMENTED` / `VERIFIED`                                             |
-| W8  | Scanner enforcement (`report-only` → required categories)                                                | **Stage 1 authorized 2026-11-16; Stage 2 needs a separate decision** | an explicit `mode` / `required_categories` change with its own authorization; packet: [PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md](PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md) | `STAGE 1 IMPLEMENTED` (PR #503); Stage 2 packet: [PROPOSAL-LLM03-W8-STAGE2-DEPENDENCIES.md](PROPOSAL-LLM03-W8-STAGE2-DEPENDENCIES.md) |
+| W8  | Scanner enforcement (`report-only` → required categories)                                                | **Stages 1 and 2 authorized and implemented** | an explicit `mode` / `required_categories` change with its own authorization; packet: [PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md](PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md) | `IMPLEMENTED` / `VERIFIED`: Stage 1 PR #503; Stage 2 PR #513; packet: [PROPOSAL-LLM03-W8-STAGE2-DEPENDENCIES.md](PROPOSAL-LLM03-W8-STAGE2-DEPENDENCIES.md) |
 
 ## Sequence
 
@@ -51,7 +50,7 @@ acceptance.
    git-output finding.
 3. W4: confirm the remaining categories.
 4. W5: reconcile documentation last so it describes the verified state.
-5. W8 Stage 1 is implemented; Stage 2 (`dependencies`) remains deferred pending its own authorization and must not gate other work.
+5. W8 stages 1 and 2 are implemented; OSV freshness and remaining scanner-integrity residuals stay visible.
 
 ## Guardrails for anyone executing this plan
 
