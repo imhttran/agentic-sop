@@ -133,8 +133,6 @@ jobs:
       - name: provision the pinned scanners this job runs
         env:
           SOP_SECURITY_TOOLS_DIR: ${{ runner.temp }}/sop-security-tools
-          SOP_SECURITY_SEMGREP_BIN: ${{ runner.temp }}/sop-security-tools/semgrep-1.183.0-venv/bin/semgrep
-          SOP_SECURITY_GITLEAKS_BIN: ${{ runner.temp }}/sop-security-tools/gitleaks-8.30.1/gitleaks
           SOP_SECURITY_INTEGRATION_PROVISION_ONLY: "1"
         run: bash scripts/checks/security-integration.sh
       - name: database verifier states
