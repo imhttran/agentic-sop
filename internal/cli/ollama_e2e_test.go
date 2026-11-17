@@ -106,7 +106,7 @@ func TestImplementEndToEndProducesValidationRuns(t *testing.T) {
 		Model:          ollamaagent.DefaultModel,
 		Timeout:        5 * time.Second,
 		MaxToolCalls:   10,
-		CommandTimeout: 10 * time.Second,
+		CommandTimeout: 120 * time.Second, // production default: sandboxed go test compiles cold on loaded runners
 		MaxOutputBytes: 1 << 20,
 	}
 	a := &hybridAgent{native: ollamaagent.NewNativeAgent(cfg, dir, io.Discard)}
