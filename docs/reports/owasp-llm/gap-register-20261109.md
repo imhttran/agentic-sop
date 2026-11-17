@@ -233,10 +233,14 @@ Decided and implemented: per-row index digests (option A, schema 2), RAG `chunk_
    ignored artifacts inside scope — `.claude/` outside `worktrees`, `.run/spike`,
    `.run/tunnel`, `.playwright-mcp`, `.env`, `CLAUDE.local.md`, and a built `sop`
    binary at the repository root — plus three files over Semgrep's 1 MB limit. A
-   clean checkout at the same revision scans `PASS` / `COMPLETE`. This is **not**
-   changed by the `.claude/worktrees` exclusion: cleaning those artifacts, or
-   excluding `.run`, `/sop` or the rest of `.claude`, is a separate decision that
-   was not authorized.
+   clean checkout at the same revision scans `PASS` / `COMPLETE`. Every skipped path
+   is git-ignored and none is tracked, so this is an accounting mismatch with the
+   source scope the other adapters use (`internal/git.SnapshotFiles`: tracked plus
+   untracked non-ignored), not an unreported source file. This is **not** changed by
+   the `.claude/worktrees` exclusion. The decision packet with the evidence, three
+   options and the exact authorization is
+   [PROPOSAL-SEMGREP-IGNORED-COVERAGE.md](../../plans/PROPOSAL-SEMGREP-IGNORED-COVERAGE.md);
+   no scanner behaviour, exclusion or artifact was changed.
 
 ## Preserved baseline
 
