@@ -1,6 +1,6 @@
 # Plan B — OWASP LLM gap closeout: work gated on operator decisions
 
-Status: BLOCKED on operator authorization, stage by stage; not executed.
+Status: PARTLY EXECUTED as of 2026-11-17. OWASPB-001 and OWASPB-002 are implemented, OWASPB-003 is implemented, and OWASPB-004 and OWASPB-005 are open. Each stage's status is below.
 Order: 2 of 2. Independent of [Plan A](PLAN-OWASP-LLM-Closeout-A-Unblocked.md).
 Suggested branch: one branch per stage (`security/mandatory-isolation`, `security/clean-filter-fingerprint`, `security/scanner-required-mode`, `security/llm02-defaults`, `docs/owasp-residual-acceptance`).
 Dependency: each stage starts only after the operator records the decision named in it.
@@ -21,6 +21,20 @@ the proposals it cites. It turns them into ordered stages with checks.
 **Nothing here is authorized by this document.** Each stage states the decision
 it needs. A stage whose decision is declined is recorded as declined and skipped;
 it does not block stages that do not depend on it.
+
+## Status (2026-11-17)
+
+Source: [gap-register-20261109.md](../reports/owasp-llm/gap-register-20261109.md) and [coverage-statement.md](../reports/owasp-llm/coverage-statement.md), checked against `origin/main`. The stage text below is the original plan and is unchanged.
+
+| Stage | State | Evidence |
+| --- | --- | --- |
+| OWASPB-001 mandatory isolation | Implemented 2026-11-16 (option B); override removed | [execution-boundary-w6.md](../reports/owasp-llm/execution-boundary-w6.md); Linux `pass=446 fail=0 skip=3 sandbox_skip=0` |
+| OWASPB-002 clean-filter policy | Implemented 2026-11-16 (option C) | [git-output-integrity.md](../reports/owasp-llm/git-output-integrity.md) |
+| OWASPB-003 scanner required mode | Implemented via W8 stages 1 and 2 (2026-11-17): `mode: required`, `required_categories: [sast, secrets, dependencies]` | `.agent-sdlc/config.yaml`; the `dependencies` gate needs an offline OSV database under 90 days old in each environment |
+| OWASPB-004 LLM02/LLM10 opt-in controls | Not started. C1 is still disabled in repository configuration; the token budget is off | coverage-statement, LLM02 and LLM10 sections |
+| OWASPB-005 residual dispositions | Partly done. LLM06 and LLM02 dispositions are recorded. Open: the context-free unknown-format value, provider retention, model-output artifacts, notification prose, retrieval/handoff prose, prompt secrecy, factual correctness, and producer-side `chunk_hash` | gap-register "Decisions and evidence still required" |
+
+Stages still blocked on an operator decision: OWASPB-004 (decision a, enable C1; decision b, token budget value) and OWASPB-005 (accept, mitigate, or transfer per residual).
 
 ## OWASPB-001 — Mandatory isolation for model-reachable execution (M1 + G3 + G4)
 
