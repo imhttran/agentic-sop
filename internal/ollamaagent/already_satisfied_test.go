@@ -112,6 +112,7 @@ func TestAlreadySatisfiedRequiresObjectiveProof(t *testing.T) {
 			{name: "real mutation cannot claim already satisfied", turns: []string{readAdd, readAddTest, `{"tool":"create_file","args":{"path":"new.txt","content":"new"}}`, validateAdd}},
 		} {
 			t.Run(string(cap)+"/"+tc.name, func(t *testing.T) {
+				t.Parallel() // each subtest runs its own real validation command; they are independent
 				dir, req := satisfactionFixture(t)
 				req.Capability = cap
 				if tc.setup != nil {
