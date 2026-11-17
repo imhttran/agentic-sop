@@ -519,12 +519,17 @@ These cannot be closed by code in this repository:
    and fingerprints fail closed to "changed". The residual is that a verified filter
    still executes and still transforms content. See
    [git-output-integrity.md](git-output-integrity.md#option-c--verified-git-lfs-filter-policy-w7-approved-2026-11-16).
-7. **Scanner enforcement.** Moving off `report-only` and setting
-   `required_categories` is unchanged and still an operator decision
-   ([PROPOSAL-SCANNER-PIN-POLICY.md](../../plans/PROPOSAL-SCANNER-PIN-POLICY.md)). A
-   decision-ready W8 packet with the proposed config, the baseline operations, the
-   prerequisites and the rollback is
-   [PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md](../../plans/PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md).
+7. **Scanner enforcement — active; one open gate.** `security.mode` is `required`
+   with `required_categories: [sast, secrets, dependencies]`, set by W8 stages 1 and
+   2 (2026-11-17); the rationale is in
+   [PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md](../../plans/PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md)
+   and the policy in [PROPOSAL-SCANNER-PIN-POLICY.md](../../plans/PROPOSAL-SCANNER-PIN-POLICY.md).
+   The open gate: on the long-lived primary checkout, git-ignored artifacts make
+   Semgrep report `PARTIAL` coverage, so the verdict is `INDETERMINATE` and the
+   required `sast` gate cannot pass there. A clean checkout at the same revision
+   passes. The operator decision is pending in
+   [PROPOSAL-SEMGREP-IGNORED-COVERAGE.md](../../plans/PROPOSAL-SEMGREP-IGNORED-COVERAGE.md)
+   (recommended Option A1).
 
 ## Code follow-ups worth doing
 
