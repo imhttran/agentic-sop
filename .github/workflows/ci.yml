@@ -137,6 +137,14 @@ jobs:
         run: bash scripts/checks/security-integration.sh
       - name: database verifier states
         run: bash scripts/checks/test-osv-db-verify.sh
+      # Prove the required provisioning path end to end: fetch the real offline
+      # database, then verify its layout, digests and freshness. Provisioning is an
+      # explicit step here and never happens during a scan.
+      - name: provision and verify the offline OSV database
+        run: |
+          set -euo pipefail
+          SOP_SECURITY_OSV_DB_DIR="$RUNNER_TEMP/osv-db" bash scripts/security/fetch-osv-databases.sh
+          bash scripts/checks/osv-db-verify.sh --db "$RUNNER_TEMP/osv-db"
       - name: required-mode gate end to end
         env:
           SOP_SECURITY_TOOLS_DIR: ${{ runner.temp }}/sop-security-tools

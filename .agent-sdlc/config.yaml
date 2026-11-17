@@ -60,10 +60,12 @@ planner:
 security:
   enabled: true
   mode: required
-  # Stage 1 of the W8 enforcement decision (PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md):
-  # sast and secrets are required; dependencies stays out until offline OSV
-  # provisioning is demonstrated in every gate environment.
-  required_categories: [sast, secrets]
+  # W8 enforcement (PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md and
+  # PROPOSAL-LLM03-W8-STAGE2-DEPENDENCIES.md): sast, secrets and dependencies are
+  # required. A dependencies gate needs a provisioned offline OSV database no more
+  # than 90 days old; run `make osv-db-fetch` then `make osv-db-verify` in every
+  # environment that runs this gate. Windows is not a supported platform.
+  required_categories: [sast, secrets, dependencies]
   scope: workspace
   timeout_seconds: 300
   stale_advisory_database: deny
