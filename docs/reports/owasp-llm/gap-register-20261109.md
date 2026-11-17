@@ -211,6 +211,33 @@ Decided and implemented: per-row index digests (option A, schema 2), RAG `chunk_
 - The evidence matrix is not a compliance mapping and does not imply installation,
   deployment, or full OWASP coverage.
 
+## Bounded scope limits (2026-11-17)
+
+1. **`.claude/worktrees` is excluded by path, not by registration.** Agent harnesses
+   keep registered git worktrees there, and a negative-test fixture in one of them
+   (a Rust manifest with no `Cargo.lock`) made required `dependencies`
+   unsatisfiable for content that is not this repository's obligation. The scan
+   excludes the subtree, so those checkouts are not scanned, found, or counted as
+   obligations. The exclusion is *path-based*: any directory at that path is out of
+   scope whether or not git registers it, which keeps results deterministic on
+   machines and CI where no such checkout exists. **Residual:** content deliberately
+   placed under `.claude/worktrees` is not scanned. This is the same bounded class
+   as the existing `.worktrees`, `.sop-evidence`, `testdata` and
+   `internal/security/testdata` exclusions, and it is a scope limit, not a risk
+   acceptance. Registration-aware exclusion was considered and rejected: it would
+   make the same tree scan differently depending on git state, would require the
+   detection path to shell out to git, and would re-expose unregistered checkouts.
+2. **Semgrep coverage is `PARTIAL` in a long-lived checkout.** Semgrep honours
+   `.semgrepignore` (`:include .gitignore`), and the adapter counts skipped files
+   inside the declared scope as partial coverage. A working checkout here carries
+   ignored artifacts inside scope — `.claude/` outside `worktrees`, `.run/spike`,
+   `.run/tunnel`, `.playwright-mcp`, `.env`, `CLAUDE.local.md`, and a built `sop`
+   binary at the repository root — plus three files over Semgrep's 1 MB limit. A
+   clean checkout at the same revision scans `PASS` / `COMPLETE`. This is **not**
+   changed by the `.claude/worktrees` exclusion: cleaning those artifacts, or
+   excluding `.run`, `/sop` or the rest of `.claude`, is a separate decision that
+   was not authorized.
+
 ## Preserved baseline
 
 The original register at `main` `93c72857`, including its dispositions and boundaries,
