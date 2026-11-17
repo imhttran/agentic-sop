@@ -192,7 +192,8 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   and this repository enables the Semgrep rules pin (PR #338). Per-platform binary
   pins are committed for Gitleaks 8.30.1 and OSV-Scanner 2.7.0 on linux and darwin
   (amd64+arm64) (PR #461), and for cargo-audit 0.22.2 on linux/amd64 and darwin/arm64
-  (OWASPA-002, PR #502). PR #410 closes the
+  (OWASPA-002, PR #502). The fail-closed negative control passed on 2026-11-17, and the
+  configured command now includes the `audit` subcommand. PR #410 closes the
   binary hash-then-exec race by executing a verified private copy
   (`TestPinnedExecutor`); `stageRules` does the same for the rules file or tree,
   so Semgrep and Gitleaks read verified private bytes
