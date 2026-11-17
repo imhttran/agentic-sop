@@ -254,10 +254,10 @@ the lockfile obligation explicit.
 > `security.required_categories` so it reads `[sast, secrets, dependencies]`, and
 > require `make osv-db-verify` to pass in every environment that runs the gate.
 > This authorizes that configuration change and the accompanying documentation
-> only. It does not add publisher signature verification, does not add binary pins
-> for cargo-audit on `linux/arm64`, `darwin/amd64` or Windows, does not change the
-> OSV freshness boundary, does not add or remove any baseline entry, and does not
-> accept any residual risk.
+> only. It does not add publisher signature verification, does not add a Windows
+> binary pin for cargo-audit (the four supported platforms are already pinned),
+> does not change the OSV freshness boundary, does not add or remove any baseline
+> entry, and does not accept any residual risk.
 
 The `stage2-gate-e2e` and `sandbox-linux` CI jobs must be green on the activating
 PR, and `make osv-db-verify` must pass in the operator's environment.
