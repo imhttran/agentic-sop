@@ -158,7 +158,9 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: test -race
-        run: go test -race ./...
+        # ponytail: the package suite runs ~134 s locally under -race and exceeds the
+        # default 10 m per-package alarm on the runner. Raise the alarm; cut test cost later.
+        run: go test -race -timeout 30m ./...
 
   # The tagged JEV evidence acceptance checks. They are build-tagged out of the ordinary
   # suite (so `go test ./...` stays green before an evidence artifact exists); this job runs
