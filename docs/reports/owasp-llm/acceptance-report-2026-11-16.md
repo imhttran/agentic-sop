@@ -199,7 +199,8 @@ findings 101, suppressed 84, unsuppressed 17, blocking 1
   rejected, positive controls returned their documents, and an embedded
   instruction arrived as untrusted evidence text.
 - **Remaining gaps:** one producer, one embedding model, one run, synthetic data;
-  `TIMEOUT`/cancellation not observed live; semantic poisoning inside an
+  `TIMEOUT`/cancellation observed live under a test delay hook (OWASPA-003); a real slow
+  database and in-request cancellation remain unobserved; semantic poisoning inside an
   authorized repository is not prevented (see LLM04).
 - **Classification:** `VERIFIED` for the shipped, disabled-by-default path.
 
