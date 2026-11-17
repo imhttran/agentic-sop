@@ -7,7 +7,7 @@ and darwin, and run the baseline. Items 2 (publisher signatures) and 3 (required
 categories) are not decided here.
 
 **Scope:** Gitleaks and OSV-Scanner, which are the configured adapters that ship a
-single executable. Semgrep is not pinned: its install is a venv, which the proposal
+single executable, and cargo-audit, added by OWASPA-002 (PR #502). Semgrep is not pinned: its install is a venv, which the proposal
 says needs a tree digest and can follow later. Windows is not pinned.
 
 ## Derived digests
@@ -29,11 +29,13 @@ so its binary digest is the committed manifest value.
 | OSV-Scanner 2.7.0 | linux/arm64 | `osv-scanner-manifest.json` asset pin | `4061ef4c021ed3c47f203b818f337e351336cc5cd67c0274fc36bd1dfc728dd7` | yes |
 | OSV-Scanner 2.7.0 | darwin/amd64 | `osv-scanner-manifest.json` asset pin | `e82c5df7ab0a42dff29a1cd0660711447b56b4c0483ff66ad8634df10fd81a45` | yes |
 | OSV-Scanner 2.7.0 | darwin/arm64 | `osv-scanner-manifest.json` asset pin | `d4926ef8da134332543be276dff157e4c170f99ad91fc48e89448a8816bdf70b` | yes |
-| cargo-audit 0.22.2 | linux/amd64 | extracted `cargo-audit-x86_64-unknown-linux-gnu-v0.22.2.tgz` | `473b9a71e5cb5bde22f69c32f749c9b83931287d92dc36b91cb04f6705640ef2` | no |
-| cargo-audit 0.22.2 | darwin/arm64 | extracted `cargo-audit-aarch64-apple-darwin-v0.22.2.tgz` | `33fbe81adca1b794f4ffe98574d59b0ebe6fcfdb310976fafed98a094c795111` | no |
+| cargo-audit 0.22.2 | linux/amd64 | extracted `cargo-audit-x86_64-unknown-linux-gnu-v0.22.2.tgz` | `473b9a71e5cb5bde22f69c32f749c9b83931287d92dc36b91cb04f6705640ef2` | yes (OWASPA-002, PR #502) |
+| cargo-audit 0.22.2 | darwin/arm64 | extracted `cargo-audit-aarch64-apple-darwin-v0.22.2.tgz` | `33fbe81adca1b794f4ffe98574d59b0ebe6fcfdb310976fafed98a094c795111` | yes (OWASPA-002, PR #502) |
 
-cargo-audit digests are derived but not committed: the tracked configuration has no
-cargo-audit adapter, so a pin would be inert. They are recorded for when one is added.
+cargo-audit digests are committed in `.agent-sdlc/config.yaml` as `binary_sha256_by_platform`
+(linux/amd64 and darwin/arm64). **Not yet demonstrated:** a fail-closed negative control
+for cargo-audit, which OWASPA-002 requires once per scanner. Gitleaks has one (below);
+cargo-audit does not. The Windows and Semgrep gaps are unchanged.
 
 ## Configuration shape
 
