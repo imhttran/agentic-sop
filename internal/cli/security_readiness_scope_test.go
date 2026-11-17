@@ -37,33 +37,56 @@ func coveredSelection(covered ...string) security.Selection {
 	}
 }
 
+// coveredSelectionFor is coveredSelection with an explicit detected-language set,
+// so a case can describe a repository that really contains Rust.
+func coveredSelectionFor(languages []security.Language, covered ...string) security.Selection {
+	var coverage []security.CategoryCoverage
+	for _, category := range covered {
+		langs := make([]security.LanguageCoverage, 0, len(languages))
+		for _, language := range languages {
+			langs = append(langs, security.LanguageCoverage{Language: language, State: security.CoverageStateCovered})
+		}
+		coverage = append(coverage, security.CategoryCoverage{
+			Category:  security.Category(category),
+			Required:  true,
+			State:     security.CoverageStateCovered,
+			Languages: langs,
+		})
+	}
+	return security.Selection{Coverage: coverage, Detection: &security.Detection{Languages: languages}}
+}
+
 // TestInspectRequiredReadinessScopesToRequiredCategories pins the projection the
 // operator reads from `sop security inspect`. An adapter outside a required
 // category must never make the required gate look unsatisfiable, and every
 // required-category gap must still fail closed.
 func TestInspectRequiredReadinessScopesToRequiredCategories(t *testing.T) {
 	cargoUnsupported := security.AdapterCandidate{
-		ID:       security.AdapterIDCargoAudit,
-		Category: security.CategoryDependencies,
-		Status:   security.CapabilityUnsupported,
-		Reason:   "no Rust content with a Cargo.lock",
+		ID:        security.AdapterIDCargoAudit,
+		Category:  security.CategoryDependencies,
+		Languages: []security.Language{security.LanguageRust},
+		Status:    security.CapabilityUnsupported,
+		Reason:    "no Rust content with a Cargo.lock",
 	}
 	cargoUnavailable := security.AdapterCandidate{
-		ID:       security.AdapterIDCargoAudit,
-		Category: security.CategoryDependencies,
-		Status:   security.CapabilityUnavailable,
-		Reason:   "cargo-audit not found",
+		ID:        security.AdapterIDCargoAudit,
+		Category:  security.CategoryDependencies,
+		Languages: []security.Language{security.LanguageRust},
+		Status:    security.CapabilityUnavailable,
+		Reason:    "cargo-audit not found",
 	}
 	semgrepAvailable := security.AdapterCandidate{
-		ID:       security.AdapterIDSemgrep,
-		Category: security.CategorySAST,
-		Status:   security.CapabilityAvailable,
+		ID:        security.AdapterIDSemgrep,
+		Category:  security.CategorySAST,
+		Languages: []security.Language{security.LanguageGo},
+		Status:    security.CapabilityAvailable,
 	}
 	semgrepUnavailable := security.AdapterCandidate{
-		ID:       security.AdapterIDSemgrep,
-		Category: security.CategorySAST,
-		Status:   security.CapabilityUnavailable,
-		Reason:   "semgrep not found",
+		ID:        security.AdapterIDSemgrep,
+		Category:  security.CategorySAST,
+		Languages: []security.Language{security.LanguageGo},
+		Status:    security.CapabilityUnavailable,
+		Reason:    "semgrep not found",
 	}
 
 	cases := []struct {
@@ -89,9 +112,45 @@ func TestInspectRequiredReadinessScopesToRequiredCategories(t *testing.T) {
 			wantReady: true,
 		},
 		{
+			// Stage 2 activation case: dependencies is required, cargo-audit is
+			// unsupported because there is no Rust content, and Rust is not a
+			// detected language. The gate does not owe Rust coverage here.
+			name:      "required adapter for an undetected language does not block",
+			cfg:       requiredConfig("sast", "dependencies"),
+			selection: coveredSelection("sast", "dependencies"),
+			selected:  []security.AdapterCandidate{semgrepAvailable, cargoUnsupported},
+			wantReady: true,
+		},
+		{
+			// The same adapter, with Rust actually detected, is a real obligation.
+			name: "required adapter for a detected language fails closed",
+			cfg:  requiredConfig("dependencies"),
+			selection: security.Selection{
+				Coverage: []security.CategoryCoverage{{
+					Category:  security.CategoryDependencies,
+					Required:  true,
+					State:     security.CoverageStateCovered,
+					Languages: []security.LanguageCoverage{{Language: security.LanguageRust, State: security.CoverageStateCovered}},
+				}},
+				Detection: &security.Detection{Languages: []security.Language{security.LanguageGo, security.LanguageRust}},
+			},
+			selected:  []security.AdapterCandidate{cargoUnsupported},
+			wantReady: false,
+			wantWhy:   "adapter cargo-audit prerequisite is unsupported",
+		},
+		{
+			// With no detected language nothing is scoped away.
+			name:      "no detected languages keeps the conservative answer",
+			cfg:       requiredConfig("dependencies"),
+			selection: security.Selection{Coverage: coveredSelection("dependencies").Coverage, Detection: &security.Detection{}},
+			selected:  []security.AdapterCandidate{cargoUnavailable},
+			wantReady: false,
+			wantWhy:   "adapter cargo-audit prerequisite is unavailable",
+		},
+		{
 			name:      "required unavailable adapter fails closed",
 			cfg:       requiredConfig("dependencies"),
-			selection: coveredSelection("dependencies"),
+			selection: coveredSelectionFor([]security.Language{security.LanguageRust, security.LanguageGo}, "dependencies"),
 			selected:  []security.AdapterCandidate{cargoUnavailable},
 			wantReady: false,
 			wantWhy:   "adapter cargo-audit prerequisite is unavailable: cargo-audit not found",
@@ -99,7 +158,7 @@ func TestInspectRequiredReadinessScopesToRequiredCategories(t *testing.T) {
 		{
 			name:      "required unsupported adapter fails closed",
 			cfg:       requiredConfig("dependencies"),
-			selection: coveredSelection("dependencies"),
+			selection: coveredSelectionFor([]security.Language{security.LanguageRust, security.LanguageGo}, "dependencies"),
 			selected:  []security.AdapterCandidate{cargoUnsupported},
 			wantReady: false,
 			wantWhy:   "no Rust content with a Cargo.lock",
@@ -107,7 +166,7 @@ func TestInspectRequiredReadinessScopesToRequiredCategories(t *testing.T) {
 		{
 			name:      "required unavailable adapter fails closed even beside a covered one",
 			cfg:       requiredConfig("sast", "dependencies"),
-			selection: coveredSelection("sast", "dependencies"),
+			selection: coveredSelectionFor([]security.Language{security.LanguageRust, security.LanguageGo}, "sast", "dependencies"),
 			selected:  []security.AdapterCandidate{semgrepAvailable, cargoUnavailable},
 			wantReady: false,
 			wantWhy:   "adapter cargo-audit prerequisite is unavailable",
@@ -179,7 +238,7 @@ func TestInspectReadinessIgnoresOptionalAdapterReasons(t *testing.T) {
 		requiredConfig("sast"),
 		coveredSelection("sast"),
 		[]security.AdapterCandidate{
-			{ID: security.AdapterIDSemgrep, Category: security.CategorySAST, Status: security.CapabilityAvailable},
+			{ID: security.AdapterIDSemgrep, Category: security.CategorySAST, Languages: []security.Language{security.LanguageGo}, Status: security.CapabilityAvailable},
 			{ID: security.AdapterIDCargoAudit, Category: security.CategoryDependencies, Status: security.CapabilityUnsupported, Reason: "no Rust content"},
 		},
 	)

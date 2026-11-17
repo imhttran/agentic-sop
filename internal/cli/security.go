@@ -418,13 +418,23 @@ func inspectRequiredReadiness(cfg config.Config, selection security.Selection, s
 			}
 		}
 	}
-	// Only an adapter in a required category can block readiness. A configured but
-	// optional adapter — cargo-audit on a repository with no Rust content, for
-	// example — must not make the required gate look unsatisfiable, and skipping it
-	// here cannot hide a required gap: the coverage check above already fails
-	// closed for every required category.
+	// Only an adapter in a required category can block readiness, and only for a
+	// language the repository actually contains. The gate scopes its obligation to
+	// detected languages (cargo-audit is not owed on a Go-only repository), so the
+	// projection must do the same or it reports an unsatisfiable gate that the scan
+	// passes. When no language is detected the obligation is not scoped away: the
+	// conservative answer stays.
+	detected := map[security.Language]bool{}
+	if selection.Detection != nil {
+		for _, language := range selection.Detection.Languages {
+			detected[language] = true
+		}
+	}
 	for _, candidate := range selected {
 		if !requiredCategories[string(candidate.Category)] {
+			continue
+		}
+		if len(detected) > 0 && len(candidate.Languages) > 0 && !candidateCoversAny(candidate, detected) {
 			continue
 		}
 		if candidate.Status == security.CapabilityAvailable {
@@ -441,6 +451,17 @@ func inspectRequiredReadiness(cfg config.Config, selection security.Selection, s
 		reasons = []string{"all required categories and detected languages have selected, available adapters"}
 	}
 	return ready, reasons
+}
+
+// candidateCoversAny reports whether the candidate serves at least one detected
+// language. A candidate that serves none is not an obligation for this repository.
+func candidateCoversAny(candidate security.AdapterCandidate, detected map[security.Language]bool) bool {
+	for _, language := range candidate.Languages {
+		if detected[language] {
+			return true
+		}
+	}
+	return false
 }
 
 func availableCategoryAdapter(candidates []security.AdapterCandidate, category string) bool {
