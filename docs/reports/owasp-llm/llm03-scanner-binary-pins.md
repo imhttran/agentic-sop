@@ -33,9 +33,9 @@ so its binary digest is the committed manifest value.
 | cargo-audit 0.22.2 | darwin/arm64 | extracted `cargo-audit-aarch64-apple-darwin-v0.22.2.tgz` | `33fbe81adca1b794f4ffe98574d59b0ebe6fcfdb310976fafed98a094c795111` | yes (OWASPA-002, PR #502) |
 
 cargo-audit digests are committed in `.agent-sdlc/config.yaml` as `binary_sha256_by_platform`
-(linux/amd64 and darwin/arm64). The fail-closed negative control is demonstrated below,
-but the committed command needs a fix before the scan can run. The Windows and Semgrep
-gaps are unchanged.
+(linux/amd64 and darwin/arm64). The fail-closed negative control is demonstrated below, and the
+command now includes the `audit` subcommand (2026-11-17). The Windows and Semgrep gaps
+are unchanged.
 
 ## Configuration shape
 
@@ -126,7 +126,10 @@ minimal `Cargo.toml`, and the fixture advisory database). The configuration is t
   The verdict was `FAIL` because the fixture database is stale under the `deny` policy,
   which is expected for this fixture.
 
-**Status:** the fail-closed negative control is demonstrated. The configured
-cargo-audit command in `.agent-sdlc/config.yaml` is not runnable as committed and
-needs an `audit` subcommand. That change is not made here: it changes a committed
-adapter invocation and needs a decision.
+**Status:** the fail-closed negative control is demonstrated. The configured command is
+`[cargo-audit, audit]` in `.agent-sdlc/config.yaml`. `go test ./internal/security/...`
+passes. The repository scan verdict is unchanged by the fix, because cargo-audit has
+no Rust content to scan at the repository root (`INDETERMINATE`, with Gitleaks,
+Semgrep and OSV-Scanner `FAILED` on this machine because their local binaries are not
+the pinned builds). The `101/84/17/1` baseline comparison needs the pinned
+Gitleaks and OSV-Scanner binaries and was not run here.
