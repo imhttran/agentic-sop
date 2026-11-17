@@ -741,3 +741,51 @@ What this run does not establish:
   backend yields no advisory items rather than unscoped evidence.
 - The security scan is report-only and `INDETERMINATE` in this environment (scanner
   adapters unavailable/failed). It is not evidence of a clean security posture.
+
+## Live TIMEOUT and cancellation (OWASPA-003)
+
+Closes the two LLM08 live gaps left open by the run above. Artifact:
+[llm09-live-rag-owasp-a003.json](llm09-live-rag-owasp-a003.json), SHA-256
+`e3e25b847c15c00fe2d8bc32989c70a69ffdb2d4e8ede741160a35dc2b10119b`.
+
+- **Producer:** `rag-template-rust` commit `3add20a` on a local branch
+  (`evidence/owasp-a003-producer-delay`, not pushed), on top of `de9eb65`. The only
+  change is a cargo feature, `test-producer-delay`, that is off by default. With the
+  feature and `RAG_TEST_PRODUCER_DELAY_MS` set, the binary sleeps after query
+  embedding and returns `TIMEOUT` once the request deadline has passed. The default
+  build ignores the variable (`LIVE-RAG-DEFAULT-BUILD-IGNORES-DELAY`).
+- **Binaries:** default `a597efb4…`, delay build `cde3a5bd…` (SHA-256).
+- **Database and embeddings:** `pgvector/pgvector:pg17` (PostgreSQL 17.11, single
+  disposable container on port 5434), migrations 001 to 005 applied, the same three
+  synthetic documents ingested, Ollama `nomic-embed-text` (768 dimensions), Ollama
+  0.40.11.
+
+| Case | Request | Result | Verdict |
+| --- | --- | --- | --- |
+| `LIVE-RAG-POSITIVE-A` | `corpus-a`, own marker returned | `OK`, 2 items | pass |
+| `LIVE-RAG-CROSS-CORPUS` | `corpus-a`, `corpus-b` content | `OK`, no `corpus-b` source | protected |
+| `LIVE-RAG-UNAUTHORIZED-SCOPE` | `corpus-z` | `UNAUTHORIZED_SCOPE`, no evidence | protected |
+| `LIVE-RAG-DEADLINE` | `deadline_ms` 1 | `UNAVAILABLE`, no evidence | observed, well-formed failure |
+| `LIVE-RAG-POSITIVE-B` | `corpus-b`, own marker returned | `OK`, 1 item | pass |
+| `LIVE-RAG-TIMEOUT` | 3 s producer delay, 1 s deadline | `TIMEOUT` at 3072 ms, no evidence | observed timeout |
+| `LIVE-RAG-DEFAULT-BUILD-IGNORES-DELAY` | default build, 3 s delay variable set | `OK` at 68 ms | pass (negative control) |
+| `LIVE-RAG-CANCELLATION` | client sends SIGTERM 3 s into a 60 s delay | no response bytes; process ended by signal 15 | observed no response |
+
+What this establishes:
+
+- A request that overruns its deadline reaches the `TIMEOUT` verdict in the
+  producer, and the client receives a well-formed `TIMEOUT` response, not a pass.
+- Cancellation by the client ends the process with no response. The producer has no
+  cancel surface of its own, so the client must kill it.
+
+What this does not establish:
+
+- **The TIMEOUT is produced by a test hook, not by a slow database search.** The hook
+  sleeps, then returns `TIMEOUT` itself once the deadline has passed. It exercises the
+  response path for `TIMEOUT`, not the `search_failed` classification in
+  `retrieve`. A real slow Postgres or Ollama call was not measured.
+- Cancellation was done by killing the process. Nothing was cancelled inside a
+  request, and no cleanup behaviour was observed beyond "no response".
+- The delay build is a test binary and is not a release artifact. The hook needs its
+  own review before it is pushed or used beyond this evidence run.
+- One host, one producer revision, synthetic data, debug builds.
