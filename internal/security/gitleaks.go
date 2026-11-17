@@ -55,15 +55,9 @@ func gitleaksSourceFiles(ctx context.Context, req Request) (gitleaksSource, erro
 	repo := git.New(req.WorkspaceRoot)
 	files, err := repo.SnapshotFiles(ctx)
 	if err != nil {
-		if ctx.Err() != nil {
-			return gitleaksSource{}, ctx.Err()
-		}
 		// A directory with Git metadata is a checkout; if its source cannot be
 		// enumerated, fail closed rather than walking ignored local files.
-		if _, statErr := os.Lstat(filepath.Join(req.WorkspaceRoot, ".git")); statErr == nil {
-			return gitleaksSource{}, err
-		}
-		return gitleaksSource{}, nil
+		return gitleaksSource{}, gitScopeFailure(ctx, req.WorkspaceRoot, err)
 	}
 	if req.Scope.Mode == "changed-files" && len(req.Scope.Files) > 0 {
 		files = mergeSourceFiles(files, req.Scope.Files)
