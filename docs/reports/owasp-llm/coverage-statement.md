@@ -206,10 +206,11 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   - Publisher signatures are not checked; a digest proves the bytes, not who
     produced them.
   - Semgrep has no committed execution-time binary pin (it is a venv), and Windows
-    is not pinned. Cargo-audit is pinned only on linux/amd64 and darwin/arm64.
-  - Enforcement covers `sast` and `secrets` only (W8 stage 1, 2026-11-16).
-    `dependencies` is not required until offline OSV provisioning is demonstrated
-    ([PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md](../../plans/PROPOSAL-LLM03-W8-SCANNER-ENFORCEMENT.md)).
+    is not pinned. Cargo-audit is pinned on linux and darwin, amd64 and arm64.
+  - Enforcement covers `sast`, `secrets` and `dependencies` (W8 stages 1 and 2,
+    2026-11-17). A `dependencies` gate needs a provisioned offline OSV database no
+    more than 90 days old in every environment that runs the gate
+    ([PROPOSAL-LLM03-W8-STAGE2-DEPENDENCIES.md](../../plans/PROPOSAL-LLM03-W8-STAGE2-DEPENDENCIES.md)).
 
 > **Historical: scanner-enforcement status before W8 stage 1 (PRs #471–#482).** This
 > paragraph records the pre-activation state; the current gate is described above
