@@ -35,11 +35,7 @@ so its binary digest is the committed manifest value.
 | cargo-audit 0.22.2 | darwin/amd64 | extracted `cargo-audit-x86_64-apple-darwin-v0.22.2.tgz` | `1a63bb3ab4f99a0220a8e4d8a677692afe5901cb44a949b2473c545a02028326` | yes (W8 Stage 2 prep) |
 
 cargo-audit digests are committed in `.agent-sdlc/config.yaml` as `binary_sha256_by_platform`
-(linux/amd64 and darwin/arm64). **Not yet demonstrated:** a fail-closed negative control
-for cargo-audit, which OWASPA-002 requires once per scanner. Gitleaks has one (below);
-cargo-audit now covers all four supported platforms. The Windows and Semgrep gaps
-are unchanged: Windows has no committed pin and no sandbox, and Semgrep is a
-hash-pinned venv rather than a pinned binary.
+(all four supported platforms; see the table above). The fail-closed negative control is demonstrated below, and the command now includes the `audit` subcommand (2026-11-17). The Windows and Semgrep gaps are unchanged: Windows has no committed pin and no sandbox, and Semgrep is a hash-pinned venv rather than a pinned binary.
 
 ## Configuration shape
 
@@ -106,3 +102,34 @@ installs do not match the release digests.
 A binary pin proves the bytes of a local scanner executable. It does not establish the
 provenance of a model, and SOP does not pin a model digest. See
 [llm04-supply-chain.md](llm04-supply-chain.md), "Model provenance".
+
+## cargo-audit fail-closed control (OWASPA-002 follow-up, 2026-11-17)
+
+Run with `sop` built from `origin/main` `f60a77dd`, on darwin arm64, against the
+fixture `internal/security/testdata/cargo-audit` (copied into a git repository with a
+minimal `Cargo.toml`, and the fixture advisory database). The configuration is the committed
+`.agent-sdlc/config.yaml` plus one `database:` key pointing at the fixture database.
+
+- **Negative control (fails closed):** the `cargo-audit` on `PATH` was
+  `/Users/imhttran/.cargo/bin/cargo-audit`, digest `057e5e27…`, which is not the pinned
+  digest. The adapter returned `FAILED` with `binary pin mismatch: the resolved
+  executable is not the pinned binary (sha256 057e5e27…)`, and the verdict became
+  `INDETERMINATE`. No scan ran.
+- **Positive control (pinned binary accepted):** `cargo-audit` 0.22.2 with digest
+  `33fbe81a…` (the pinned darwin/arm64 value) was first on `PATH`. The version check
+  passed. The scan then ran the committed command, `[cargo-audit]`, and failed with a
+  `cargo` usage error (`unexpected argument '--file'`). The adapter appends
+  `--file`, `--json` and `--no-fetch` without the `audit` subcommand, so the committed
+  command never runs the scan.
+- **With `command: [cargo-audit, audit]` (scratch config only):** the pinned binary
+  ran to `COMPLETED` with `COMPLETE` coverage and reported the fixture's one advisory.
+  The verdict was `FAIL` because the fixture database is stale under the `deny` policy,
+  which is expected for this fixture.
+
+**Status:** the fail-closed negative control is demonstrated. The configured command is
+`[cargo-audit, audit]` in `.agent-sdlc/config.yaml`. `go test ./internal/security/...`
+passes. The repository scan verdict is unchanged by the fix, because cargo-audit has
+no Rust content to scan at the repository root (`INDETERMINATE`, with Gitleaks,
+Semgrep and OSV-Scanner `FAILED` on this machine because their local binaries are not
+the pinned builds). The `101/84/17/1` baseline comparison needs the pinned
+Gitleaks and OSV-Scanner binaries and was not run here.

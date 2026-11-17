@@ -127,7 +127,7 @@ security:
     - id: cargo-audit
       category: dependencies
       protocol: builtin
-      command: [cargo-audit]
+      command: [cargo-audit, audit]
       languages: [rust]
       version: "0.22.2"
       # Executable digests of the cargo-audit 0.22.2 binary extracted from the
