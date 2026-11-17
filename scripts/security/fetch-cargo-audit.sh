@@ -57,6 +57,8 @@ case "$(uname -m)" in
 esac
 case "$os/$arch" in
   linux/x64) target=x86_64-unknown-linux-gnu ;;
+  linux/arm64) target=aarch64-unknown-linux-gnu ;;
+  darwin/x64) target=x86_64-apple-darwin ;;
   darwin/arm64) target=aarch64-apple-darwin ;;
   *) die "no pinned cargo-audit asset for $os/$arch; add one to $manifest before provisioning" ;;
 esac
