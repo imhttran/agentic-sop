@@ -124,15 +124,33 @@ automatic refresh; nothing downloads during a scan or `sop run`.
 
 For a required `dependencies` category the two gaps that matter:
 
-1. **cargo-audit is unpinned on `linux/arm64`, `darwin/amd64` and Windows.** The
-   manifest only carries `x86_64-unknown-linux-gnu` and `aarch64-apple-darwin`.
-   On those platforms the dependency gate would run an unpinned binary — the
-   exact supply-chain weakness the pins exist to close. Options: add manifest
-   entries and pins for the missing targets, or exclude Rust dependency scanning
-   from the support claim on those platforms.
+1. **cargo-audit pins now cover every supported platform.** W8 Stage 2
+   preparation added `aarch64-unknown-linux-gnu` and `x86_64-apple-darwin` to
+   `scripts/security/cargo-audit-manifest.json` and their executable digests to
+   `binary_sha256_by_platform`, so `linux/amd64`, `linux/arm64`, `darwin/amd64`
+   and `darwin/arm64` are all pinned at execution time. The two pre-existing pins
+   were reproduced byte-for-byte while deriving the new ones.
+   `TestCargoAuditRepoPinsCoverEverySupportedPlatform` keeps the platform matrix,
+   the archive pins and the binary pins in step, and fails when one is missing.
+   **Windows remains unsupported**: `binary_sha256_by_platform` does not accept a
+   Windows key, there is no committed pin, and `run_command` is refused there.
 2. **No publisher signatures anywhere.** A digest proves the bytes match a prior
    review, not who produced them. This is a pre-existing accepted limit; changing
    it needs its own decision.
+
+### Supported platform matrix
+
+| Platform | Gitleaks | OSV-Scanner | cargo-audit | Dependency gate supported |
+| --- | --- | --- | --- | --- |
+| linux/amd64 | pinned | pinned | **pinned** | yes |
+| linux/arm64 | pinned | pinned | **pinned** | yes |
+| darwin/amd64 | pinned | pinned | **pinned** | yes |
+| darwin/arm64 | pinned | pinned | **pinned** | yes |
+| windows/amd64 | none | none (manifest only) | none | **no** — no pin, no sandbox |
+
+Release assets that exist but are not provisioned: `armv7-unknown-linux-gnueabihf`
+and `x86_64-unknown-linux-musl` for cargo-audit. They are not supported targets for
+this gate.
 
 `dependencies` also requires Rust content to carry a `Cargo.lock`. With Rust
 detected and a lockfile missing, readiness is false and the scan fails closed
@@ -151,7 +169,9 @@ means a Rust repository with an uncommitted lockfile is blocked.
 
 ## 7. Acceptance criteria
 
-Positive:
+Positive (the `stage2-gate-e2e` CI job asserts every row below against a
+temporary Stage 2 configuration; it never reads the repository's own config,
+baseline or database):
 
 | Criterion | Evidence |
 | --- | --- |
@@ -173,6 +193,36 @@ Negative (each must fail closed, never `PASS`):
 | Changed-files scope with required mode | `INDETERMINATE` (required gate cannot pass on changed-files evidence) |
 | New unsuppressed HIGH finding | `FAIL` (measured in Stage 1) |
 
+### End-to-end evidence (this PR)
+
+`scripts/checks/stage2-gate-e2e.sh` runs the real `sop security scan` against a
+temporary repository and temporary Stage 2 configuration with synthetic offline
+databases. Measured locally on darwin arm64 with the pinned scanners, 7 of 7 cases
+as expected:
+
+```
+valid database                       PASS
+missing database                     INDETERMINATE
+stale database                       INDETERMINATE
+corrupt database                     INDETERMINATE
+unpinned scanner binary              INDETERMINATE
+missing required language coverage   INDETERMINATE
+new unsuppressed HIGH finding        FAIL
+```
+
+`scripts/checks/test-osv-db-verify.sh` covers the verifier itself with synthetic
+databases, 7 of 7: valid `0`; missing layout, absent directory, stale, corrupt,
+invalid metadata and the freshness-boundary override all `1`.
+
+Both run in the `stage2-gate-e2e` CI job, which reuses the pinned scanners the
+security-integration job provisions (provision-only mode) instead of paying for a
+second full provisioning run.
+
+One behaviour worth noting for operators: the database freshness and digest checks
+only engage when there is dependency content to resolve. A repository with no
+lockfile does not exercise them — which is also why `dependencies` required makes
+the lockfile obligation explicit.
+
 ## 8. Rollback
 
 1. Revert §2 in one commit: `required_categories: [sast, secrets]`. No baseline,
@@ -190,7 +240,7 @@ Negative (each must fail closed, never `PASS`):
 | # | Risk / decision | State |
 | --- | --- | --- |
 | R1 | Stage 1 gate depends on OSV freshness even though `dependencies` is optional (§3) | Documented; keeping as-is is recommended, changing it needs authorization |
-| R2 | `cargo-audit` unpinned on `linux/arm64`, `darwin/amd64`, Windows | Open; needs pins or a scope exclusion |
+| R2 | `cargo-audit` pin matrix | **Closed for the four supported platforms**; Windows remains unsupported by design |
 | R3 | No publisher signature verification | Open, pre-existing |
 | R4 | Windows outside the support claim (pins + sandbox) | Open; document |
 | R5 | Rust repositories require a committed `Cargo.lock` | By design; document |
@@ -209,5 +259,9 @@ Negative (each must fail closed, never `PASS`):
 > OSV freshness boundary, does not add or remove any baseline entry, and does not
 > accept any residual risk.
 
-If R2 must be closed first, the alternative wording replaces the configuration
-change with the pin work and defers Stage 2 until the pins are merged.
+The `stage2-gate-e2e` and `sandbox-linux` CI jobs must be green on the activating
+PR, and `make osv-db-verify` must pass in the operator's environment.
+
+If the Windows gap must be closed first, the alternative is to add a Windows
+platform key and pins before activating; that is a code and pinning change, not a
+configuration change, and it is not part of this authorization.

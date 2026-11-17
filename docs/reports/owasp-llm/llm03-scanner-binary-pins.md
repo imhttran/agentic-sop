@@ -31,11 +31,15 @@ so its binary digest is the committed manifest value.
 | OSV-Scanner 2.7.0 | darwin/arm64 | `osv-scanner-manifest.json` asset pin | `d4926ef8da134332543be276dff157e4c170f99ad91fc48e89448a8816bdf70b` | yes |
 | cargo-audit 0.22.2 | linux/amd64 | extracted `cargo-audit-x86_64-unknown-linux-gnu-v0.22.2.tgz` | `473b9a71e5cb5bde22f69c32f749c9b83931287d92dc36b91cb04f6705640ef2` | yes (OWASPA-002, PR #502) |
 | cargo-audit 0.22.2 | darwin/arm64 | extracted `cargo-audit-aarch64-apple-darwin-v0.22.2.tgz` | `33fbe81adca1b794f4ffe98574d59b0ebe6fcfdb310976fafed98a094c795111` | yes (OWASPA-002, PR #502) |
+| cargo-audit 0.22.2 | linux/arm64 | extracted `cargo-audit-aarch64-unknown-linux-gnu-v0.22.2.tgz` | `bc1528b7ba3b7dc0bb681eaa13237fb195142ef0ba037f0e73d28afc3ec22c4d` | yes (W8 Stage 2 prep) |
+| cargo-audit 0.22.2 | darwin/amd64 | extracted `cargo-audit-x86_64-apple-darwin-v0.22.2.tgz` | `1a63bb3ab4f99a0220a8e4d8a677692afe5901cb44a949b2473c545a02028326` | yes (W8 Stage 2 prep) |
 
 cargo-audit digests are committed in `.agent-sdlc/config.yaml` as `binary_sha256_by_platform`
 (linux/amd64 and darwin/arm64). **Not yet demonstrated:** a fail-closed negative control
 for cargo-audit, which OWASPA-002 requires once per scanner. Gitleaks has one (below);
-cargo-audit does not. The Windows and Semgrep gaps are unchanged.
+cargo-audit now covers all four supported platforms. The Windows and Semgrep gaps
+are unchanged: Windows has no committed pin and no sandbox, and Semgrep is a
+hash-pinned venv rather than a pinned binary.
 
 ## Configuration shape
 

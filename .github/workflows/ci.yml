@@ -108,6 +108,47 @@ jobs:
       - name: verify the backend can start and run the sandbox-dependent suites
         run: bash scripts/checks/sandbox-integration.sh
 
+  # W8 Stage 2 readiness: exercise the required-mode security gate end to end with
+  # temporary Stage 2 configurations and synthetic offline databases, then check
+  # the database verifier against every degraded state. It reuses the pinned
+  # scanners the security-integration job already provisioned, so it is a step in
+  # that job rather than a second job paying for the same provisioning.
+  stage2-gate-e2e:
+    name: required-mode gate end to end (W8 Stage 2 readiness)
+    runs-on: ubuntu-latest
+    needs: security-integration
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/sop-security-tools
+          key: sop-security-tools-${{ runner.os }}-${{ hashFiles('scripts/security/*-manifest.json', 'scripts/checks/security-integration.sh', 'scripts/security/semgrep-requirements.lock') }}
+      - name: provision the pinned scanners this job runs
+        env:
+          SOP_SECURITY_TOOLS_DIR: ${{ runner.temp }}/sop-security-tools
+          SOP_SECURITY_SEMGREP_BIN: ${{ runner.temp }}/sop-security-tools/semgrep-1.183.0-venv/bin/semgrep
+          SOP_SECURITY_GITLEAKS_BIN: ${{ runner.temp }}/sop-security-tools/gitleaks-8.30.1/gitleaks
+          SOP_SECURITY_INTEGRATION_PROVISION_ONLY: "1"
+        run: bash scripts/checks/security-integration.sh
+      - name: database verifier states
+        run: bash scripts/checks/test-osv-db-verify.sh
+      - name: required-mode gate end to end
+        env:
+          SOP_SECURITY_TOOLS_DIR: ${{ runner.temp }}/sop-security-tools
+        run: |
+          set -euo pipefail
+          tools="$SOP_SECURITY_TOOLS_DIR"
+          export PATH="$tools/gitleaks-8.30.1:$tools/osv-scanner-2.7.0:$tools/semgrep-1.183.0-venv/bin:$PATH"
+          export SOP_SECURITY_E2E_RULES="$tools/semgrep-rules"
+          bash scripts/checks/stage2-gate-e2e.sh
+
   # The suite under the race detector, which the lifecycle and scheduler tests rely on.
   race:
     name: race detector

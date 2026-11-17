@@ -131,6 +131,15 @@ rules_dir="$tools_dir/semgrep-rules"
 
 echo "security-integration: semgrep=$actual_semgrep gitleaks=$actual_gitleaks cargo-audit=$actual_cargo_audit osv-scanner=$actual_osv"
 
+# Provision-only mode: stop after the pinned tools, rules and database fixture are
+# in place. A caller that runs its own checks against the provisioned tools (for
+# example the Stage 2 gate job) uses this to avoid running the tagged suite twice.
+if [ "${SOP_SECURITY_INTEGRATION_PROVISION_ONLY:-0}" = "1" ]; then
+  echo "security-integration: provision-only (skipping the tagged suite)"
+  echo "security-integration: tools=$tools_dir rules=$rules_dir"
+  exit 0
+fi
+
 cd "$root"
 SOP_SECURITY_SEMGREP_BIN="$semgrep_bin" \
 SOP_SECURITY_GITLEAKS_BIN="$gitleaks_bin" \
