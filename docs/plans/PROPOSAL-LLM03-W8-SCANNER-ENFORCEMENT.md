@@ -333,4 +333,7 @@ Enabling enforcement requires this decision. Exact text:
 > `dependencies` category, and does not accept any residual risk.
 
 Stage 2 (`dependencies`) needs its own authorization after the OSV provisioning
-prerequisite is demonstrated.
+prerequisite is demonstrated. The decision-ready Stage 2 packet, with the measured
+database matrix, the readiness/verdict divergence, and the exact configuration
+change, is
+[PROPOSAL-LLM03-W8-STAGE2-DEPENDENCIES.md](PROPOSAL-LLM03-W8-STAGE2-DEPENDENCIES.md).

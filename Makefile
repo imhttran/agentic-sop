@@ -5,7 +5,7 @@
 # checks/, agents/).
 
 .PHONY: fmt vet test test-fast test-planner-tunnel test-mcp-portability setup-planner build check check-fast check-plugin check-push check-push-fix install-hooks install install-all install-ollama-agent \
-	security-integration \
+	security-integration osv-db-fetch osv-db-verify \
 	ollama-agent-pin-preflight ollama-agent-invalid-test-mode plugin install-plugin \
 	install-skills install-skills-zed install-skills-claude \
 	uninstall-skills uninstall-skills-zed uninstall-skills-claude \
@@ -115,6 +115,16 @@ check-plugin:
 # fail rather than skip. The OSV database is a controlled offline fixture.
 security-integration:
 	./scripts/checks/security-integration.sh
+
+# Offline OSV database used by the dependency scanner. Provisioning is explicit
+# and separate from scanning: a scan never downloads. `osv-db-verify` fails closed
+# on a missing, stale (>90 days), corrupt or invalid database, which is what a
+# required `dependencies` category needs before it can be evidence.
+osv-db-fetch:
+	./scripts/security/fetch-osv-databases.sh
+
+osv-db-verify:
+	./scripts/checks/osv-db-verify.sh
 
 # Install the sop CLI (and nothing else). Add `./install.sh --all` for everything.
 install:
