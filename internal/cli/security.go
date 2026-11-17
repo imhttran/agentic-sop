@@ -387,6 +387,10 @@ func inspectRequiredReadiness(cfg config.Config, selection security.Selection, s
 	for _, category := range selection.Coverage {
 		coverage[string(category.Category)] = category
 	}
+	requiredCategories := make(map[string]bool, len(cfg.Security.RequiredCategories))
+	for _, raw := range cfg.Security.RequiredCategories {
+		requiredCategories[strings.ToLower(strings.TrimSpace(raw))] = true
+	}
 	ready := true
 	var reasons []string
 	for _, raw := range cfg.Security.RequiredCategories {
@@ -414,7 +418,15 @@ func inspectRequiredReadiness(cfg config.Config, selection security.Selection, s
 			}
 		}
 	}
+	// Only an adapter in a required category can block readiness. A configured but
+	// optional adapter — cargo-audit on a repository with no Rust content, for
+	// example — must not make the required gate look unsatisfiable, and skipping it
+	// here cannot hide a required gap: the coverage check above already fails
+	// closed for every required category.
 	for _, candidate := range selected {
+		if !requiredCategories[string(candidate.Category)] {
+			continue
+		}
 		if candidate.Status == security.CapabilityAvailable {
 			continue
 		}
