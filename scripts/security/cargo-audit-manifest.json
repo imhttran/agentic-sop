@@ -8,6 +8,12 @@
     },
     "aarch64-apple-darwin": {
       "sha256": "ec7ca4263769593df4d909be85b94a6b79efa2897be5d2bb8ebd516e823175af"
+    },
+    "aarch64-unknown-linux-gnu": {
+      "sha256": "c6603814ddaa45e51263dafd31c0ac98808f688d26f7395804f9670b0fd599dd"
+    },
+    "x86_64-apple-darwin": {
+      "sha256": "847831323de932155b226ab60ee4a180e13e5d007a019f0d4b7b4d89a6de2ab2"
     }
   }
 }

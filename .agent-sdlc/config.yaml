@@ -131,10 +131,13 @@ security:
       languages: [rust]
       version: "0.22.2"
       # Executable digests of the cargo-audit 0.22.2 binary extracted from the
-      # tarballs pinned in scripts/security/cargo-audit-manifest.json. Only the two
-      # platforms the manifest supports are pinned; other platforms run unpinned.
+      # tarballs pinned in scripts/security/cargo-audit-manifest.json. All four
+      # supported platforms are pinned; Windows has no pin and is an unsupported
+      # platform for the dependency gate (no sandbox there either).
       binary_sha256_by_platform:
         linux/amd64: 473b9a71e5cb5bde22f69c32f749c9b83931287d92dc36b91cb04f6705640ef2
+        linux/arm64: bc1528b7ba3b7dc0bb681eaa13237fb195142ef0ba037f0e73d28afc3ec22c4d
+        darwin/amd64: 1a63bb3ab4f99a0220a8e4d8a677692afe5901cb44a949b2473c545a02028326
         darwin/arm64: 33fbe81adca1b794f4ffe98574d59b0ebe6fcfdb310976fafed98a094c795111
   evaluation:
     # Kept out of the routine scan path: an enabled evaluation adds ~121 s to
