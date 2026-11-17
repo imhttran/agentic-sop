@@ -1,0 +1,223 @@
+{
+  "gap": "OWASP LLM08 / gap 14 (OWASPA-003)",
+  "producer": {
+    "repo": "rag-template-rust",
+    "base_revision": "de9eb65",
+    "revision": "3add20a",
+    "branch": "evidence/owasp-a003-producer-delay (local, not pushed)",
+    "test_only_change": "cargo feature test-producer-delay (Cargo.toml, src/bin/retrieval.rs)"
+  },
+  "database": {
+    "image": "pgvector/pgvector:pg17",
+    "server": "PostgreSQL 17.11",
+    "container": "sop-owasp-a003-pg",
+    "port": 5434,
+    "disposable": true,
+    "migrations": "migrations/001..005 in order"
+  },
+  "embedding": {
+    "provider": "ollama",
+    "model": "nomic-embed-text",
+    "dim": 768,
+    "ollama_version": "0.40.11"
+  },
+  "corpora": {
+    "allowed": [
+      "corpus-a",
+      "corpus-b"
+    ],
+    "documents": [
+      "alpha.txt (corpus-a)",
+      "poison.txt (corpus-a, poisoned)",
+      "beta.txt (corpus-b)"
+    ],
+    "synthetic": true
+  },
+  "platform": "darwin arm64; Ollama in Docker",
+  "cases": [
+    {
+      "id": "LIVE-RAG-POSITIVE-A",
+      "description": "positive control: corpus-a retrieves its own document",
+      "kind": "positive",
+      "binary": "retrieval-default",
+      "binary_sha256": "a597efb42adebc3b474351f384dbcf5680e9f18e3802e41f0ae5a18187546cd2",
+      "request": "req-positive.json",
+      "request_sha256": "dcf8d3d9e4e874a4ae0ad6a8b0e82b076f694d2ef249849bafc9b03f154bc5a8",
+      "response": "resp-req-positive.json",
+      "response_sha256": "0a424dbbe3c2d02ee47958a8a824e3e9ff95b28849d4c7363c4363b28deaccbf",
+      "status": "OK",
+      "error_code": "",
+      "elapsed_ms": 85,
+      "evidence_count": 2,
+      "evidence_sources": [
+        "alpha.txt",
+        "poison.txt"
+      ],
+      "all_evidence_has_chunk_hash": true,
+      "marker_observed_in_evidence": {
+        "alpha": true,
+        "beta": false
+      },
+      "verdict": "pass"
+    },
+    {
+      "id": "LIVE-RAG-CROSS-CORPUS",
+      "description": "corpus-a query for corpus-b content must not return corpus-b",
+      "kind": "isolation",
+      "binary": "retrieval-default",
+      "binary_sha256": "a597efb42adebc3b474351f384dbcf5680e9f18e3802e41f0ae5a18187546cd2",
+      "request": "req-cross.json",
+      "request_sha256": "9ca3974e5e7e8a5660104d48df90dc445f0c0d87b339d4f9b22d97144256bd9d",
+      "response": "resp-req-cross.json",
+      "response_sha256": "7d1c0f849cceeb3a19f1e9c959c217ba99118157f09754727955bf10d9d66dd7",
+      "status": "OK",
+      "error_code": "",
+      "elapsed_ms": 69,
+      "evidence_count": 2,
+      "evidence_sources": [
+        "alpha.txt",
+        "poison.txt"
+      ],
+      "all_evidence_has_chunk_hash": true,
+      "marker_observed_in_evidence": {
+        "alpha": true,
+        "beta": false
+      },
+      "verdict": "protected"
+    },
+    {
+      "id": "LIVE-RAG-UNAUTHORIZED-SCOPE",
+      "description": "corpus-z not in allowlist is rejected before any work",
+      "kind": "scope",
+      "binary": "retrieval-default",
+      "binary_sha256": "a597efb42adebc3b474351f384dbcf5680e9f18e3802e41f0ae5a18187546cd2",
+      "request": "req-unauth.json",
+      "request_sha256": "2eedb542cedbcfcda8afca025b12f0321310badf41e8fa6b433915e1bea554d3",
+      "response": "resp-req-unauth.json",
+      "response_sha256": "b798673ca31e18eb3991cb9124a3aca359e0fcf28c19ab7ac8afd0f8390bfda9",
+      "status": "UNAUTHORIZED_SCOPE",
+      "error_code": "UNAUTHORIZED_SCOPE",
+      "elapsed_ms": 0,
+      "evidence_count": 0,
+      "evidence_sources": [],
+      "all_evidence_has_chunk_hash": true,
+      "marker_observed_in_evidence": {
+        "alpha": false,
+        "beta": false
+      },
+      "verdict": "protected"
+    },
+    {
+      "id": "LIVE-RAG-DEADLINE",
+      "description": "1 ms deadline returns a well-formed failure",
+      "kind": "deadline",
+      "binary": "retrieval-default",
+      "binary_sha256": "a597efb42adebc3b474351f384dbcf5680e9f18e3802e41f0ae5a18187546cd2",
+      "request": "req-deadline.json",
+      "request_sha256": "c7b77eb5fcb0ac7b1ee62974fea247b204c72691ff32cfc12728e7aab1ecdd54",
+      "response": "resp-req-deadline.json",
+      "response_sha256": "d54aab6fee95098920f6b4e7141e6f8f4b9b9cd008e9819f98b2e0c72c84e4d4",
+      "status": "UNAVAILABLE",
+      "error_code": "UNAVAILABLE",
+      "elapsed_ms": 32,
+      "evidence_count": 0,
+      "evidence_sources": [],
+      "all_evidence_has_chunk_hash": true,
+      "marker_observed_in_evidence": {
+        "alpha": false,
+        "beta": false
+      },
+      "verdict": "observed_well_formed_failure"
+    },
+    {
+      "id": "LIVE-RAG-POSITIVE-B",
+      "description": "positive control: corpus-b retrieves its own document",
+      "kind": "positive",
+      "binary": "retrieval-default",
+      "binary_sha256": "a597efb42adebc3b474351f384dbcf5680e9f18e3802e41f0ae5a18187546cd2",
+      "request": "req-positive-b.json",
+      "request_sha256": "6edc13e27226cb3e51f8e8e50d6e445587f89fa51282e8bb4a64f16503c62398",
+      "response": "resp-req-positive-b.json",
+      "response_sha256": "6e755eb78846ec72ac7c3c97c603e01393f9e702e9d859f68b67698747da9aae",
+      "status": "OK",
+      "error_code": "",
+      "elapsed_ms": 78,
+      "evidence_count": 1,
+      "evidence_sources": [
+        "beta.txt"
+      ],
+      "all_evidence_has_chunk_hash": true,
+      "marker_observed_in_evidence": {
+        "alpha": false,
+        "beta": true
+      },
+      "verdict": "pass"
+    },
+    {
+      "id": "LIVE-RAG-TIMEOUT",
+      "description": "producer delay 3000 ms exceeds 1000 ms deadline; producer must report TIMEOUT",
+      "kind": "timeout",
+      "binary": "retrieval-delay",
+      "binary_sha256": "cde3a5bd72e95376aa099ac91f7727cff8a3ff2c0715bf5a5583adc203e21d74",
+      "request": "req-timeout.json",
+      "request_sha256": "605ccdb5c649ebf6c7908734eacf35d883bc3b21f7614199d83a959d3a14190b",
+      "response": "resp-timeout.json",
+      "response_sha256": "82d3bd5135505913138f692cc33503ff697d4adafa97500cd9b930f6816be42b",
+      "status": "TIMEOUT",
+      "error_code": "TIMEOUT",
+      "elapsed_ms": 3072,
+      "evidence_count": 0,
+      "evidence_sources": [],
+      "all_evidence_has_chunk_hash": true,
+      "marker_observed_in_evidence": {
+        "alpha": false,
+        "beta": false
+      },
+      "verdict": "observed_timeout",
+      "producer_delay_ms": 3000,
+      "deadline_ms": 1000,
+      "producer_build": "cargo feature test-producer-delay (test-only)"
+    },
+    {
+      "id": "LIVE-RAG-DEFAULT-BUILD-IGNORES-DELAY",
+      "description": "negative control: default build ignores RAG_TEST_PRODUCER_DELAY_MS=3000",
+      "kind": "control",
+      "binary": "retrieval-default",
+      "binary_sha256": "a597efb42adebc3b474351f384dbcf5680e9f18e3802e41f0ae5a18187546cd2",
+      "request": "req-timeout.json",
+      "request_sha256": "605ccdb5c649ebf6c7908734eacf35d883bc3b21f7614199d83a959d3a14190b",
+      "response": "resp-default-with-delay.json",
+      "response_sha256": "2c40631ad50e84b33c297e27fe0e0dd284d21a882ad9a41b620e127a3d989a28",
+      "status": "OK",
+      "error_code": "",
+      "elapsed_ms": 68,
+      "evidence_count": 2,
+      "evidence_sources": [
+        "alpha.txt",
+        "poison.txt"
+      ],
+      "all_evidence_has_chunk_hash": true,
+      "marker_observed_in_evidence": {
+        "alpha": true,
+        "beta": false
+      },
+      "verdict": "pass"
+    },
+    {
+      "id": "LIVE-RAG-CANCELLATION",
+      "description": "client sends SIGTERM 3 s into a 60 s producer delay (deadline 30 s)",
+      "kind": "cancellation",
+      "binary": "retrieval-delay",
+      "binary_sha256": "cde3a5bd72e95376aa099ac91f7727cff8a3ff2c0715bf5a5583adc203e21d74",
+      "request": "req-cancel.json",
+      "request_sha256": "dcf8d3d9e4e874a4ae0ad6a8b0e82b076f694d2ef249849bafc9b03f154bc5a8",
+      "response": "resp-cancel.json",
+      "response_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "client_action": "SIGTERM after 3 s",
+      "process_exit": "terminated by signal 15 (wait status 143)",
+      "stdout_bytes": 0,
+      "verdict": "observed_no_response"
+    }
+  ],
+  "case_count": 8
+}
