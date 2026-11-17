@@ -33,9 +33,9 @@ so its binary digest is the committed manifest value.
 | cargo-audit 0.22.2 | darwin/arm64 | extracted `cargo-audit-aarch64-apple-darwin-v0.22.2.tgz` | `33fbe81adca1b794f4ffe98574d59b0ebe6fcfdb310976fafed98a094c795111` | yes (OWASPA-002, PR #502) |
 
 cargo-audit digests are committed in `.agent-sdlc/config.yaml` as `binary_sha256_by_platform`
-(linux/amd64 and darwin/arm64). **Not yet demonstrated:** a fail-closed negative control
-for cargo-audit, which OWASPA-002 requires once per scanner. Gitleaks has one (below);
-cargo-audit does not. The Windows and Semgrep gaps are unchanged.
+(linux/amd64 and darwin/arm64). The fail-closed negative control is demonstrated below,
+but the committed command needs a fix before the scan can run. The Windows and Semgrep
+gaps are unchanged.
 
 ## Configuration shape
 
@@ -102,3 +102,31 @@ installs do not match the release digests.
 A binary pin proves the bytes of a local scanner executable. It does not establish the
 provenance of a model, and SOP does not pin a model digest. See
 [llm04-supply-chain.md](llm04-supply-chain.md), "Model provenance".
+
+## cargo-audit fail-closed control (OWASPA-002 follow-up, 2026-11-17)
+
+Run with `sop` built from `origin/main` `f60a77dd`, on darwin arm64, against the
+fixture `internal/security/testdata/cargo-audit` (copied into a git repository with a
+minimal `Cargo.toml`, and the fixture advisory database). The configuration is the committed
+`.agent-sdlc/config.yaml` plus one `database:` key pointing at the fixture database.
+
+- **Negative control (fails closed):** the `cargo-audit` on `PATH` was
+  `/Users/imhttran/.cargo/bin/cargo-audit`, digest `057e5e27…`, which is not the pinned
+  digest. The adapter returned `FAILED` with `binary pin mismatch: the resolved
+  executable is not the pinned binary (sha256 057e5e27…)`, and the verdict became
+  `INDETERMINATE`. No scan ran.
+- **Positive control (pinned binary accepted):** `cargo-audit` 0.22.2 with digest
+  `33fbe81a…` (the pinned darwin/arm64 value) was first on `PATH`. The version check
+  passed. The scan then ran the committed command, `[cargo-audit]`, and failed with a
+  `cargo` usage error (`unexpected argument '--file'`). The adapter appends
+  `--file`, `--json` and `--no-fetch` without the `audit` subcommand, so the committed
+  command never runs the scan.
+- **With `command: [cargo-audit, audit]` (scratch config only):** the pinned binary
+  ran to `COMPLETED` with `COMPLETE` coverage and reported the fixture's one advisory.
+  The verdict was `FAIL` because the fixture database is stale under the `deny` policy,
+  which is expected for this fixture.
+
+**Status:** the fail-closed negative control is demonstrated. The configured
+cargo-audit command in `.agent-sdlc/config.yaml` is not runnable as committed and
+needs an `audit` subcommand. That change is not made here: it changes a committed
+adapter invocation and needs a decision.
