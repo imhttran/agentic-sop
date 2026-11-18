@@ -377,11 +377,13 @@ sandbox_skip=0` with `SOP_SANDBOX_REQUIRED=1`, so no sandbox test skipped.
   - G4 covers the file tools only: sandboxed model code can still write
     `.git/config`, but it is inert for host execution because git itself is
     sandboxed.
-  - The Semgrep `dangerous-exec-command` finding stays visible and blocking.
-    Containment mitigates behaviour, not the call site, and it is not suppressed.
-    The current scan is **98 findings, 81 suppressed, 17 unsuppressed, 1 blocking**
-    (three baseline entries went stale because this change removed the tests they
-    referenced; none was added, edited, or removed).
+  - The Semgrep `dangerous-exec-command` finding at `internal/toolharness/harness.go`
+    is not accepted as safe. Containment mitigates behaviour, not the call site, so
+    the finding is covered by one guarded baseline entry that expires on
+    2027-03-31 (`.agent-sdlc/security-baseline.json`). Its reason cites mandatory
+    isolation and the `TestModelReachableExecIsIsolated` guard; re-review it at
+    expiry or if that guard changes. The earliest baseline expiry is 2027-03-31
+    (13 entries); the rest expire on 2027-06-30 (69 entries).
   - With the sandbox on, the repository's own suite passes on macOS (87-91 s
     in-sandbox against 86 s unsandboxed, no failures) and has no sandbox-caused
     failures on Linux arm64 in a container (two container artifacts remain). Tests
