@@ -152,6 +152,18 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 		return finish(exec, nil)
 	}
 
+	// Declared out-of-scope content: a path Git ignores is not repository source,
+	// the same definition SnapshotFiles and the Gitleaks adapter already use. The
+	// set is derived from enumerated paths, never from Semgrep's skip counts,
+	// which carry no paths.
+	ignoredScope, ignoredErr := deriveSemgrepIgnoredScope(ctx, req)
+	if ignoredErr != nil {
+		exec.Status = StatusFailed
+		exec.Coverage = CoverageUnknown
+		exec.Diagnostics = append(exec.Diagnostics, "semgrep out-of-scope set is unavailable: "+SanitizeText(ignoredErr.Error(), MaxDiagnosticBytes))
+		return finish(exec, nil)
+	}
+
 	// Coverage is language-scoped. A Go-only ruleset must never be treated as a
 	// successful Rust scan, and a ruleset with no rule for any detected language
 	// must not produce a clean result.
@@ -203,6 +215,20 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 			argv = append(argv, "--exclude", pattern)
 		}
 		exec.Diagnostics = append(exec.Diagnostics, "configured exclusions: "+SanitizeText(strings.Join(excludes, ", "), MaxDiagnosticBytes))
+	}
+	// Derived out-of-scope content is declared with the joined form so a value can
+	// never be read as the next Semgrep option.
+	for _, pattern := range ignoredScope.Excludes {
+		argv = append(argv, "--exclude="+pattern)
+	}
+	if len(ignoredScope.Excludes) > 0 {
+		exec.Diagnostics = append(exec.Diagnostics, fmt.Sprintf("git-ignored paths are declared out of scope: %d exclusion(s) derived from git", len(ignoredScope.Excludes)))
+	}
+	if ignoredScope.Dropped > 0 {
+		exec.Diagnostics = append(exec.Diagnostics, fmt.Sprintf("%d git-ignored path(s) could not be declared out of scope safely and remain in scope", ignoredScope.Dropped))
+	}
+	if ignoredScope.Bounded {
+		exec.Diagnostics = append(exec.Diagnostics, fmt.Sprintf("git-ignored paths exceed the %d-exclusion bound; none were declared, so their skips still count as gaps", semgrepIgnoredExcludeLimit))
 	}
 	// A changed-files scope is an optimization and is recorded as such. When it
 	// is requested, only the named files are targets.
@@ -310,6 +336,7 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 
 	allowed := changedSet(req.Scope)
 	excludedFindings := 0
+	outOfScopeFindings := 0
 	for _, result := range report.Results {
 		path, reason := NormalizePath(result.Path)
 		if path == "" {
@@ -320,6 +347,12 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 			// --exclude and the target filter should already omit these; keep the
 			// guard so an excluded finding never reaches the report.
 			excludedFindings++
+			continue
+		}
+		if path != "" && ignoredScope.contains(path) {
+			// A git-ignored path is out-of-scope content. The exclusion should already
+			// have omitted it; keep the guard so it never reaches the report.
+			outOfScopeFindings++
 			continue
 		}
 		if allowed != nil && path != "" && !allowed[path] {
@@ -360,6 +393,9 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 
 	if excludedFindings > 0 {
 		exec.Diagnostics = append(exec.Diagnostics, fmt.Sprintf("semgrep: %d finding(s) in declared excluded paths were omitted from the normalized report", excludedFindings))
+	}
+	if outOfScopeFindings > 0 {
+		exec.Diagnostics = append(exec.Diagnostics, fmt.Sprintf("semgrep: %d finding(s) in git-ignored out-of-scope paths were omitted from the normalized report", outOfScopeFindings))
 	}
 
 	sanitized, digest, serr := SanitizeNativeReport(stdout)

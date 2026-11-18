@@ -1,17 +1,16 @@
 # Decision packet — Semgrep `PARTIAL` coverage from git-ignored artifacts
 
-**Status:** proposal, read-only. **No scanner behaviour, exclusion, ignored file,
-worktree, or configuration is changed by this document.**
+**Status:** implemented (Option A1), 2026-11-17, PR #524. The sections below are the decision record: §1–§4 are the evidence as measured before the change, §5–§7 the options, §8–§10 the approved scope, tests and authorization, and §11 the workaround that is no longer needed. The implementation changed no exclusion, ignored file, worktree, or configuration.
 **Base:** `origin/main` @ `21943cd0` (2026-11-17), PR #519 merged.
 **Required categories:** `sast`, `secrets`, `dependencies`; dependency readiness is
 `true` on the primary checkout.
 
 ## 1. Symptom
 
-| Checkout | Verdict | Coverage | SAST |
-| --- | --- | --- | --- |
-| Primary checkout (long-lived) | `INDETERMINATE` | `PARTIAL` | semgrep `PARTIAL` |
-| Clean checkout at the same revision | `PASS` | `COMPLETE` | semgrep `COMPLETE` |
+| Checkout                            | Verdict         | Coverage   | SAST               |
+| ----------------------------------- | --------------- | ---------- | ------------------ |
+| Primary checkout (long-lived)       | `INDETERMINATE` | `PARTIAL`  | semgrep `PARTIAL`  |
+| Clean checkout at the same revision | `PASS`          | `COMPLETE` | semgrep `COMPLETE` |
 
 Semgrep's own summary in the primary checkout:
 
@@ -30,12 +29,12 @@ git-ignored files are skipped and counted under that class.
 1.183.0's `--json` output exposes only `paths.scanned`; it does **not** report
 `paths.skipped`, verified on this host). Skips are classified as:
 
-| Class | Treatment |
-| --- | --- |
-| `declared-exclude` (a configured `--exclude`) | not a gap |
-| `semgrepignore` | **gap** → coverage `PARTIAL` |
-| `large-file` | **gap** → coverage `PARTIAL` |
-| `unrecognized` | **gap** — an unknown limitation never yields `COMPLETE` |
+| Class                                         | Treatment                                               |
+| --------------------------------------------- | ------------------------------------------------------- |
+| `declared-exclude` (a configured `--exclude`) | not a gap                                               |
+| `semgrepignore`                               | **gap** → coverage `PARTIAL`                            |
+| `large-file`                                  | **gap** → coverage `PARTIAL`                            |
+| `unrecognized`                                | **gap** — an unknown limitation never yields `COMPLETE` |
 
 The classifier is deliberately summary-level and conservative: it never uses a skip
 reason to conclude that a skip is acceptable.
@@ -44,10 +43,10 @@ reason to conclude that a skip is acceptable.
 
 Derived from git and from file sizes, without opening any skipped file:
 
-| Class | Count in scope | Tracked? | Ignored? |
-| --- | --- | --- | --- |
-| `semgrepignore` matches | **67** git-ignored files, of which Semgrep targets 40 | **0** | all |
-| `large-file` (≥ 1 MB) | 4: `./sop` (17.6 MB), `.run/spike/sop-planner` (29.5 MB), `.run/spike/sop-planner-main` (28.9 MB), `.run/tunnel/logs/issue-90-candidate.jsonl` (1.75 MB) | **0** | all |
+| Class                   | Count in scope                                                                                                                                           | Tracked? | Ignored? |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | -------- |
+| `semgrepignore` matches | **67** git-ignored files, of which Semgrep targets 40                                                                                                    | **0**    | all      |
+| `large-file` (≥ 1 MB)   | 4: `./sop` (17.6 MB), `.run/spike/sop-planner` (29.5 MB), `.run/spike/sop-planner-main` (28.9 MB), `.run/tunnel/logs/issue-90-candidate.jsonl` (1.75 MB) | **0**    | all      |
 
 Ignored files inside the declared scope, by prefix: `.run` 31, `.playwright-mcp`
 29, plus `sop`, `.env`, `.env.bak`, `.DS_Store`, `CLAUDE.local.md`,
@@ -123,14 +122,14 @@ unblock if the checkout is needed before A1 lands. Do not do B.
 
 ## 8. Regression tests for A1
 
-| Test | Asserts |
-| --- | --- |
-| `TestSemgrepScopeExcludesGitIgnoredPaths` | an ignored path inside the walk is passed as a declared exclusion, so a skip of it is not a gap |
-| `TestSemgrepScopeKeepsUntrackedNonIgnored` | a new (untracked, not ignored) source file is still in scope and a skip of it is a gap |
-| `TestSemgrepScopeKeepsTrackedEvenIfIgnored` | a tracked file matching an ignore rule is never excluded |
-| `TestSemgrepCoverageFailsClosedWithoutGit` | when the ignored set cannot be determined, coverage stays `PARTIAL`, never `COMPLETE` |
-| `TestSemgrepCoverageCountsTrackedSkipsAsGap` | a skipped tracked file still yields `PARTIAL` (the anti-regression for this change) |
-| `TestSemgrepCoverageLargeTrackedFileIsStillAGap` | a tracked file over the size limit remains a gap |
+| Test                                             | Asserts                                                                                         |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `TestSemgrepScopeExcludesGitIgnoredPaths`        | an ignored path inside the walk is passed as a declared exclusion, so a skip of it is not a gap |
+| `TestSemgrepScopeKeepsUntrackedNonIgnored`       | a new (untracked, not ignored) source file is still in scope and a skip of it is a gap          |
+| `TestSemgrepScopeKeepsTrackedEvenIfIgnored`      | a tracked file matching an ignore rule is never excluded                                        |
+| `TestSemgrepCoverageFailsClosedWithoutGit`       | when the ignored set cannot be determined, coverage stays `PARTIAL`, never `COMPLETE`           |
+| `TestSemgrepCoverageCountsTrackedSkipsAsGap`     | a skipped tracked file still yields `PARTIAL` (the anti-regression for this change)             |
+| `TestSemgrepCoverageLargeTrackedFileIsStillAGap` | a tracked file over the size limit remains a gap                                                |
 
 ## 9. Acceptance criteria
 
