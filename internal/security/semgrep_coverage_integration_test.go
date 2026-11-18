@@ -105,6 +105,53 @@ func TestRealSemgrepCoverageContract(t *testing.T) {
 			t.Errorf("provenance exclusions = %v, want the configured pattern", exec.Provenance.Exclusions)
 		}
 	})
+
+	// The Git-derived scope is the end-to-end case for a long-lived checkout: with
+	// `.semgrepignore` including `.gitignore`, ignored build or runtime scratch no
+	// longer stops a checkout from reaching COMPLETE.
+	t.Run("git-ignored content is declared scope", func(t *testing.T) {
+		root := gitWorkspace(t)
+		writeCoverageFixture(t, root, "main.go", "package probe\n\nfunc Clean() {}\n")
+		writeCoverageFixture(t, root, ".gitignore", "ignored/\n")
+		writeCoverageFixture(t, root, ".semgrepignore", ":include .gitignore\n")
+		writeCoverageFixture(t, root, filepath.Join("ignored", "a.go"), "package probe\n\nfunc Ignored() {}\n")
+		gitRun(t, root, "add", ".gitignore", ".semgrepignore", "main.go")
+		gitRun(t, root, "commit", "-q", "-m", "init")
+
+		exec := run(t, root, nil)
+		if exec.Coverage != CoverageComplete {
+			t.Fatalf("coverage = %s, want COMPLETE: ignored content is out of scope: %v", exec.Coverage, exec.Diagnostics)
+		}
+		if !strings.Contains(diagnostics(exec), "git-ignored paths are declared out of scope") {
+			t.Errorf("diagnostics = %v, want the derived-scope statement", exec.Diagnostics)
+		}
+	})
+
+	// The derived scope must not excuse a skip of in-scope content: the oversized
+	// file here is untracked and not ignored, so it stays in scope.
+	t.Run("git-ignored content does not excuse an in-scope skip", func(t *testing.T) {
+		root := gitWorkspace(t)
+		writeCoverageFixture(t, root, "main.go", "package probe\n\nfunc Clean() {}\n")
+		writeCoverageFixture(t, root, ".gitignore", "ignored/\n")
+		writeCoverageFixture(t, root, ".semgrepignore", ":include .gitignore\n")
+		writeCoverageFixture(t, root, filepath.Join("ignored", "a.go"), "package probe\n\nfunc Ignored() {}\n")
+		var builder strings.Builder
+		builder.WriteString("package probe\n")
+		for builder.Len() < 1400*1024 {
+			builder.WriteString("// padding line for the scanner size limit\n")
+		}
+		writeCoverageFixture(t, root, "big.go", builder.String())
+		gitRun(t, root, "add", ".gitignore", ".semgrepignore", "main.go")
+		gitRun(t, root, "commit", "-q", "-m", "init")
+
+		exec := run(t, root, nil)
+		if exec.Coverage != CoveragePartial {
+			t.Fatalf("coverage = %s, want PARTIAL for an in-scope size skip: %v", exec.Coverage, exec.Diagnostics)
+		}
+		if !strings.Contains(diagnostics(exec), "Files larger than") {
+			t.Errorf("diagnostics = %v, want the size-limit skip class", exec.Diagnostics)
+		}
+	})
 }
 
 func writeCoverageFixture(t *testing.T, root, name, content string) {
