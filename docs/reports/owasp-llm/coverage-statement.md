@@ -527,14 +527,15 @@ skip=3 sandbox_skip=0`, so Linux containment is `VERIFIED`. See
    The formerly open gate — on the long-lived primary checkout, git-ignored
    artifacts made Semgrep report `PARTIAL` coverage, so the verdict was
    `INDETERMINATE` and the required `sast` gate could not pass there — is closed.
-   Option A1 is implemented (PR #524): the Semgrep adapter derives the ignored
-   set from Git and declares it as exclusions, so those skips are scope rather
-   than gaps, while a skip of tracked or untracked non-ignored content still
-   yields `PARTIAL` and an unreadable checkout fails closed. A real Semgrep
-   1.183.0 probe of the primary checkout reported `COMPLETE` with 51 derived
-   exclusions and no in-scope skip. The residual is that git-ignored content is
-   not scanned by `sast`, the same bounded limit `secrets` already had. Decision
-   record: [PROPOSAL-SEMGREP-IGNORED-COVERAGE.md](../../plans/PROPOSAL-SEMGREP-IGNORED-COVERAGE.md).
+   The operator authorized Option A1 on 2026-11-17, and it is implemented and
+   verified in PR #524: the Semgrep adapter derives the ignored set from Git and
+   declares it as exclusions, so those skips are scope rather than gaps, while a
+   skip of tracked or untracked non-ignored content still yields `PARTIAL` and an
+   unreadable checkout fails closed. A real Semgrep 1.183.0 probe of the primary
+   checkout reported `COMPLETE` with 51 derived exclusions and no in-scope skip.
+   The residual is that git-ignored content is not scanned by `sast`, the same
+   bounded limit `secrets` already had. Decision record:
+   [PROPOSAL-SEMGREP-IGNORED-COVERAGE.md](../../plans/PROPOSAL-SEMGREP-IGNORED-COVERAGE.md).
 
 ## Code follow-ups worth doing
 
