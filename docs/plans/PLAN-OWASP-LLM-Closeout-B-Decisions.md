@@ -1,6 +1,6 @@
 # Plan B — OWASP LLM gap closeout: work gated on operator decisions
 
-Status: PARTLY EXECUTED as of 2026-11-17. OWASPB-001 and OWASPB-002 are implemented, OWASPB-003 is implemented, and OWASPB-004 is decided as per-operator opt-in and OWASPB-005 is open. Each stage's status is below.
+Status: PARTLY EXECUTED as of 2026-11-17. OWASPB-001 and OWASPB-002 are implemented, OWASPB-003 is implemented, and OWASPB-004 is decided as per-operator opt-in and OWASPB-005 is decided. Each stage's status is below.
 Order: 2 of 2. Independent of [Plan A](PLAN-OWASP-LLM-Closeout-A-Unblocked.md).
 Suggested branch: one branch per stage (`security/mandatory-isolation`, `security/clean-filter-fingerprint`, `security/scanner-required-mode`, `security/llm02-defaults`, `docs/owasp-residual-acceptance`).
 Dependency: each stage starts only after the operator records the decision named in it.
@@ -32,9 +32,9 @@ Source: [gap-register-20261109.md](../reports/owasp-llm/gap-register-20261109.md
 | OWASPB-002 clean-filter policy | Implemented 2026-11-16 (option C) | [git-output-integrity.md](../reports/owasp-llm/git-output-integrity.md) |
 | OWASPB-003 scanner required mode | Implemented via W8 stages 1 and 2 (2026-11-17): `mode: required`, `required_categories: [sast, secrets, dependencies]` | `.agent-sdlc/config.yaml`; the `dependencies` gate needs an offline OSV database under 90 days old in each environment |
 | OWASPB-004 LLM02/LLM10 opt-in controls | Decided 2026-11-18: both stay per-operator, nothing is checked in. C1 needs an operator-owned `0600` inventory file outside the repo and fails closed without it, so a checked-in `redaction.enabled: true` would break CI and other checkouts. The token budget is the environment variable `SOP_AGENT_MAX_TOTAL_TOKENS` only (no config key), and no CI workflow runs the agent against a model. The cap value is the operator's choice and is not recorded here | [llm02-disclosure.md](../reports/owasp-llm/llm02-disclosure.md) (C1 setup), [llm06-consumption.md](../reports/owasp-llm/llm06-consumption.md) |
-| OWASPB-005 residual dispositions | Partly done. LLM06 and LLM02 dispositions are recorded. Open: the context-free unknown-format value, provider retention, model-output artifacts, notification prose, retrieval/handoff prose, prompt secrecy, factual correctness, and producer-side `chunk_hash` | gap-register "Decisions and evidence still required" |
+| OWASPB-005 residual dispositions | Decided. LLM02 dispositions R1–R8 were recorded 2026-11-12 and R6 is implemented (`04983bc3`, `e677f73d`). The LLM04, LLM05, LLM07 and LLM09 dispositions were recorded 2026-11-18. Both sets are chat-recorded in the decision packet, not in the approval repository. Still to do: file the producer-side `chunk_hash` issue | [llm02-decision-packet.md](../reports/owasp-llm/llm02-decision-packet.md) §C.4 and §C.5 |
 
-Stages still blocked on an operator decision: OWASPB-005 (accept, mitigate, or transfer per residual). OWASPB-004 is decided as per-operator opt-in (above); the repository itself carries neither control.
+No stage is blocked on an operator decision. OWASPB-004 is decided as a per-operator opt-in (the repository carries neither control), and OWASPB-005 is decided.
 
 ## OWASPB-001 — Mandatory isolation for model-reachable execution (M1 + G3 + G4)
 

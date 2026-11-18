@@ -559,9 +559,23 @@ dispositions below are not recorded in the approval repository.
 | R3  | **DONE** (see D.5).                                                                                                                   |
 | R4  | **ACCEPTED as a known limit.** macOS parent-environment visibility through `kern.procargs2` is documented. The sandbox is not weakened. |
 | R5  | **ACCEPTED (residual).** An unknown-format value echoed into a reply file is persisted; shaped secrets are redacted (PR #450).       |
-| R6  | **MITIGATE.** Extend notification descriptive redaction to `redact.ModelInput`. This is code work and is tracked as its own follow-up; it is not done by this packet. |
+| R6  | **MITIGATE.** Extend notification descriptive redaction to `redact.ModelInput`. This is code work and is tracked as its own follow-up; it is not done by this packet. **Implemented since:** `redactDescriptive` runs `redact.Scrub` (known env values, credential shapes, and the C1 policy when enabled) over `Reason`, `NextAction`, `Outcome`, and the resolution command; commits `04983bc3` and `e677f73d`. |
 | R7  | **ACCEPTED (boundary).** Retrieval and handoff stay disabled by default. Live retrieval remains `NOT_RUN`.                           |
 | R8  | **TRANSFERRED** to the provider/compliance owner. No SOP code change.                                                                 |
+
+### C.5 Remaining Plan B dispositions (chat, 2026-11-18)
+
+The operator approved the proposed disposition for each remaining residual in
+chat on 2026-11-18. Like C.4, these are an audit trail only: no decision-memory
+entry, configuration change, or code change is made here.
+
+| Residual                           | Operator disposition                                                                                                                                                              |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| LLM04 producer-side `chunk_hash`   | **ACCEPTED (bounded)** until the producer emits it. Evidence without `chunk_hash` stays labelled `chunk=unverified` (PR #488). The follow-up issue is not yet filed.            |
+| LLM04 intact but hostile content   | **ACCEPTED as a known limit.** A digest proves the bytes are unchanged, not that they are benign.                                                                                |
+| LLM05 third-party rendering        | **TRANSFERRED** to the owner of the renderer. SOP controls only its own sinks.                                                                                                    |
+| LLM07 prompt secrecy               | **ACCEPTED.** SOP does not rely on prompt secrecy for security and does not claim it.                                                                                            |
+| LLM09 factual correctness          | **ACCEPTED, by design.** SOP does not check that model prose is factually correct.                                                                                                |
 
 ## D. Single-sitting decision list
 
