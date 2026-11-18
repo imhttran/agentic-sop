@@ -527,9 +527,10 @@ These cannot be closed by code in this repository:
    The open gate: on the long-lived primary checkout, git-ignored artifacts make
    Semgrep report `PARTIAL` coverage, so the verdict is `INDETERMINATE` and the
    required `sast` gate cannot pass there. A clean checkout at the same revision
-   passes. The operator decision is pending in
+   passes. The operator authorized Option A1 on 2026-11-17; implementation and
+   verification are tracked in PR #524, using
    [PROPOSAL-SEMGREP-IGNORED-COVERAGE.md](../../plans/PROPOSAL-SEMGREP-IGNORED-COVERAGE.md)
-   (recommended Option A1).
+   as the decision source.
 
 ## Code follow-ups worth doing
 
