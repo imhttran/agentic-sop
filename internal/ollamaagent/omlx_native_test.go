@@ -336,3 +336,67 @@ func TestNativeToolSchemasCoverHarness(t *testing.T) {
 		}
 	}
 }
+
+func TestOMLXNativeToolsDenialReturnsToolResult(t *testing.T) {
+	dir := t.TempDir()
+	f, srv := newNativeScriptedOMLX(t,
+		nativeToolResponse("call-denied", toolharness.ToolGitStatus, map[string]any{}),
+		nativeFinalResponse("needs_human", "denied", false),
+	)
+	cfg := omLXTestConfig(srv.URL)
+	cfg.NativeTools = true
+	h := NewWithClient(cfg, dir, newOpenAIChatClient(cfg))
+	ev := &mutationEvidence{}
+	req := implementRequest()
+	req.Deliverables = []string{"marker-output.txt"}
+	req.DiscoveryIterations = 1
+
+	content, err := h.ExecuteWithEvidence(context.Background(), req, ev)
+	if err != nil {
+		t.Fatalf("ExecuteWithEvidence failed: %v", err)
+	}
+	if !strings.Contains(content, `"status":"needs_human"`) {
+		t.Fatalf("content = %q, want the final needs_human outcome", content)
+	}
+
+	f.mu.Lock()
+	requests := append([]openAIChatRequest(nil), f.requests...)
+	f.mu.Unlock()
+	if len(requests) < 2 {
+		t.Fatalf("requests = %d, want at least 2", len(requests))
+	}
+	if got := toolMessageContent(requests[1], "call-denied"); !strings.Contains(got, "required deliverable is missing") {
+		t.Errorf("denial tool result = %q, want the missing-deliverable denial with the original tool_call_id", got)
+	}
+	denied := false
+	for _, rec := range h.AuditRecords() {
+		if rec.Tool == toolharness.ToolGitStatus && rec.Action == toolharness.ActionDeny {
+			denied = true
+		}
+	}
+	if !denied {
+		t.Errorf("audit did not record the denied native call: %+v", h.AuditRecords())
+	}
+	if paths := ev.mutationPaths(); len(paths) != 0 {
+		t.Errorf("denied native call recorded mutations: %v", paths)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "marker-output.txt")); !os.IsNotExist(statErr) {
+		t.Errorf("denied native call created marker-output.txt")
+	}
+}
+
+func TestNativeRootAwareSchemas(t *testing.T) {
+	for _, name := range []string{"delete_file", "restore_file", "rewrite_file"} {
+		props, ok := nativeToolSchemas[name]["properties"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s has no properties", name)
+		}
+		root, ok := props["root"].(map[string]any)
+		if !ok || root["type"] != "string" {
+			t.Errorf("%s root schema = %v, want an optional string", name, root)
+		}
+		if nativeToolSchemas[name]["additionalProperties"] != false {
+			t.Errorf("%s must keep additionalProperties=false", name)
+		}
+	}
+}

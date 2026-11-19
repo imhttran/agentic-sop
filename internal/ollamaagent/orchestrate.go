@@ -507,17 +507,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 				false,
 			)
 
-			messages = append(
-				messages,
-				chatMessage{
-					Role:    "assistant",
-					Content: assistantEcho(name, args, raw),
-				},
-				chatMessage{
-					Role:    "user",
-					Content: implementFinalizeCorrection,
-				},
-			)
+			messages = h.appendToolOutcome(messages, raw, name, args, nativeID, implementFinalizeCorrection)
 
 			continue
 		}
@@ -540,10 +530,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 				}
 				return "", h.noProgressError(req, iteration, lastTool, lastReq)
 			}
-			messages = append(messages,
-				chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
-				chatMessage{Role: "user", Content: toolResultMessageWithPolicy(name, "", errors.New(detail), h.cfg.Redaction) + "\n\n" + implementDeliverableInstruction(deliverables)},
-			)
+			messages = h.appendToolOutcome(messages, raw, name, args, nativeID, toolResultMessageWithPolicy(name, "", errors.New(detail), h.cfg.Redaction)+"\n\n"+implementDeliverableInstruction(deliverables))
 			continue
 		}
 
@@ -563,10 +550,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 				}
 				return "", h.noProgressError(req, iteration, lastTool, lastReq)
 			}
-			messages = append(messages,
-				chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
-				chatMessage{Role: "user", Content: toolResultMessageWithPolicy(name, "", errors.New(detail), h.cfg.Redaction) + recoverySuffix(recovery)},
-			)
+			messages = h.appendToolOutcome(messages, raw, name, args, nativeID, toolResultMessageWithPolicy(name, "", errors.New(detail), h.cfg.Redaction)+recoverySuffix(recovery))
 			continue
 		}
 
@@ -591,10 +575,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 				}
 				return "", h.noProgressError(req, iteration, lastTool, lastReq)
 			}
-			messages = append(messages,
-				chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
-				chatMessage{Role: "user", Content: implementConvergenceCorrection},
-			)
+			messages = h.appendToolOutcome(messages, raw, name, args, nativeID, implementConvergenceCorrection)
 			continue
 		}
 
@@ -759,17 +740,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		for _, a := range advice {
 			content += "\n\n" + a
 		}
-		if h.cfg.NativeTools && nativeID != "" {
-			messages = append(messages,
-				chatMessage{Role: "assistant", Content: raw, NativeToolCalls: []toolCall{{ID: nativeID, Name: name, Args: args}}},
-				chatMessage{Role: "tool", ToolCallID: nativeID, Content: content},
-			)
-		} else {
-			messages = append(messages,
-				chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
-				chatMessage{Role: "user", Content: content},
-			)
-		}
+		messages = h.appendToolOutcome(messages, raw, name, args, nativeID, content)
 	}
 	if !st.mutationObserved {
 		// Normally the discovery window plus stale bound stops an unmutated run

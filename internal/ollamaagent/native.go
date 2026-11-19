@@ -17,6 +17,23 @@ type nativeChatClient interface {
 	chatWithTools(ctx context.Context, messages []chatMessage, tools []nativeToolSpec) (string, []toolCall, error)
 }
 
+// appendToolOutcome appends one tool outcome using the native transcript when a
+// native tool_call_id is available, and the content protocol otherwise. Denial
+// paths use it too, so a denied native call still reaches the model as a tool
+// result with its original id.
+func (h *Harness) appendToolOutcome(messages []chatMessage, raw, name string, args map[string]any, nativeID, content string) []chatMessage {
+	if h.cfg.NativeTools && nativeID != "" {
+		return append(messages,
+			chatMessage{Role: "assistant", Content: raw, NativeToolCalls: []toolCall{{ID: nativeID, Name: name, Args: args}}},
+			chatMessage{Role: "tool", ToolCallID: nativeID, Content: content},
+		)
+	}
+	return append(messages,
+		chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
+		chatMessage{Role: "user", Content: content},
+	)
+}
+
 func nativeToolSpecs(policy CapabilityPolicy, phase implementPhase) []nativeToolSpec {
 	if phase == implFinalize {
 		return nil
@@ -78,14 +95,20 @@ var nativeToolSchemas = map[string]map[string]any{
 		"additionalProperties": false,
 	},
 	"delete_file": {
-		"type":                 "object",
-		"properties":           map[string]any{"path": map[string]any{"type": "string"}},
+		"type": "object",
+		"properties": map[string]any{
+			"path": map[string]any{"type": "string"},
+			"root": map[string]any{"type": "string"},
+		},
 		"required":             []string{"path"},
 		"additionalProperties": false,
 	},
 	"restore_file": {
-		"type":                 "object",
-		"properties":           map[string]any{"path": map[string]any{"type": "string"}},
+		"type": "object",
+		"properties": map[string]any{
+			"path": map[string]any{"type": "string"},
+			"root": map[string]any{"type": "string"},
+		},
 		"required":             []string{"path"},
 		"additionalProperties": false,
 	},
@@ -105,6 +128,7 @@ var nativeToolSchemas = map[string]map[string]any{
 			"path": map[string]any{"type": "string"},
 			"from": map[string]any{"type": "string"},
 			"to":   map[string]any{"type": "string"},
+			"root": map[string]any{"type": "string"},
 		},
 		"required":             []string{"path", "from", "to"},
 		"additionalProperties": false,
