@@ -68,17 +68,42 @@ func newOpenAIChatClient(cfg Config) chatClient {
 	}
 }
 
-// openAIChatMessage is one request message. The loop keeps the transcript in
-// plain role/content form, so no tool-call IDs or tool-role messages are needed.
+// openAIChatMessage is one request message. Native-tool mode carries the
+// assistant tool_calls and the matching tool_call_id result; the default path
+// remains plain role/content.
 type openAIChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role       string                  `json:"role"`
+	Content    string                  `json:"content"`
+	ToolCalls  []openAIToolCallRequest `json:"tool_calls,omitempty"`
+	ToolCallID string                  `json:"tool_call_id,omitempty"`
 }
 
 // openAIResponseFormat requests a single JSON object, matching the loop's
 // protocol and keeping a final outcome or tool call parseable.
 type openAIResponseFormat struct {
 	Type string `json:"type"`
+}
+
+type openAIFunctionSpec struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
+	Parameters  map[string]any `json:"parameters"`
+}
+
+type openAIToolSpec struct {
+	Type     string             `json:"type"`
+	Function openAIFunctionSpec `json:"function"`
+}
+
+type openAIFunctionCall struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+type openAIToolCallRequest struct {
+	ID       string             `json:"id"`
+	Type     string             `json:"type"`
+	Function openAIFunctionCall `json:"function"`
 }
 
 type openAIChatRequest struct {
@@ -88,9 +113,13 @@ type openAIChatRequest struct {
 	MaxTokens          int                   `json:"max_tokens,omitempty"`
 	ResponseFormat     *openAIResponseFormat `json:"response_format,omitempty"`
 	ChatTemplateKwargs map[string]any        `json:"chat_template_kwargs,omitempty"`
+	Tools              []openAIToolSpec      `json:"tools,omitempty"`
+	ToolChoice         string                `json:"tool_choice,omitempty"`
 }
 
 type openAIToolCall struct {
+	ID       string `json:"id"`
+	Type     string `json:"type"`
 	Function struct {
 		Name      string `json:"name"`
 		Arguments string `json:"arguments"`
@@ -120,9 +149,15 @@ type openAIChatResponse struct {
 // happens before a returned tool call is dispatched, so it cannot duplicate a
 // tool invocation.
 func (c *openAIChatClient) chat(ctx context.Context, messages []chatMessage) (string, []toolCall, error) {
+	return c.chatWithTools(ctx, messages, nil)
+}
+
+// chatWithTools is the native-tool variant: it declares only the supplied tools
+// and omits response_format. The bounded retry policy is identical.
+func (c *openAIChatClient) chatWithTools(ctx context.Context, messages []chatMessage, tools []nativeToolSpec) (string, []toolCall, error) {
 	var lastErr error
 	for attempt := 1; attempt <= maxProviderAttempts; attempt++ {
-		content, calls, err := c.chatOnce(ctx, messages)
+		content, calls, err := c.chatOnceWithTools(ctx, messages, tools)
 		if err == nil {
 			return content, calls, nil
 		}
@@ -140,15 +175,26 @@ func (c *openAIChatClient) chat(ctx context.Context, messages []chatMessage) (st
 // chatOnce performs exactly one POST /v1/chat/completions. It never retries
 // itself; chat owns the bounded retry policy.
 func (c *openAIChatClient) chatOnce(ctx context.Context, messages []chatMessage) (string, []toolCall, error) {
+	return c.chatOnceWithTools(ctx, messages, nil)
+}
+
+func (c *openAIChatClient) chatOnceWithTools(ctx context.Context, messages []chatMessage, tools []nativeToolSpec) (string, []toolCall, error) {
 	if err := perf.CheckTokenBudget(ctx); err != nil {
 		return "", nil, err
 	}
 	body := openAIChatRequest{
-		Model:          c.model,
-		Messages:       openAIMessages(messages),
-		Stream:         false,
-		MaxTokens:      c.maxOutputTokens,
-		ResponseFormat: &openAIResponseFormat{Type: "json_object"},
+		Model:     c.model,
+		Messages:  openAIMessages(messages),
+		Stream:    false,
+		MaxTokens: c.maxOutputTokens,
+	}
+	if len(tools) > 0 {
+		body.Tools = toOpenAITools(tools)
+		body.ToolChoice = "auto"
+		// Native tool turns omit response_format; the prompt asks for the final
+		// SOP outcome JSON once the model stops calling tools.
+	} else {
+		body.ResponseFormat = &openAIResponseFormat{Type: "json_object"}
 	}
 	if !c.enableThinking {
 		// Qwen-style oMLX models otherwise spend the entire bounded output
@@ -181,9 +227,9 @@ func (c *openAIChatClient) chatOnce(ctx context.Context, messages []chatMessage)
 
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, int64(c.maxBytes)))
 	if err != nil {
-		// A timeout can occur after the headers arrive while reading the body.
-		// Route it through the same classifier as connection-level failures so it
-		// remains a typed, retryable provider timeout.
+		// A timeout can occur after the response headers arrive while reading
+		// the body. Route it through the same classifier as connection-level
+		// failures so it remains a typed, retryable provider timeout.
 		return "", nil, c.transportFailure(ctx, err)
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -260,7 +306,19 @@ func (c *openAIChatClient) retryBackoff(ctx context.Context, attempt int) error 
 func openAIMessages(messages []chatMessage) []openAIChatMessage {
 	out := make([]openAIChatMessage, 0, len(messages))
 	for _, m := range messages {
-		out = append(out, openAIChatMessage{Role: m.Role, Content: m.Content})
+		om := openAIChatMessage{Role: m.Role, Content: m.Content, ToolCallID: m.ToolCallID}
+		for _, tc := range m.NativeToolCalls {
+			args, err := json.Marshal(tc.Args)
+			if err != nil {
+				args = []byte("{}")
+			}
+			om.ToolCalls = append(om.ToolCalls, openAIToolCallRequest{
+				ID:       tc.ID,
+				Type:     "function",
+				Function: openAIFunctionCall{Name: tc.Name, Arguments: string(args)},
+			})
+		}
+		out = append(out, om)
 	}
 	return out
 }
@@ -276,7 +334,23 @@ func normalizeOpenAIToolCalls(raw []openAIToolCall) []toolCall {
 		if name == "" {
 			continue
 		}
-		out = append(out, toolCall{Name: name, Args: toolArguments(json.RawMessage(rc.Function.Arguments))})
+		out = append(out, toolCall{ID: strings.TrimSpace(rc.ID), Name: name, Args: toolArguments(json.RawMessage(rc.Function.Arguments))})
+	}
+	return out
+}
+
+// toOpenAITools projects the provider-neutral specs into the OpenAI request shape.
+func toOpenAITools(specs []nativeToolSpec) []openAIToolSpec {
+	out := make([]openAIToolSpec, 0, len(specs))
+	for _, spec := range specs {
+		out = append(out, openAIToolSpec{
+			Type: "function",
+			Function: openAIFunctionSpec{
+				Name:        spec.Name,
+				Description: spec.Description,
+				Parameters:  spec.Parameters,
+			},
+		})
 	}
 	return out
 }

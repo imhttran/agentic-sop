@@ -115,6 +115,11 @@ func NativeOMLXAgentFromEnvWithPolicy(configuredModel string, cargoAgentToolEnab
 		return nil, err
 	}
 	cfg.EnableThinking = toggle
+	nativeTools, err := agent.MLXNativeToolsEnabled()
+	if err != nil {
+		return nil, err
+	}
+	cfg.NativeTools = nativeTools
 	// Use the shared resolver so the governed path and the text-only MLX path
 	// apply the same documented environment > configuration precedence.
 	cfg.Model = agent.ProviderModelFromEnv(agent.ProviderMLX, configuredModel)

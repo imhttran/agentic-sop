@@ -26,6 +26,13 @@ const (
 	// new execution path.
 	EnvMLXToolLoop = "SOP_MLX_TOOL_LOOP"
 
+	// EnvMLXNativeTools opts the governed oMLX loop into the provider's native tool
+	// protocol. It is off by default, so the existing JSON-in-content tool protocol
+	// remains the default behavior. When enabled, the oMLX client declares only the
+	// tools the current capability/phase permits and returns tool results with the
+	// original tool_call_id.
+	EnvMLXNativeTools = "SOP_MLX_NATIVE_TOOLS"
+
 	// EnvMLXEnableThinking opts the oMLX tool loop back into a model's reasoning
 	// channel. Reasoning is disabled by default because it consumes the bounded
 	// output budget and can leave a turn with no content or tool call; an operator
@@ -42,6 +49,10 @@ func MLXToolLoopEnabled() (bool, error) { return boolEnv(EnvMLXToolLoop) }
 // MLXThinkingEnabled reports whether the oMLX tool loop may use a model's
 // reasoning channel. Unset keeps it disabled; a malformed value is an error.
 func MLXThinkingEnabled() (bool, error) { return boolEnv(EnvMLXEnableThinking) }
+
+// MLXNativeToolsEnabled reports whether the provider-native tool protocol is
+// enabled. Unset keeps the existing JSON-in-content protocol.
+func MLXNativeToolsEnabled() (bool, error) { return boolEnv(EnvMLXNativeTools) }
 
 // boolEnv parses an optional boolean environment setting with one consistent
 // rule: unset is false, and anything else must be a valid boolean.
