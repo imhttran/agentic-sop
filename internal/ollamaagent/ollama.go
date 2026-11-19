@@ -80,7 +80,7 @@ type ollamaChatResponse struct {
 // errEmptyResponse is returned when the model produces no message content. It is
 // retry-able: a model can occasionally emit an empty turn, and re-asking usually
 // produces the answer. Reasoning is disabled (see chat) so this is rare.
-var errEmptyResponse = errors.New("ollama returned an empty response")
+var errEmptyResponse = errors.New("provider returned an empty response")
 
 // maxProviderAttempts bounds the provider-call retry budget for one logical chat
 // turn: the initial attempt plus at most two retries. It is small and fixed so a
@@ -95,41 +95,72 @@ const maxProviderAttempts = 3
 // change or eliminate the wait.
 const defaultProviderRetryDelay = 200 * time.Millisecond
 
-// ollamaHTTPError is a non-2xx response from Ollama. It carries the status code so
-// the retry boundary decides from the type rather than by parsing the message,
-// which is preserved unchanged for compatibility with failure classification.
+// ollamaHTTPError is a non-2xx response from a chat provider. It carries the
+// status code so the retry boundary decides from the type rather than by parsing
+// the message, which is preserved unchanged for compatibility with failure
+// classification. provider is empty for the historical Ollama path and "mlx"
+// for the oMLX client, so the same retry policy reports the correct identity.
 type ollamaHTTPError struct {
+	provider   string
 	statusCode int
 	baseURL    string
 	body       string
 }
 
 func (e *ollamaHTTPError) Error() string {
-	return fmt.Sprintf("ollama returned HTTP %d at %s: %s", e.statusCode, e.baseURL, truncate(strings.TrimSpace(e.body), 512))
+	return fmt.Sprintf("%s returned HTTP %d at %s: %s", providerLabel(e.provider), e.statusCode, e.baseURL, truncate(strings.TrimSpace(e.body), 512))
 }
 
 // ollamaTimeoutError is a provider call that exceeded the client timeout. It is a
-// transient condition and is retried at the provider boundary.
-type ollamaTimeoutError struct{ timeout time.Duration }
-
-func (e *ollamaTimeoutError) Error() string {
-	return fmt.Sprintf("ollama timed out after %s; raise %s to wait longer (for example %s=600s)", e.timeout, agent.EnvOllamaTimeout, agent.EnvOllamaTimeout)
+// transient condition and is retried at the provider boundary. env names the
+// timeout setting to raise, so an oMLX failure points at SOP_MLX_TIMEOUT rather
+// than the Ollama setting.
+type ollamaTimeoutError struct {
+	provider string
+	timeout  time.Duration
+	env      string
 }
 
-// ollamaTransportError is a failure to reach Ollama (connection refused, reset,
-// unavailable). It is transient and retryable, and it wraps the underlying error
-// so a caller can still inspect it — in particular a context.Canceled that must
-// never be retried.
+func (e *ollamaTimeoutError) Error() string {
+	env := e.env
+	if env == "" {
+		env = agent.EnvOllamaTimeout
+	}
+	return fmt.Sprintf("%s timed out after %s; raise %s to wait longer (for example %s=600s)", providerLabel(e.provider), e.timeout, env, env)
+}
+
+// ollamaTransportError is a failure to reach the provider (connection refused,
+// reset, unavailable). It is transient and retryable, and it wraps the
+// underlying error so a caller can still inspect it — in particular a
+// context.Canceled that must never be retried.
 type ollamaTransportError struct {
-	baseURL string
-	err     error
+	provider string
+	baseURL  string
+	err      error
 }
 
 func (e *ollamaTransportError) Error() string {
-	return fmt.Sprintf("ollama unavailable at %s: %v", e.baseURL, e.err)
+	return fmt.Sprintf("%s unavailable at %s: %v", providerLabel(e.provider), e.baseURL, e.err)
 }
 
 func (e *ollamaTransportError) Unwrap() error { return e.err }
+
+// providerLabel renders the execution identity for diagnostics. The empty value
+// is the historical Ollama path, so existing messages are unchanged.
+func providerLabel(provider string) string {
+	if p := strings.TrimSpace(provider); p != "" {
+		return p
+	}
+	return "ollama"
+}
+
+// chatClient is the single-turn chat entry point the bounded tool loop drives.
+// The Ollama client and the oMLX OpenAI-compatible client both satisfy it, so the
+// loop, tool executor, permission checks, edit tracking, and iteration limits are
+// shared rather than reimplemented per provider.
+type chatClient interface {
+	chat(ctx context.Context, messages []chatMessage) (string, []toolCall, error)
+}
 
 // ollamaClient is a small client for Ollama's /api/chat endpoint. It is
 // deliberately independent of SOP's Ollama provider: it needs multi-turn

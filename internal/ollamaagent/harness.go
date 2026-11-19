@@ -241,7 +241,7 @@ type outcomeWire struct {
 // Complete/Execute call, so one invocation cannot contaminate another.
 type Harness struct {
 	cfg    Config
-	client *ollamaClient
+	client chatClient
 	tools  *toolharness.Harness
 	audit  *toolharness.AuditLog
 	trace  *TraceLog
@@ -256,6 +256,15 @@ type Harness struct {
 // the state database is refused for every tool, destructive Git is denied, and
 // every tool call is audited.
 func New(cfg Config, root string) *Harness {
+	return NewWithClient(cfg, root, newOllamaClient(cfg))
+}
+
+// NewWithClient returns a Harness using the supplied chat transport. It is the
+// single construction point for the bounded tool loop, so the Ollama client and
+// the oMLX OpenAI-compatible client share the same tool executor, permission
+// checks, edit tracking, and iteration limits. The transport only supplies model
+// turns; every repository action still goes through toolharness.
+func NewWithClient(cfg Config, root string, client chatClient) *Harness {
 	audit := toolharness.NewAuditLog(defaultMaxAuditRecords)
 	var sink toolharness.Auditor = audit
 	if path := strings.TrimSpace(lookupEnv(envToolAuditLog)); path != "" {
@@ -273,7 +282,7 @@ func New(cfg Config, root string) *Harness {
 	tools := toolharness.New(root, toolCfg, sink)
 	return &Harness{
 		cfg:       cfg,
-		client:    newOllamaClient(cfg),
+		client:    client,
 		tools:     tools,
 		audit:     audit,
 		trace:     newTraceLog(defaultMaxTraceRecords),
@@ -283,11 +292,34 @@ func New(cfg Config, root string) *Harness {
 
 // ShowRuntimeVisibility writes the execution stack (harness, provider, model, source) to w.
 func (h *Harness) ShowRuntimeVisibility(w io.Writer) {
-	source := configSource(agent.EnvOllamaModel)
+	source := configSource(h.cfg.ModelEnv)
 	fmt.Fprintf(w, "Harness: tool\n")
-	fmt.Fprintf(w, "Provider: ollama\n")
+	fmt.Fprintf(w, "Provider: %s\n", h.providerName())
 	fmt.Fprintf(w, "Model: %s\n", h.cfg.Model)
 	fmt.Fprintf(w, "Provider source: %s\n", source)
+}
+
+// providerName is the execution identity used in diagnostics. Empty is the
+// historical Ollama path.
+func (h *Harness) providerName() string {
+	if p := strings.TrimSpace(h.cfg.Provider); p != "" {
+		return p
+	}
+	return "ollama"
+}
+
+// agentName is the human-readable failure prefix. It keeps the historical
+// "Ollama agent" wording for the default path and names oMLX correctly, so a
+// failure is never attributed to the wrong runtime.
+func (h *Harness) agentName() string {
+	switch h.providerName() {
+	case "ollama":
+		return "Ollama agent"
+	case "mlx":
+		return "oMLX agent"
+	default:
+		return h.providerName() + " agent"
+	}
 }
 
 // AuditRecords returns the in-memory audit trail for this run, for review and
@@ -483,15 +515,15 @@ func (h *Harness) recordTurn(req agent.Request, iteration int, action, request s
 // limitError reports that a capability exhausted its iteration budget without
 // returning a final response.
 func (h *Harness) limitError(req agent.Request, policy CapabilityPolicy, lastTool, lastRequest string) error {
-	return fmt.Errorf("the Ollama agent %s did not complete after %d iterations (termination=%s, model=%s%s)",
-		req.Capability, policy.MaxIterations, terminationIteration, h.cfg.Model, actionSuffix(lastTool, lastRequest))
+	return fmt.Errorf("the %s %s did not complete after %d iterations (termination=%s, model=%s%s)",
+		h.agentName(), req.Capability, policy.MaxIterations, terminationIteration, h.cfg.Model, actionSuffix(lastTool, lastRequest))
 }
 
 // noProgressError reports that a capability kept repeating a non-progressing
 // action after it was told to conclude.
 func (h *Harness) noProgressError(req agent.Request, iteration int, action, request string) error {
-	return fmt.Errorf("the Ollama agent %s stopped after %d iterations; the model repeated a non-progressing action (termination=%s, model=%s, repeated_action=%q)",
-		req.Capability, iteration, terminationNoProgress, h.cfg.Model, strings.TrimSpace(action+" "+request))
+	return fmt.Errorf("the %s %s stopped after %d iterations; the model repeated a non-progressing action (termination=%s, model=%s, repeated_action=%q)",
+		h.agentName(), req.Capability, iteration, terminationNoProgress, h.cfg.Model, strings.TrimSpace(action+" "+request))
 }
 
 // chat asks the model for the next turn. Transient provider failures (an empty

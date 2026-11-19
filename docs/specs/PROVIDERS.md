@@ -127,6 +127,12 @@ checked wrapper rejects such a request rather than forwarding it. Becoming a cod
 agent still requires the harness tools of
 [`AGENT-PROVIDER.md`](AGENT-PROVIDER.md) §6.
 
+The MLX/oMLX provider is text-only by default. `SOP_MLX_TOOL_LOOP=true` selects the
+governed in-process tool loop instead; that path reuses the harness tools of
+[`AGENT-PROVIDER.md`](AGENT-PROVIDER.md) §6 (the same controlled executor, permission
+checks, edit tracking, and iteration limits as Ollama) and therefore MAY declare
+`IMPLEMENT`/`FIX`. The generic `openai_compatible` transport remains text-only.
+
 ## 3. Registry
 
 **Required.** Providers MUST be held in an explicit `provider.Registry` that is

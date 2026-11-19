@@ -291,8 +291,10 @@ workflow:
 | --------- | ---------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------- | --------------- |
 | `tool`    | `ollama`   | `agent.harness`, `agent.provider`, `agent.model` | `SOP_OLLAMA_BASE_URL`, `SOP_OLLAMA_MODEL`, `SOP_OLLAMA_TIMEOUT`                               | Yes             |
 | `tool`    | `llamacpp` | `agent.harness`, `agent.provider`, `agent.model` | `SOP_LLAMACPP_BASE_URL`, `SOP_LLAMACPP_MODEL`, `SOP_LLAMACPP_TIMEOUT`, `SOP_LLAMACPP_API_KEY` | Yes             |
-| `tool`    | `mlx`      | `agent.harness`, `agent.provider`, `agent.model` | `SOP_MLX_BASE_URL`, `SOP_MLX_MODEL`, `SOP_MLX_TIMEOUT`, `SOP_MLX_API_KEY`                     | Yes             |
+| `tool`    | `mlx`      | `agent.harness`, `agent.provider`, `agent.model` | `SOP_MLX_BASE_URL`, `SOP_MLX_MODEL`, `SOP_MLX_TIMEOUT`, `SOP_MLX_API_KEY`, `SOP_MLX_TOOL_LOOP`, `SOP_MLX_ENABLE_THINKING` | Yes             |
 | `command` | `command`  | `agent.harness` (optional; defaults to command)  | `SOP_AGENT_COMMAND` (required), `SOP_AGENT_PROVIDER` (optional)                               | No              |
+
+`SOP_MLX_TOOL_LOOP=true` opts the `mlx` provider into the governed in-process tool loop. The flag is off by default, so MLX/oMLX stays text-only; when enabled, the agent advertises `IMPLEMENT`/`FIX` and runs them through the same controlled tools, permission checks, edit tracking, and iteration limits as the native Ollama harness. `SOP_MLX_ENABLE_THINKING=true` re-enables a model's reasoning channel (off by default).
 
 `SOP_OLLAMA_TIMEOUT`, `SOP_LLAMACPP_TIMEOUT`, `SOP_MLX_TIMEOUT`, and
 `SOP_OPENAI_COMPATIBLE_TIMEOUT` are Go durations (e.g. `300s` / `10m`) that bound one

@@ -733,3 +733,20 @@ func TestClientsReportAbsentUsageAsUnknown(t *testing.T) {
 		t.Errorf("usage = %+v, want unreported calls rather than zero tokens", got)
 	}
 }
+
+// TestHarnessFromConfigMLXToolLoopGuard proves the agent-package factory does not
+// silently return the text-only MLX harness when the governed oMLX tool loop is
+// enabled: only the CLI composition root can build that path.
+func TestHarnessFromConfigMLXToolLoopGuard(t *testing.T) {
+	t.Setenv(EnvMLXToolLoop, "true")
+	_, err := HarnessFromConfig(HarnessTool, ProviderMLX, "m")
+	if err == nil || !strings.Contains(err.Error(), "composition root") {
+		t.Fatalf("err = %v, want a composition-root error", err)
+	}
+
+	t.Setenv(EnvMLXToolLoop, "maybe")
+	_, err = HarnessFromConfig(HarnessTool, ProviderMLX, "m")
+	if err == nil || !strings.Contains(err.Error(), EnvMLXToolLoop) {
+		t.Fatalf("err = %v, want a malformed %s error", err, EnvMLXToolLoop)
+	}
+}

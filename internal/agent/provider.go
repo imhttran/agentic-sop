@@ -80,6 +80,30 @@ func FromEnv() (Agent, error) {
 	return FromConfig("", "")
 }
 
+// ProviderModelFromEnv resolves a model for providerName with the documented
+// precedence: SOP_AGENT_MODEL, then the provider-specific environment variable,
+// then the configured model. An empty result means no layer supplied one.
+func ProviderModelFromEnv(providerName, configured string) string {
+	if unified := strings.TrimSpace(os.Getenv(EnvAgentModel)); unified != "" {
+		return unified
+	}
+	var model string
+	switch providerName {
+	case ProviderOllama:
+		model = strings.TrimSpace(os.Getenv(EnvOllamaModel))
+	case ProviderLlamaCpp:
+		model = strings.TrimSpace(os.Getenv(EnvLlamaCppModel))
+	case ProviderMLX:
+		model = strings.TrimSpace(os.Getenv(EnvMLXModel))
+	case ProviderOpenAICompatible:
+		model = strings.TrimSpace(os.Getenv(EnvOpenAICompatibleModel))
+	}
+	if model == "" {
+		model = strings.TrimSpace(configured)
+	}
+	return model
+}
+
 // FromConfig builds the Agent for a configured provider name and model, with
 // EnvAgentProvider and EnvAgentModel overriding the configured values when set.
 // Precedence for model: SOP_AGENT_MODEL > provider-specific env > configured model.
@@ -260,6 +284,18 @@ func HarnessFromConfig(harness, configuredProvider, model string) (Harness, erro
 			}
 			return HarnessFunc(agent.Generate), nil
 		case ProviderMLX:
+			// The governed oMLX tool loop is built by the CLI composition root,
+			// which can import internal/ollamaagent. This factory cannot, so it
+			// must not silently return the text-only harness when the operator
+			// enabled the loop: that would advertise a capability set the caller
+			// did not ask for and cannot execute here.
+			on, err := MLXToolLoopEnabled()
+			if err != nil {
+				return nil, err
+			}
+			if on {
+				return nil, errors.New("harness tool with provider mlx and SOP_MLX_TOOL_LOOP enabled runs in-process as the governed oMLX tool loop; build it through the SOP composition root, not through HarnessFromConfig")
+			}
 			baseURL := strings.TrimSpace(os.Getenv(EnvMLXBaseURL))
 			if baseURL == "" {
 				baseURL = defaultMLXBaseURL

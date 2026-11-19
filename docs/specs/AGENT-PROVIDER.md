@@ -27,6 +27,8 @@ SOP MUST keep three concepts independent: **Harness** — the layer executing ag
 
 Harness MUST be `tool` (a local tool-calling harness such as `sop-ollama-agent`) or `command` (a subprocess adapter running an external command that implements the agent interface). Provider MUST be `ollama` (local text-only), `llamacpp` (OpenAI-compatible), `mlx` (an Apple-Silicon MLX / oMLX runtime behind an OpenAI-compatible boundary), `openai_compatible` (a generic OpenAI-compatible endpoint — oMLX, vLLM, LM Studio, LocalAI, ...), or `command` (an external subprocess already a full agent). `llamacpp`, `mlx`, and `openai_compatible` share one OpenAI-compatible execution transport; see [PROVIDERS.md](PROVIDERS.md) §2a.
 
+By default the `mlx` provider is text-only: it declares `PLAN`, `DESIGN_TESTS`, `DIAGNOSE_FAILURE`, and `REVIEW`, and the composition root's existing checked wrapper (`agent.NewChecked`) rejects `IMPLEMENT`/`FIX`. An operator MAY enable the governed oMLX tool loop with `SOP_MLX_TOOL_LOOP=true`. On that path the `tool` harness drives the same bounded in-process loop, controlled tool executor, permission checks, edit tracking, and iteration limits as the native Ollama harness, so the agent declares the full capability set. `openai_compatible` remains text-only in both modes.
+
 ## 3. Model Requirement Rules
 
 For `ollama`/`llamacpp`/`mlx`/`openai_compatible` a model MUST be specified (config `agent.model` or the provider's env var); the run MUST fail clearly if neither provides one. The command provider MUST NOT require a model. The command harness MUST require `SOP_AGENT_COMMAND`; the run MUST fail if unset.
@@ -37,7 +39,7 @@ For `ollama`/`llamacpp`/`mlx`/`openai_compatible` a model MUST be specified (con
 | --------- | ---------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------- | ------ |
 | `tool`    | `ollama`   | `agent.harness`, `agent.provider`, `agent.model` | `SOP_OLLAMA_BASE_URL`, `SOP_OLLAMA_MODEL`, `SOP_OLLAMA_TIMEOUT`                               | Yes    |
 | `tool`    | `llamacpp` | `agent.harness`, `agent.provider`, `agent.model` | `SOP_LLAMACPP_BASE_URL`, `SOP_LLAMACPP_MODEL`, `SOP_LLAMACPP_TIMEOUT`, `SOP_LLAMACPP_API_KEY` | Yes    |
-| `tool`    | `mlx`      | `agent.harness`, `agent.provider`, `agent.model` | `SOP_MLX_BASE_URL`, `SOP_MLX_MODEL`, `SOP_MLX_TIMEOUT`, `SOP_MLX_API_KEY`                     | Yes    |
+| `tool`    | `mlx`      | `agent.harness`, `agent.provider`, `agent.model` | `SOP_MLX_BASE_URL`, `SOP_MLX_MODEL`, `SOP_MLX_TIMEOUT`, `SOP_MLX_API_KEY`, `SOP_MLX_TOOL_LOOP`, `SOP_MLX_ENABLE_THINKING` | Yes    |
 | `command` | `command`  | `agent.harness` (optional; defaults to command)  | `SOP_AGENT_COMMAND` (required), `SOP_AGENT_PROVIDER` (optional)                               | No     |
 
 ## 5. Configuration Precedence
@@ -47,6 +49,8 @@ Settings MUST resolve highest-first: (1) environment variables (`SOP_AGENT_PROVI
 ## 6. Turning a Text-Only Provider into a Coding Agent
 
 A text-only Ollama/llama.cpp endpoint alone is **not** a coding agent and cannot mutate a repository. The `tool` harness MUST add the tools, safety boundaries, and structured logic that make it one: file tools (`read_file`, `write_file`, `create_file`, `delete_file`, `restore_file`, `list_files`, `search_files`), git tools (`git_status`, `git_diff`), a bounded allow-listed `run_command`, tool-loop bounds, and structured outcomes. Layers MAY be composed (the `command` harness running a `tool` harness subprocess, which holds the provider settings). SOP MUST retain validation, review, retries, human gates, and workflow state; the harness MUST remain an implementation adapter only.
+
+The MLX/oMLX provider follows this rule only on the opt-in governed path. With `SOP_MLX_TOOL_LOOP=true`, the `tool` harness connects the OpenAI-compatible model output to the existing bounded tool loop, so `IMPLEMENT` and `FIX` reuse the same `toolharness` executor, permission checks, mutation observation, and iteration limits as Ollama. Without the flag, the MLX/oMLX path remains text-only and MUST NOT advertise a mutating capability.
 
 ## 7. Provider-Neutral Interface and Capability Detection
 
