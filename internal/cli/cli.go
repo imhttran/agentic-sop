@@ -189,6 +189,34 @@ func defaultDeps() deps {
 				}
 				return agent.NewChecked(a), nil
 			}
+			if h == agent.HarnessTool && p == agent.ProviderMLX {
+				// The governed oMLX path is opt-in. When enabled, the same bounded
+				// tool loop the native Ollama harness uses drives the MLX/oMLX
+				// OpenAI-compatible endpoint, so IMPLEMENT and FIX run through the
+				// existing controlled tools rather than the text-only transport.
+				// When disabled, the existing text-only MLX path below is unchanged.
+				on, err := agent.MLXToolLoopEnabled()
+				if err != nil {
+					return nil, err
+				}
+				if on {
+					dir, err := os.Getwd()
+					if err != nil {
+						return nil, err
+					}
+					policy, err := redactionPolicyFromProject(dir)
+					if err != nil {
+						return nil, err
+					}
+					a, err := ollamaagent.NativeOMLXAgentFromEnvWithPolicy(model, cargoAgentTool, policy)
+					if err != nil {
+						return nil, err
+					}
+					return agent.NewChecked(agent.NewRedacted(a, policy)), nil
+				}
+				// Flag off: fall through to the existing text-only MLX transport
+				// built by agent.FromConfig below, exactly as before this change.
+			}
 			if p == agent.ProviderOpenAICompatible {
 				// The generic OpenAI-compatible provider owns its endpoint with the
 				// documented precedence environment > configuration > default. The

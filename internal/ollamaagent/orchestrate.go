@@ -145,7 +145,8 @@ func (h *Harness) executeTwoPhase(ctx context.Context, req agent.Request, tp two
 
 			if synthCorrections > maxSynthesisCorrections {
 				return "", fmt.Errorf(
-					"the Ollama agent %s repeatedly requested tools during %s (model=%s, synthesis_corrections=%d, termination=synthesis_correction_limit)",
+					"the %s %s repeatedly requested tools during %s (model=%s, synthesis_corrections=%d, termination=synthesis_correction_limit)",
+					h.agentName(),
 					req.Capability,
 					strings.ToLower(tp.synthLabel),
 					h.cfg.Model,
@@ -225,8 +226,8 @@ func (h *Harness) recordSynthesisTransition(req agent.Request, tp twoPhase) {
 // tool-free synthesis turns without producing a document. It is deliberately
 // phase-specific rather than the generic iteration-limit message.
 func (h *Harness) synthesisLimitError(req agent.Request, tp twoPhase, discovered, synth int) error {
-	return fmt.Errorf("the Ollama agent %s failed during %s (model=%s, %s=%d, %s=%d, termination=%s)",
-		req.Capability, strings.ToLower(tp.synthLabel), h.cfg.Model,
+	return fmt.Errorf("the %s %s failed during %s (model=%s, %s=%d, %s=%d, termination=%s)",
+		h.agentName(), req.Capability, strings.ToLower(tp.synthLabel), h.cfg.Model,
 		strings.ToLower(tp.discoverLabel)+"_tool_calls", discovered,
 		strings.ToLower(tp.synthLabel)+"_turns", synth, terminationSynthesis)
 }
@@ -442,7 +443,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 					}
 					proof.closeCorrectionPhase()
 					h.recordImplementEvent(req, "ALREADY_SATISFIED rejected", rej.String())
-					message := fmt.Sprintf("the Ollama agent %s ALREADY_SATISFIED claim lacked verified acceptance evidence [%s] (model=%s, repository_mutations=%d, iteration=%d, termination=no_changes); a retry may succeed", req.Capability, rej.Code, h.cfg.Model, st.repositoryMutations, iteration)
+					message := fmt.Sprintf("the %s %s ALREADY_SATISFIED claim lacked verified acceptance evidence [%s] (model=%s, repository_mutations=%d, iteration=%d, termination=no_changes); a retry may succeed", h.agentName(), req.Capability, rej.Code, h.cfg.Model, st.repositoryMutations, iteration)
 					if !st.mutationObserved {
 						return "", &changeIncompleteError{message}
 					}
@@ -454,7 +455,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 				// After the one permitted evidence correction was requested, a zero-mutation
 				// run that does not return an ACCEPTED ALREADY_SATISFIED fails closed, rather
 				// than treating an unsupported completion as success.
-				message := fmt.Sprintf("the Ollama agent %s ALREADY_SATISFIED claim lacked verified acceptance evidence (model=%s, repository_mutations=%d, iteration=%d, termination=no_changes); a retry may succeed", req.Capability, h.cfg.Model, st.repositoryMutations, iteration)
+				message := fmt.Sprintf("the %s %s ALREADY_SATISFIED claim lacked verified acceptance evidence (model=%s, repository_mutations=%d, iteration=%d, termination=no_changes); a retry may succeed", h.agentName(), req.Capability, h.cfg.Model, st.repositoryMutations, iteration)
 				return "", &changeIncompleteError{message}
 			}
 			h.recordImplementTurn(req, st.phase, iteration, "outcome", "", progressOK, false, false)
@@ -847,8 +848,8 @@ func (e *noProgressError) Error() string { return e.msg }
 // classifier's retryable-incomplete disposition (CONTINUE).
 func (h *Harness) implementNoProgressError(req agent.Request, st *executionState, ev *mutationEvidence, iteration int, lastTool, lastRequest string) error {
 	marker := strings.ToUpper(string(req.Capability)) + "_NO_PROGRESS"
-	msg := fmt.Sprintf("%s: the Ollama agent %s made no repository progress after %d consecutive stale iterations (provider=ollama, model=%s, iterations=%d, discovery_allowance=%d, discovery_inspections=%d, repository_mutations=%d, changed_files=%d, tool_calls=%d, termination=%s%s); a retry may succeed",
-		marker, req.Capability, st.consecutiveNoProgress, h.cfg.Model, iteration, st.discoveryLimit(), len(st.discoverySeen), st.repositoryMutations, len(ev.mutationPaths()), st.counters.toolCalls, terminationNoProgress, actionSuffix(lastTool, lastRequest))
+	msg := fmt.Sprintf("%s: the %s %s made no repository progress after %d consecutive stale iterations (provider=%s, model=%s, iterations=%d, discovery_allowance=%d, discovery_inspections=%d, repository_mutations=%d, changed_files=%d, tool_calls=%d, termination=%s%s); a retry may succeed",
+		marker, h.agentName(), req.Capability, st.consecutiveNoProgress, h.providerName(), h.cfg.Model, iteration, st.discoveryLimit(), len(st.discoverySeen), st.repositoryMutations, len(ev.mutationPaths()), st.counters.toolCalls, terminationNoProgress, actionSuffix(lastTool, lastRequest))
 	if inspected := st.inspectedSummary(); inspected != "" {
 		msg += fmt.Sprintf("\ncontinuation checkpoint (phase=%s, inspected=%s): resume from the intended change rather than repeating repository discovery",
 			st.phase.label(), inspected)
@@ -864,8 +865,8 @@ func (h *Harness) implementNoProgressError(req agent.Request, st *executionState
 // implementNoProgressError carries the same checkpoint. Kept for the fallback path
 // described on terminationNoChange.
 func (h *Harness) noChangeError(req agent.Request, policy CapabilityPolicy, st *executionState, lastTool, lastRequest string) error {
-	msg := fmt.Sprintf("the Ollama agent %s made no repository change after %d iterations (model=%s, discovery_allowance=%d, tool_calls=%d, termination=%s%s); a retry may succeed",
-		req.Capability, policy.MaxIterations, h.cfg.Model, st.discoveryLimit(), st.counters.interactions, terminationNoChange, actionSuffix(lastTool, lastRequest))
+	msg := fmt.Sprintf("the %s %s made no repository change after %d iterations (model=%s, discovery_allowance=%d, tool_calls=%d, termination=%s%s); a retry may succeed",
+		h.agentName(), req.Capability, policy.MaxIterations, h.cfg.Model, st.discoveryLimit(), st.counters.interactions, terminationNoChange, actionSuffix(lastTool, lastRequest))
 	if inspected := st.inspectedSummary(); inspected != "" {
 		msg += fmt.Sprintf("\ncontinuation checkpoint (phase=%s, inspected=%s): resume from the intended change rather than repeating repository discovery",
 			st.phase.label(), inspected)
@@ -878,14 +879,14 @@ func (h *Harness) noChangeError(req agent.Request, policy CapabilityPolicy, st *
 // two very different failures — changed nothing, and changed things but would not
 // stop — are distinguishable.
 func (h *Harness) implementExhaustedError(req agent.Request, policy CapabilityPolicy, st *executionState, lastTool, lastRequest string) error {
-	return fmt.Errorf("the Ollama agent %s did not complete after %d iterations (model=%s, mutation_observed=%t, tool_calls=%d, termination=%s%s)",
-		req.Capability, policy.MaxIterations, h.cfg.Model, st.mutationObserved, st.counters.interactions, terminationIteration, actionSuffix(lastTool, lastRequest))
+	return fmt.Errorf("the %s %s did not complete after %d iterations (model=%s, mutation_observed=%t, tool_calls=%d, termination=%s%s)",
+		h.agentName(), req.Capability, policy.MaxIterations, h.cfg.Model, st.mutationObserved, st.counters.interactions, terminationIteration, actionSuffix(lastTool, lastRequest))
 }
 
 // finalizeLimitError reports that a phased run kept asking for tools after its
 // finalization allowance without returning an outcome. It is deliberately
 // phase-specific rather than the generic iteration-limit message.
 func (h *Harness) finalizeLimitError(req agent.Request, st *executionState, lastTool, lastRequest string) error {
-	return fmt.Errorf("the Ollama agent %s did not finalize (model=%s, mutation_observed=%t, tool_calls=%d, finalization_turns=%d, termination=%s%s)",
-		req.Capability, h.cfg.Model, st.mutationObserved, st.counters.interactions, st.finalization.turns, terminationFinalization, actionSuffix(lastTool, lastRequest))
+	return fmt.Errorf("the %s %s did not finalize (model=%s, mutation_observed=%t, tool_calls=%d, finalization_turns=%d, termination=%s%s)",
+		h.agentName(), req.Capability, h.cfg.Model, st.mutationObserved, st.counters.interactions, st.finalization.turns, terminationFinalization, actionSuffix(lastTool, lastRequest))
 }

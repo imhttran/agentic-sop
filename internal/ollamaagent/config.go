@@ -114,6 +114,20 @@ type Config struct {
 	// preserves the previous behavior; a loaded policy is passed by the
 	// composition root from the project configuration and external inventory.
 	Redaction redact.Policy
+	// Provider labels the execution identity in diagnostics and failure text.
+	// Empty keeps the historical Ollama wording; "mlx" selects the oMLX
+	// wording, so an oMLX failure never reports itself as an Ollama failure.
+	Provider string
+	// ModelEnv names the environment variable that supplied the model, for the
+	// runtime visibility line. Empty keeps SOP_OLLAMA_MODEL.
+	ModelEnv string
+	// APIKey is the optional bearer token for an OpenAI-compatible endpoint. It
+	// is never logged or recorded.
+	APIKey string
+	// EnableThinking allows the oMLX client to request a model's reasoning
+	// channel. It is off by default: reasoning consumes the bounded output
+	// budget and can leave a turn with no content or tool call.
+	EnableThinking bool
 }
 
 // EffectiveBudget returns the budget this harness enforces. A Config that was
@@ -141,6 +155,7 @@ func ConfigFromEnv() (Config, error) {
 		MaxToolCalls:   defaultMaxToolCalls,
 		CommandTimeout: defaultCommandTimeout,
 		MaxOutputBytes: defaultMaxOutputBytes,
+		ModelEnv:       agent.EnvOllamaModel,
 	}
 	if v := strings.TrimSpace(os.Getenv(agent.EnvOllamaBaseURL)); v != "" {
 		cfg.BaseURL = strings.TrimRight(v, "/")
