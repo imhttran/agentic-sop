@@ -15,6 +15,13 @@ import (
 // protocol, and how to finish. It is the only place the model learns which tools
 // it may call and how to conclude.
 func systemPrompt(req agent.Request, policy CapabilityPolicy, primaryRoot string, externals []toolharness.Root) string {
+	return systemPromptFor(req, policy, primaryRoot, externals, false)
+}
+
+// systemPromptFor renders the system prompt. native selects the provider-native
+// tool protocol: the API declares the tools, so the JSON-in-content tool
+// instructions are omitted. The final SOP outcome contract is unchanged.
+func systemPromptFor(req agent.Request, policy CapabilityPolicy, primaryRoot string, externals []toolharness.Root, native bool) string {
 	var b strings.Builder
 	b.WriteString(`You are the implementation agent inside an SOP-controlled repository.
 
@@ -31,13 +38,20 @@ because they look unrelated, and do not report them as blocking. Only touch file
 that the task actually requires.
 `)
 
-	b.WriteString("\n## Tool protocol\n")
-	fmt.Fprintf(&b, "Available tools for %s: %s.\n", req.Capability, describeTools(policy))
-	b.WriteString(toolReference(policy))
-	b.WriteString(`
+	if native {
+		b.WriteString("\n## Native tools\n")
+		b.WriteString("The API declares the tools allowed for this capability. Use the native tool interface, one tool per turn; do not emit a JSON tool request in content.\n")
+		b.WriteString(toolReference(policy))
+		b.WriteString("When the implementation is complete, return the required final response as exactly one JSON object.\n")
+	} else {
+		b.WriteString("\n## Tool protocol\n")
+		fmt.Fprintf(&b, "Available tools for %s: %s.\n", req.Capability, describeTools(policy))
+		b.WriteString(toolReference(policy))
+		b.WriteString(`
 Reply with exactly one JSON object, no prose and no markdown. To call a tool:
 {"tool": "<name>", "args": {...}}
 `)
+	}
 
 	if len(externals) > 0 {
 		b.WriteString("\n## Authorized repository roots\n")

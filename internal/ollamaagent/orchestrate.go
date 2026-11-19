@@ -321,7 +321,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 	}
 	policy := policyFor(req.Capability, b) // all tools; IMPLEMENT may mutate
 	messages := []chatMessage{
-		{Role: "system", Content: systemPrompt(req, policy, h.tools.Root(), h.cfg.Roots)},
+		{Role: "system", Content: systemPromptFor(req, policy, h.tools.Root(), h.cfg.Roots, h.cfg.NativeTools)},
 		{Role: "user", Content: userPromptWithPolicy(req, h.cfg.Redaction)},
 	}
 
@@ -377,7 +377,14 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 			messages = append(messages, chatMessage{Role: "user", Content: implementFinalizeInstruction})
 		}
 
-		raw, calls, err := h.chat(ctx, messages)
+		var raw string
+		var calls []toolCall
+		var err error
+		if h.cfg.NativeTools {
+			raw, calls, err = h.chatNative(ctx, messages, nativeToolSpecs(policy, st.phase))
+		} else {
+			raw, calls, err = h.chat(ctx, messages)
+		}
 		if err != nil {
 			return "", err
 		}
@@ -404,6 +411,16 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 				chatMessage{Role: "user", Content: nudgeText(recovery)},
 			)
 			continue
+		}
+		if h.cfg.NativeTools && isTool && len(calls) > 1 {
+			return "", fmt.Errorf("native oMLX mode supports one tool call per turn; received %d (tool_call_ids cannot be left unanswered)", len(calls))
+		}
+		nativeID := ""
+		if h.cfg.NativeTools && isTool && len(calls) > 0 {
+			nativeID = calls[0].ID
+			if nativeID == "" {
+				return "", errors.New("native oMLX tool call is missing a tool_call_id")
+			}
 		}
 		if !isTool {
 			// One bounded existing-work verification opportunity: an invocation that reports
@@ -742,10 +759,17 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		for _, a := range advice {
 			content += "\n\n" + a
 		}
-		messages = append(messages,
-			chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
-			chatMessage{Role: "user", Content: content},
-		)
+		if h.cfg.NativeTools && nativeID != "" {
+			messages = append(messages,
+				chatMessage{Role: "assistant", Content: raw, NativeToolCalls: []toolCall{{ID: nativeID, Name: name, Args: args}}},
+				chatMessage{Role: "tool", ToolCallID: nativeID, Content: content},
+			)
+		} else {
+			messages = append(messages,
+				chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
+				chatMessage{Role: "user", Content: content},
+			)
+		}
 	}
 	if !st.mutationObserved {
 		// Normally the discovery window plus stale bound stops an unmutated run

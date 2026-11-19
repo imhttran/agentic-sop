@@ -534,3 +534,13 @@ func (h *Harness) noProgressError(req agent.Request, iteration int, action, requ
 func (h *Harness) chat(ctx context.Context, messages []chatMessage) (string, []toolCall, error) {
 	return h.client.chat(ctx, messages)
 }
+
+// chatNative asks the transport for one provider-native tool turn. It fails
+// closed when the configured transport does not implement native tools.
+func (h *Harness) chatNative(ctx context.Context, messages []chatMessage, tools []nativeToolSpec) (string, []toolCall, error) {
+	nc, ok := h.client.(nativeChatClient)
+	if !ok {
+		return "", nil, errors.New("native tools requested but the chat transport does not support them")
+	}
+	return nc.chatWithTools(ctx, messages, tools)
+}

@@ -22,6 +22,10 @@ type chatMessage struct {
 	Role      string           `json:"role"`
 	Content   string           `json:"content"`
 	ToolCalls []ollamaToolCall `json:"tool_calls,omitempty"`
+	// NativeToolCalls and ToolCallID carry the OpenAI-native transcript used by
+	// the opt-in oMLX native-tools protocol. They are not serialized to Ollama.
+	NativeToolCalls []toolCall `json:"-"`
+	ToolCallID      string     `json:"-"`
 }
 
 // ollamaToolCall is one native tool call in a response. Arguments is kept raw
@@ -35,6 +39,7 @@ type ollamaToolCall struct {
 
 // toolCall is a normalized tool invocation, whatever protocol expressed it.
 type toolCall struct {
+	ID   string
 	Name string
 	Args map[string]any
 }

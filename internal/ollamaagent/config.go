@@ -128,6 +128,10 @@ type Config struct {
 	// channel. It is off by default: reasoning consumes the bounded output
 	// budget and can leave a turn with no content or tool call.
 	EnableThinking bool
+	// NativeTools opts the governed oMLX loop into the provider's native tool
+	// protocol. It is off by default; the existing JSON-in-content protocol is
+	// unchanged unless an operator explicitly enables it.
+	NativeTools bool
 }
 
 // EffectiveBudget returns the budget this harness enforces. A Config that was
