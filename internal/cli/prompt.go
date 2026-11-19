@@ -405,32 +405,22 @@ func runPromptReadOnly(dir string, cfg config.Config, d deps, wi workitem.WorkIt
 
 	content, err := promptGenerate(ctx, dir, a, wi, sel, opts.cache)
 	if err != nil {
+		failed := failedPromptDoc(ctx, wi, tr, sel)
 		if opts.json {
-			_ = writePromptJSON(stdout, stderr, promptResultDoc{
-				Version:    promptResultVersion,
-				WorkItemID: wi.ID,
-				Kind:       string(wi.Kind),
-				Capability: promptCapabilityName(wi.Capability),
-				Status:     "failed",
-				Routing:    promptRoutingDoc(tr, sel),
-				ReportPath: promptRunDirRel(wi.ID),
-				Tokens:     perf.UsageFrom(ctx),
-			})
+			_ = writePromptJSON(stdout, stderr, failed)
 		}
-		_ = writePromptMetadata(rn, promptResultDoc{
-			Version:    promptResultVersion,
-			WorkItemID: wi.ID,
-			Kind:       string(wi.Kind),
-			Capability: promptCapabilityName(wi.Capability),
-			Status:     "failed",
-			Routing:    promptRoutingDoc(tr, sel),
-			ReportPath: promptRunDirRel(wi.ID),
-			Tokens:     perf.UsageFrom(ctx),
-		})
+		_ = writePromptMetadata(rn, failed)
 		return failPrompt(rn, stderr, fmt.Errorf("prompt: %s: %w", wi.Capability, err))
 	}
 
-	_ = rn.WriteReply("result.md", content)
+	if err := rn.WriteReply("result.md", content); err != nil {
+		failed := failedPromptDoc(ctx, wi, tr, sel)
+		if opts.json {
+			_ = writePromptJSON(stdout, stderr, failed)
+		}
+		_ = writePromptMetadata(rn, failed)
+		return failPrompt(rn, stderr, fmt.Errorf("prompt: write result.md: %w", err))
+	}
 	writePromptRoutingArtifact(rn, wi, tr, sel)
 
 	doc := promptResultDoc{
@@ -456,6 +446,22 @@ func runPromptReadOnly(dir string, cfg config.Config, d deps, wi workitem.WorkIt
 		fmt.Fprintf(progress, "tokens: %d in, %d out across %d model calls\n", sum.Input, sum.Output, sum.Calls)
 	}
 	return exitOK
+}
+
+// failedPromptDoc is the failure result document shared by the model-call and
+// artifact-write failures. It deliberately has no ResultPath or Result: a failed
+// prompt must never claim a saved result.
+func failedPromptDoc(ctx context.Context, wi workitem.WorkItem, tr *taskRouting, sel model.Selection) promptResultDoc {
+	return promptResultDoc{
+		Version:    promptResultVersion,
+		WorkItemID: wi.ID,
+		Kind:       string(wi.Kind),
+		Capability: promptCapabilityName(wi.Capability),
+		Status:     "failed",
+		Routing:    promptRoutingDoc(tr, sel),
+		ReportPath: promptRunDirRel(wi.ID),
+		Tokens:     perf.UsageFrom(ctx),
+	}
 }
 
 // runPromptImplement executes a mutating prompt (IMPLEMENT) through SOP's existing
