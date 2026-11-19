@@ -17,6 +17,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/model"
 	"github.com/imhttran/agentic-sop/internal/perf"
 	"github.com/imhttran/agentic-sop/internal/quality"
+	"github.com/imhttran/agentic-sop/internal/redact"
 	"github.com/imhttran/agentic-sop/internal/router"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/taskfile"
@@ -412,6 +413,12 @@ func runPromptReadOnly(dir string, cfg config.Config, d deps, wi workitem.WorkIt
 		_ = writePromptMetadata(rn, failed)
 		return failPrompt(rn, stderr, fmt.Errorf("prompt: %s: %w", wi.Capability, err))
 	}
+
+	// The raw model response is the single source for result.md, metadata.json,
+	// and stdout. Sanitize it once with the existing model-input redaction policy
+	// so all three outputs carry the same content; WriteReply's own redaction is
+	// then an idempotent second pass.
+	content = redact.ModelInput(content, os.Environ())
 
 	if err := rn.WriteReply("result.md", content); err != nil {
 		failed := failedPromptDoc(ctx, wi, tr, sel)
