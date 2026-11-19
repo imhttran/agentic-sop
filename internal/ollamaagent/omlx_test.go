@@ -536,3 +536,44 @@ func TestOMLXReusesToolPermissionChecks(t *testing.T) {
 		t.Error("a denied write must not create the SOP state file")
 	}
 }
+
+// TestOMLXClientClassifiesBodyReadTimeout proves a timeout after the response
+// headers arrive is classified as the typed oMLX timeout (and remains
+// retryable), not a generic read-response error.
+func TestOMLXClientClassifiesBodyReadTimeout(t *testing.T) {
+	headers := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		close(headers)
+		time.Sleep(300 * time.Millisecond)
+		_, _ = io.WriteString(w, `{"choices":[]}`)
+	}))
+	defer srv.Close()
+
+	cfg := omLXTestConfig(srv.URL)
+	cfg.Timeout = 80 * time.Millisecond
+	client := newOpenAIChatClient(cfg).(*openAIChatClient)
+	_, _, err := client.chatOnce(context.Background(), []chatMessage{{Role: "user", Content: "x"}})
+	var timeoutErr *ollamaTimeoutError
+	if !errors.As(err, &timeoutErr) {
+		t.Fatalf("err = %v, want *ollamaTimeoutError after headers arrived", err)
+	}
+	if timeoutErr.provider != "mlx" {
+		t.Errorf("provider = %q, want mlx", timeoutErr.provider)
+	}
+	if timeoutErr.env != agent.EnvMLXTimeout {
+		t.Errorf("timeout hint = %q, want %s", timeoutErr.env, agent.EnvMLXTimeout)
+	}
+	if !retryableProviderError(err) {
+		t.Errorf("body-read timeout must remain retryable")
+	}
+	select {
+	case <-headers:
+	default:
+		t.Fatal("server did not send headers before the failure")
+	}
+}

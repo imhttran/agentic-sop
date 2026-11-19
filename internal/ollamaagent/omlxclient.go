@@ -181,7 +181,10 @@ func (c *openAIChatClient) chatOnce(ctx context.Context, messages []chatMessage)
 
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, int64(c.maxBytes)))
 	if err != nil {
-		return "", nil, fmt.Errorf("%s: read response: %w", c.provider, err)
+		// A timeout can occur after the headers arrive while reading the body.
+		// Route it through the same classifier as connection-level failures so it
+		// remains a typed, retryable provider timeout.
+		return "", nil, c.transportFailure(ctx, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return "", nil, &ollamaHTTPError{provider: c.provider, statusCode: resp.StatusCode, baseURL: c.baseURL, body: string(raw)}
