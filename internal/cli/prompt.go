@@ -861,7 +861,10 @@ func writePromptJSON(stdout, stderr io.Writer, doc promptResultDoc) int {
 		fmt.Fprintf(stderr, "prompt: encode result: %v\n", err)
 		return exitError
 	}
-	fmt.Fprintln(stdout, string(data))
+	if _, err := fmt.Fprintln(stdout, string(data)); err != nil {
+		fmt.Fprintf(stderr, "prompt: write output: %v\n", err)
+		return exitError
+	}
 	return exitOK
 }
 
