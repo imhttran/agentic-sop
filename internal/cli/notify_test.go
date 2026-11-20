@@ -12,6 +12,14 @@ import (
 	"github.com/imhttran/agentic-sop/internal/store"
 )
 
+// clearNotifyEnv clears the notification environment so a test that asserts "no
+// notification configuration" does not depend on the developer's environment or CI.
+func clearNotifyEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv(config.NotifyChannelEnv, "")
+	t.Setenv(config.NotifyWebhookURLEnv, "")
+}
+
 // notifyFixture seeds a project with initialized state and the given notification
 // configuration.
 func notifyFixture(t *testing.T, channel, filePath string) string {
@@ -45,6 +53,7 @@ func notifyDeps(dir string) deps {
 // TestNotifyStatusDistinguishesConfigurationFromDelivery proves availability comes
 // from observed evidence, not configuration alone.
 func TestNotifyStatusDistinguishesConfigurationFromDelivery(t *testing.T) {
+	clearNotifyEnv(t)
 	dir := notifyFixture(t, config.NotifyChannelNone, "")
 	var out, errb bytes.Buffer
 	if code := runNotify([]string{"status", "--json"}, &out, &errb, notifyDeps(dir)); code != exitOK {
@@ -102,6 +111,7 @@ func TestNotifyTestDeliversThroughFileChannel(t *testing.T) {
 // TestNotifyDrainWithoutChannelReportsUnavailable proves the drain refuses to
 // silently succeed when no channel is configured.
 func TestNotifyDrainWithoutChannelReportsUnavailable(t *testing.T) {
+	clearNotifyEnv(t)
 	dir := notifyFixture(t, config.NotifyChannelNone, "")
 	var out, errb bytes.Buffer
 	if code := runNotify([]string{"drain"}, &out, &errb, notifyDeps(dir)); code == exitOK {

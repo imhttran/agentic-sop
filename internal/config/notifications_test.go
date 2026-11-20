@@ -18,13 +18,37 @@ project:
   name: demo
 `
 
+// clearNotifyEnv clears the notification environment so a test that asserts "no
+// notification configuration" does not depend on the developer's environment or CI.
+func clearNotifyEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv(NotifyChannelEnv, "")
+	t.Setenv(NotifyWebhookURLEnv, "")
+}
+
 func TestNotificationsAbsentMeansNone(t *testing.T) {
+	clearNotifyEnv(t)
 	c, err := parseNotify(t, notifyBase)
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
 	if got := c.NotifyChannel(); got != NotifyChannelNone {
 		t.Fatalf("channel = %q, want %q", got, NotifyChannelNone)
+	}
+}
+
+// TestNotificationsIgnoreAmbientChannel proves an ambient channel never overrides
+// an explicit project channel. The environment may enable a channel the project
+// left at none, but it must not replace one the project configured.
+func TestNotificationsIgnoreAmbientChannel(t *testing.T) {
+	t.Setenv(NotifyChannelEnv, NotifyChannelWebhook)
+
+	c, err := parseNotify(t, notifyBase+"notifications:\n  channel: file\n  file:\n    path: /tmp/out.log\n")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := c.NotifyChannel(); got != NotifyChannelFile {
+		t.Fatalf("channel = %q, want %q despite %s=%s", got, NotifyChannelFile, NotifyChannelEnv, NotifyChannelWebhook)
 	}
 }
 
