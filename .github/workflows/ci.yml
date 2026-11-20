@@ -44,6 +44,11 @@ jobs:
           SOP_TEST_PARALLEL: "4"
           SOP_TEST_TIMEOUT: "10m"
         run: ./scripts/checks/test-fast.sh
+      - name: TEMP per-test timings
+        run: |
+          go test -v -count=1 -p 4 -timeout 20m ./internal/ollamaagent ./internal/toolharness 2>&1 \
+            | grep -E '^\s*--- (PASS|SKIP|FAIL).*\([0-9.]+s\)' | sed -E 's/.*--- (\w+): (\S+) \(([0-9.]+)s\)/\3 \1 \2/' | sort -rn | head -40
+          echo "skips:"; go test -v -count=1 ./internal/ollamaagent 2>&1 | grep -c -- '--- SKIP' || true
       # End-to-end ACP stdio smoke: builds the binary and drives initialize,
       # session/new, session/prompt, and session/cancel the way an ACP client does.
       # A blocking command harness keeps the governed child alive, so the job needs
