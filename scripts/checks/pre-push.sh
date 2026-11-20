@@ -13,7 +13,8 @@
 #   -h, --help   show this help
 #
 # Gates:
-#   1. formatting     gofmt -l .            (the same gate CI's gofmt step runs)
+#   1. formatting     gofmt -l .            (the same gate CI's gofmt step runs, minus
+#                                            .worktrees/: local scratch checkouts CI never has)
 #   2. documentation  check-doc-links.sh    (evaluated on the merge with --base)
 #
 # The merge result is materialized with `git archive` into a temporary directory.
@@ -59,7 +60,13 @@ if ! command -v gofmt >/dev/null 2>&1; then
   exit 2
 fi
 
-unformatted="$(gofmt -l .)"
+# .worktrees/ holds other branches' checkouts (gitignored); gofmt walks into dot
+# directories, so a broken file in one must not block an unrelated push.
+list_unformatted() {
+  find . -name '*.go' -not -path './.worktrees/*' -print0 | xargs -0 gofmt -l
+}
+
+unformatted="$(list_unformatted)"
 if [ -n "$unformatted" ] && [ "$fix" = "1" ]; then
   echo "pre-push: formatting with gofmt -w:"
   printf '%s\n' "$unformatted"
@@ -69,7 +76,7 @@ if [ -n "$unformatted" ] && [ "$fix" = "1" ]; then
   done <<EOF
 $unformatted
 EOF
-  unformatted="$(gofmt -l .)"
+  unformatted="$(list_unformatted)"
 fi
 if [ -n "$unformatted" ]; then
   echo "pre-push: these files are not gofmt-formatted:"
