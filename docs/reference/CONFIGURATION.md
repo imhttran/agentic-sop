@@ -960,8 +960,14 @@ Two optional policy blocks describe how SOP decides to proceed without a human.
   project folder.
 - **Adapter backend URLs and failover.** These are read by the adapter process
   (`sop decision decide` / `sop-decision-adapter`), which inherits SOP's
-  environment, not by SOP's own config loader. `SOP_DECISION_FALLBACK` names a
-  second provider that serves only when the selected one errors.
+  environment, not by SOP's own config loader. A fallback provider serves only
+  when the selected one errors, and setting `DECIDER_FALLBACK_URL` or
+  `DECIDER_FALLBACK_MODEL` is enough to enable one. It uses the generic
+  `nimble` wrapper (the model it runs is `DECIDER_FALLBACK_MODEL`, not its
+  name). `SOP_DECISION_FALLBACK=<provider>` is an optional override that picks a
+  different wrapper such as `julia`; naming the selected provider disables the
+  fallback. Setting `DECIDER_FALLBACK_*` while the selected provider is already
+  `nimble` fails loudly, so set `SOP_DECISION_FALLBACK` to another provider.
   `DECIDER_URL` sets the selected provider's base URL (the `-base-url` flag
   still wins) and `DECIDER_FALLBACK_URL` sets the fallback's. Both are
   role-based and override each provider's own default (`OLLAMA_BASE_URL`), so a
