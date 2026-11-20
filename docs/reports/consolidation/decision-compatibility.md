@@ -11,7 +11,8 @@ contract, and composes a bounded failover with no new framework:
 1. **Primary** — the configured provider (default `nimble`; naming `clef` is the
    opt-in, and `CLEF_ENABLED=0` turns it off). Selected by
    `sop decision decide -provider <name>`.
-2. **Backup** — when `SOP_DECISION_FALLBACK` names a different provider,
+2. **Backup** — when `DECIDER_FALLBACK_URL` / `DECIDER_FALLBACK_MODEL` is set
+   (default wrapper `nimble`) or `SOP_DECISION_FALLBACK` names a different provider,
    `internal/decisionadapter/providers/fallback.Provider` serves the primary first
    and the backup only when the primary errors. `DECIDER_URL` and
    `DECIDER_FALLBACK_URL` set each one's base URL (overriding the shared
