@@ -121,7 +121,7 @@ func TestNEXT002ScenarioClosesWithNoNewChanges(t *testing.T) {
 	needSandboxAvailable(t)
 	dir, req := committedFixture(t)
 	req.AcceptanceCriteria = []string{"Add returns the sum"}
-	req.ValidationCommands = []string{"go test ./..."}
+	req.ValidationCommands = []string{"go list ./..."}
 	_, srv := newFakeOllama(t, readAdd, readAddTest, validateAdd, plainCompletion, satisfiedFinal)
 	cfg := testConfig(srv.URL)
 	cfg.MaxToolCalls = 30

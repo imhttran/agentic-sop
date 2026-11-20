@@ -15,7 +15,7 @@ import (
 const satisfiedFinal = `{"status":"completed","completion":"ALREADY_SATISFIED","changes_expected":true,"repository_mutations":99,"evidence":{"acceptance":[{"criterion":"Add returns the sum","paths":["./add.go","add_test.go"]}],"validation_commands":["fabricated"]}}`
 const readAdd = `{"tool":"read_file","args":{"path":"add.go"}}`
 const readAddTest = `{"tool":"read_file","args":{"path":"add_test.go"}}`
-const validateAdd = `{"tool":"run_command","args":{"command":"go test ./..."}}`
+const validateAdd = `{"tool":"run_command","args":{"command":"go list ./..."}}`
 
 func satisfactionFixture(t *testing.T) (string, agent.Request) {
 	t.Helper()
@@ -25,7 +25,7 @@ func satisfactionFixture(t *testing.T) (string, agent.Request) {
 	writeFile(t, dir, "add_test.go", "package add\n\nimport \"testing\"\n\nfunc TestAdd(t *testing.T) { if Add(1, 2) != 3 { t.Fatal(\"wrong sum\") } }\n")
 	req := implementRequest()
 	req.AcceptanceCriteria = []string{"Add returns the sum"}
-	req.ValidationCommands = []string{"go test ./..."}
+	req.ValidationCommands = []string{"go list ./..."}
 	return dir, req
 }
 
@@ -57,7 +57,7 @@ func TestVerifiedAlreadySatisfied(t *testing.T) {
 			if err := json.Unmarshal([]byte(response.Content), &wire); err != nil {
 				t.Fatal(err)
 			}
-			if wire.RepositoryMutations == nil || *wire.RepositoryMutations != 0 || wire.Evidence == nil || len(wire.Evidence.ValidationCommands) != 1 || wire.Evidence.ValidationCommands[0] != "go test ./..." {
+			if wire.RepositoryMutations == nil || *wire.RepositoryMutations != 0 || wire.Evidence == nil || len(wire.Evidence.ValidationCommands) != 1 || wire.Evidence.ValidationCommands[0] != "go list ./..." {
 				t.Fatalf("completion evidence=%s", response.Content)
 			}
 			if fake.count() != 4 {
@@ -97,7 +97,8 @@ func TestAlreadySatisfiedRequiresObjectiveProof(t *testing.T) {
 			{name: "no-op write", turns: []string{`{"tool":"write_file","args":{"path":"add.go","content":"package add\n\nfunc Add(a, b int) int { return a + b }\n"}}`}},
 			{name: "no-op gofmt", turns: []string{`{"tool":"run_command","args":{"command":"gofmt -w add.go"}}`}},
 			{name: "failing validation", turns: []string{readAdd, readAddTest, validateAdd}, setup: func(t *testing.T, dir string, _ *agent.Request) {
-				writeFile(t, dir, "add.go", "package add\n\nfunc Add(a, b int) int { return 0 }\n")
+				// a second package in one directory makes `go list` fail without compiling anything
+				writeFile(t, dir, "other.go", "package other\n")
 			}},
 			{name: "failed read", turns: []string{`{"tool":"read_file","args":{"path":"missing.go"}}`, readAddTest, validateAdd}},
 			{name: "denied command", turns: []string{readAdd, readAddTest, `{"tool":"run_command","args":{"command":"rm -rf ."}}`}},
@@ -246,7 +247,7 @@ func TestAlreadySatisfiedAcceptsAuthorizedValidationWaiver(t *testing.T) {
 	gitInit(t, dir)
 	commitAll(t, dir, "existing implementation")
 	req.Capability = agent.Implement
-	req.ValidationCommands = []string{"go test ./...", "go vet ./..."}
+	req.ValidationCommands = []string{"go list ./...", "go vet ./..."}
 	req.ValidationWaivers = []string{"go vet ./..."} // authorized; unavailable here
 	fake, srv := newFakeOllama(t, readAdd, readAddTest, validateAdd, satisfiedFinal)
 	cfg := testConfig(srv.URL)
