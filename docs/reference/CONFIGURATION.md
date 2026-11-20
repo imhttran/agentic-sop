@@ -967,7 +967,12 @@ Two optional policy blocks describe how SOP decides to proceed without a human.
   role-based and override each provider's own default (`OLLAMA_BASE_URL`), so a
   primary and a fallback can run on different servers, for example Clef on oMLX
   (`http://127.0.0.1:8000`) with Nimble on Ollama (`http://127.0.0.1:11434`).
-  With neither set, both providers share `OLLAMA_BASE_URL` as before.
+  `DECIDER_MODEL` and `DECIDER_FALLBACK_MODEL` set each one's model the same way
+  (the `-model` flag wins for the selected provider) and override the provider's
+  own `CLEF_MODEL` / `NIMBLE_MODEL`, so a fallback can run a different model than
+  its wrapper's name suggests, for example `nimble` serving `pplx-decider-flash`.
+  With none of these set, both providers use their own defaults and share
+  `OLLAMA_BASE_URL` as before.
 - **Live inference authorization.** Running a real adapter incurs inference and is
   gated (Gate W3-4); enabling the adapter by default is a separate production-policy
   decision (Gate W3-3).
