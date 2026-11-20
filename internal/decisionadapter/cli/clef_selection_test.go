@@ -454,3 +454,72 @@ func TestDeciderModelsRoutePrimaryAndFallbackSeparately(t *testing.T) {
 		t.Fatalf("-model flag must win for the primary: %q", primaryBody)
 	}
 }
+
+// TestFallbackProviderName covers how the backup is chosen: an explicit
+// SOP_DECISION_FALLBACK names it, otherwise DECIDER_FALLBACK_URL/MODEL imply the
+// default wrapper, and an implied fallback that collides with the selected
+// provider fails loudly instead of being dropped.
+func TestFallbackProviderName(t *testing.T) {
+	cases := []struct {
+		name     string
+		selected string
+		flag     string
+		url      string
+		model    string
+		want     string
+		wantErr  bool
+	}{
+		{name: "nothing configured", selected: "clef"},
+		{name: "explicit fallback", selected: "clef", flag: "nimble", want: "nimble"},
+		{name: "explicit equals selected means none", selected: "nimble", flag: "nimble"},
+		{name: "explicit equals default selected means none", selected: "", flag: "nimble"},
+		{name: "explicit wins over inference", selected: "clef", flag: "julia", model: "m", want: "julia"},
+		{name: "model implies default wrapper", selected: "clef", model: "m", want: "nimble"},
+		{name: "url implies default wrapper", selected: "clef", url: "http://x", want: "nimble"},
+		{name: "blank values are not set", selected: "clef", url: "  ", model: " "},
+		{name: "implied collides with selected", selected: "nimble", model: "m", wantErr: true},
+		{name: "implied collides with default selected", selected: "", model: "m", wantErr: true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("SOP_DECISION_FALLBACK", c.flag)
+			t.Setenv("DECIDER_FALLBACK_URL", c.url)
+			t.Setenv("DECIDER_FALLBACK_MODEL", c.model)
+			got, err := fallbackProviderName(c.selected)
+			if (err != nil) != c.wantErr || got != c.want {
+				t.Fatalf("fallbackProviderName(%q) = %q, %v; want %q, err=%v", c.selected, got, err, c.want, c.wantErr)
+			}
+		})
+	}
+}
+
+// TestInferredFallbackChains proves DECIDER_FALLBACK_URL alone, with no
+// SOP_DECISION_FALLBACK, builds a working failover chain.
+func TestInferredFallbackChains(t *testing.T) {
+	var backupHits int
+	primary := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	backup := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		backupHits++
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer primary.Close()
+	defer backup.Close()
+
+	t.Setenv("CLEF_ENABLED", "1")
+	t.Setenv("DECIDER_URL", primary.URL)
+	t.Setenv("DECIDER_FALLBACK_URL", backup.URL)
+
+	p, err := newProvider("clef", "", "", 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := decision.DecisionRequest{State: "s", Questions: []decision.Question{
+		{ID: "q", Type: decision.QuestionChoice, Criteria: "c", Choices: []string{"a", "b"}},
+	}}
+	_, _ = p.Decide(context.Background(), req)
+	if backupHits == 0 {
+		t.Fatal("DECIDER_FALLBACK_URL alone must enable the fallback; backup was never called")
+	}
+}

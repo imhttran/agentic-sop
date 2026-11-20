@@ -146,9 +146,9 @@ func buildRequest(file, decisionID, state, choices string) (decision.DecisionReq
 // availableProviders lists the provider names the CLI can select.
 const availableProviders = "nimble, julia, clef"
 
-// newProvider builds the selected provider and, when SOP_DECISION_FALLBACK names a
-// different provider, wraps it in a primary->backup failover chain. The chain
-// reuses the same provider implementations; it adds no new framework.
+// newProvider builds the selected provider and, when a fallback is configured
+// (see fallbackProviderName), wraps it in a primary->backup failover chain. The
+// chain reuses the same provider implementations; it adds no new framework.
 func newProvider(name, baseURL, model string, timeout time.Duration) (decision.Provider, error) {
 	// DECIDER_URL / DECIDER_FALLBACK_URL and DECIDER_MODEL / DECIDER_FALLBACK_MODEL
 	// are role-based, so the primary and the backup can sit on different servers
@@ -165,8 +165,11 @@ func newProvider(name, baseURL, model string, timeout time.Duration) (decision.P
 	if err != nil {
 		return nil, err
 	}
-	fb := strings.TrimSpace(os.Getenv("SOP_DECISION_FALLBACK"))
-	if fb == "" || strings.EqualFold(fb, strings.TrimSpace(name)) {
+	fb, err := fallbackProviderName(name)
+	if err != nil {
+		return nil, err
+	}
+	if fb == "" {
 		return primary, nil
 	}
 	backup, err := buildProvider(fb, os.Getenv("DECIDER_FALLBACK_URL"), os.Getenv("DECIDER_FALLBACK_MODEL"), timeout)
@@ -174,6 +177,38 @@ func newProvider(name, baseURL, model string, timeout time.Duration) (decision.P
 		return nil, err
 	}
 	return fallback.New(primary, backup), nil
+}
+
+// defaultFallbackProvider is the provider wrapper a fallback uses when
+// DECIDER_FALLBACK_URL / DECIDER_FALLBACK_MODEL ask for one but
+// SOP_DECISION_FALLBACK names none: the generic systemone wrapper. The model it
+// runs comes from DECIDER_FALLBACK_MODEL, not from the wrapper's name.
+const defaultFallbackProvider = "nimble"
+
+// fallbackProviderName returns the provider that backs up the selected one, or ""
+// for none. An explicit SOP_DECISION_FALLBACK names it (the same provider as the
+// selected one means no fallback). Otherwise setting DECIDER_FALLBACK_URL or
+// DECIDER_FALLBACK_MODEL is enough and selects defaultFallbackProvider; if that
+// is the selected provider itself it fails loudly rather than dropping the
+// fallback the operator asked for.
+func fallbackProviderName(selected string) (string, error) {
+	selected = strings.ToLower(strings.TrimSpace(selected))
+	if selected == "" {
+		selected = defaultFallbackProvider // buildProvider treats "" as nimble
+	}
+	if fb := strings.ToLower(strings.TrimSpace(os.Getenv("SOP_DECISION_FALLBACK"))); fb != "" {
+		if fb == selected {
+			return "", nil
+		}
+		return fb, nil
+	}
+	if strings.TrimSpace(os.Getenv("DECIDER_FALLBACK_URL")) == "" && strings.TrimSpace(os.Getenv("DECIDER_FALLBACK_MODEL")) == "" {
+		return "", nil
+	}
+	if selected == defaultFallbackProvider {
+		return "", fmt.Errorf("DECIDER_FALLBACK_URL/MODEL is set but the selected provider is already %q, the default fallback; set SOP_DECISION_FALLBACK to a different provider", selected)
+	}
+	return defaultFallbackProvider, nil
 }
 
 // buildProvider resolves one provider by name.
@@ -325,9 +360,12 @@ Flags (decide):
 
 Environment (any provider):
   DECIDER_URL           base URL for the selected (primary) provider; the -base-url flag wins
-  DECIDER_FALLBACK_URL  base URL for the SOP_DECISION_FALLBACK provider
+  DECIDER_FALLBACK_URL  base URL for the fallback provider
   DECIDER_MODEL         model for the selected provider; the -model flag wins
-  DECIDER_FALLBACK_MODEL model for the SOP_DECISION_FALLBACK provider
+  DECIDER_FALLBACK_MODEL model for the fallback provider
+  Setting DECIDER_FALLBACK_URL or DECIDER_FALLBACK_MODEL enables a fallback that
+  uses the nimble wrapper; SOP_DECISION_FALLBACK=<provider> is only needed to
+  pick a different wrapper (naming the selected provider disables the fallback).
   They override OLLAMA_BASE_URL and each provider's own *_MODEL, so the two can
   live on different servers and run different models.
 
