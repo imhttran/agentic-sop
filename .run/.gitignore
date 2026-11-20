@@ -11,3 +11,6 @@
 # are machine-specific; scripts/planner-tunnel-point.sh writes them.
 /tunnel/
 /spike/
+
+# Local agent session state written by the editor harness.
+/sessions.json
