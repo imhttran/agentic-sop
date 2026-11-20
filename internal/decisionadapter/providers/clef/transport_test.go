@@ -180,6 +180,43 @@ func TestHTTPTransportListModels(t *testing.T) {
 	}
 }
 
+// TestHTTPTransportListModelsFallsBackToOpenAI covers oMLX, which has no Ollama
+// /api/tags (404) and only lists models at /v1/models.
+func TestHTTPTransportListModelsFallsBackToOpenAI(t *testing.T) {
+	_, tr := clefSystemOneServer(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/tags":
+			http.NotFound(w, r)
+		case "/v1/models":
+			io.WriteString(w, `{"data":[{"id":"clef-4bit"},{"id":"Qwen3-4B-4bit"}]}`)
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+		}
+	})
+
+	names, err := tr.ListModels(context.Background())
+	if err != nil {
+		t.Fatalf("ListModels() error = %v", err)
+	}
+	if len(names) != 2 || names[0] != "clef-4bit" {
+		t.Errorf("names = %v", names)
+	}
+}
+
+// TestHTTPTransportListModelsBothMissing keeps a backend with neither listing
+// reported as an error (unavailable), not an empty success.
+func TestHTTPTransportListModelsBothMissing(t *testing.T) {
+	_, tr := clefSystemOneServer(t, func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	})
+
+	_, err := tr.ListModels(context.Background())
+	var status *httpStatusError
+	if !errors.As(err, &status) || status.StatusCode != http.StatusNotFound {
+		t.Fatalf("error = %v, want httpStatusError 404", err)
+	}
+}
+
 // TestHTTPTransportListModelsHTTPFailure asserts a non-200 status on the model
 // listing is an httpStatusError, not a silent empty list.
 func TestHTTPTransportListModelsHTTPFailure(t *testing.T) {
