@@ -81,16 +81,24 @@ value, so a placeholder such as `local` becomes a redaction target for every
 occurrence of that word in model input.
 
 Require a candidate value to look like a credential before it is treated as a
-secret: at least 8 characters, and at least one character that is not a
-lowercase ASCII letter. Keep every longer or token-shaped value redacted.
-Document the tradeoff in a comment: a short lowercase word is more likely a
-placeholder than a credential, and redacting it corrupts repository text that
-the agent must write back.
+secret. Values shorter than 8 bytes are skipped. Values of at least 16 bytes are
+kept even when they are all lowercase letters, so a long passphrase still
+redacts. Between those bounds a value is kept only when it carries a byte that is
+not a lowercase ASCII letter: a digit, an uppercase letter, or a symbol. That
+skips placeholders such as `local` while keeping keys, hexadecimal digests, and
+mixed-case tokens. Document the tradeoff in a comment: a short lowercase word is
+more likely a placeholder than a credential, and redacting it corrupts
+repository text that the agent must write back.
 
 Add a table test `TestEnvSecretsSkipsCommonWords` in
 `internal/redact/redact_test.go`. Cover a secret-named variable whose value is
-`local` (skipped), a 32-character token-shaped value (kept), and an empty value
-(skipped).
+`local` (skipped), a token-shaped value (kept), a 20-byte lowercase value (kept),
+and an empty value (skipped). Build the token at run time, for example with
+`strings.Repeat`, so the fixture carries no credential-shaped literal.
+
+Update the fixtures in `internal/handoff/handoff_test.go` that rely on a short
+lowercase fake secret, so the test proves redaction with a realistic secret
+value instead of a placeholder.
 
 Do not change `IsSecretName`, `Values`, `ShapesValues`, or the inventory path.
 
@@ -98,6 +106,7 @@ Do not change `IsSecretName`, `Values`, `ShapesValues`, or the inventory path.
 
 - internal/redact/redact.go
 - internal/redact/redact_test.go
+- internal/handoff/handoff_test.go
 
 ### Dependencies
 

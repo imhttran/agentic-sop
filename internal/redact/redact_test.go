@@ -129,6 +129,31 @@ func TestEnvSecrets(t *testing.T) {
 	}
 }
 
+// TestEnvSecretsSkipsCommonWords proves a placeholder value is not treated as a
+// secret, while a token-shaped value still is. The token is built at run time so
+// this fixture does not carry a credential-shaped literal.
+func TestEnvSecretsSkipsCommonWords(t *testing.T) {
+	token := strings.Repeat("a1B", 11)
+	longWord := strings.Repeat("k", 20)
+	cases := []struct {
+		name string
+		env  []string
+		want []string
+	}{
+		{"short lowercase word is skipped", []string{"SOP_TEST_SECRET=local"}, nil},
+		{"token-shaped value is kept", []string{"SOP_TEST_SECRET=" + token}, []string{token}},
+		{"long lowercase value is kept", []string{"SOP_TEST_SECRET=" + longWord}, []string{longWord}},
+		{"empty value is skipped", []string{"SOP_TEST_SECRET="}, nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := EnvSecrets(tc.env); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("EnvSecrets(%v) = %v, want %v", tc.env, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestIsSecretName(t *testing.T) {
 	secret := []string{"OPENAI_API_KEY", "SOP_TOKEN", "AWS_SECRET_ACCESS_KEY", "DB_PASSWORD", "--api-key", "api.key", "SESSION_ID", "AUTHORIZATION", "SSH_AUTH_SOCK", "MYKEY"}
 	// Over-redacting these is the accepted cost of never missing, say, MYKEY.

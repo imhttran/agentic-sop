@@ -113,14 +113,17 @@ func Values(s string, secrets []string, m Marker) string {
 }
 
 // EnvSecrets returns the values of environment variables whose names name a
-// secret, longest first. A short value is skipped so common small strings are not
-// redacted by accident; a real credential is longer than that.
+// secret, longest first. A value is returned only when it could be a credential:
+// at least 8 bytes, and either at least 16 bytes long or containing a byte that
+// is not a lowercase ASCII letter. A short lowercase word is usually a
+// placeholder, and redacting one corrupts repository text that an agent must
+// write back verbatim; a token-shaped value is still caught.
 func EnvSecrets(env []string) []string {
 	var out []string
 	seen := map[string]bool{}
 	for _, kv := range env {
 		name, value, ok := strings.Cut(kv, "=")
-		if !ok || len(value) < 4 || seen[value] || !IsSecretName(name) {
+		if !ok || seen[value] || !IsSecretName(name) || !looksLikeCredential(value) {
 			continue
 		}
 		seen[value] = true
@@ -128,6 +131,29 @@ func EnvSecrets(env []string) []string {
 	}
 	sort.Slice(out, func(i, j int) bool { return len(out[i]) > len(out[j]) })
 	return out
+}
+
+// looksLikeCredential reports whether value has the shape of a credential rather
+// than of a placeholder. Values shorter than 8 bytes are skipped, and values of
+// at least 16 bytes are kept even when they are all lowercase letters, so a long
+// passphrase still redacts. Between those bounds a value is kept only when it
+// carries a byte that is not a lowercase ASCII letter: a digit, an uppercase
+// letter, or a symbol. That skips words such as "local" while keeping keys,
+// hexadecimal digests, and mixed-case tokens.
+func looksLikeCredential(value string) bool {
+	if len(value) < 8 {
+		return false
+	}
+	if len(value) >= 16 {
+		return true
+	}
+	for i := 0; i < len(value); i++ {
+		c := value[i]
+		if c < 'a' || c > 'z' {
+			return true
+		}
+	}
+	return false
 }
 
 // secretNameMarkers mark an environment variable or assignment key as naming a

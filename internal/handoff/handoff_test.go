@@ -315,21 +315,21 @@ func TestRedactExcludesSecrets(t *testing.T) {
 func TestManagerRedactsBeforePersisting(t *testing.T) {
 	store := &fakeStore{}
 	manager := newManager(store, NoOpCompressor{}, 1) // over budget: exercise compression too
-	manager.Env = []string{"DEPLOY_TOKEN=supersecret"}
+	manager.Env = []string{"DEPLOY_TOKEN=Super-Secret-Value-42"}
 
 	record, err := manager.Complete(context.Background(), doneTask("T1"),
-		Facts{Summary: "token supersecret"},
-		[]Artifact{{Kind: ArtifactCILog, Content: "log supersecret"}})
+		Facts{Summary: "token Super-Secret-Value-42"},
+		[]Artifact{{Kind: ArtifactCILog, Content: "log Super-Secret-Value-42"}})
 	if err != nil {
 		t.Fatalf("Complete failed: %v", err)
 	}
-	if strings.Contains(record.Capsule.Summary, "supersecret") {
+	if strings.Contains(record.Capsule.Summary, "Super-Secret-Value-42") {
 		t.Errorf("secret leaked into capsule: %q", record.Capsule.Summary)
 	}
-	if strings.Contains(store.saved["T1"].Capsule.Summary, "supersecret") {
+	if strings.Contains(store.saved["T1"].Capsule.Summary, "Super-Secret-Value-42") {
 		t.Errorf("secret leaked into persisted capsule: %q", store.saved["T1"].Capsule.Summary)
 	}
-	if strings.Contains(record.Content, "supersecret") {
+	if strings.Contains(record.Content, "Super-Secret-Value-42") {
 		t.Errorf("secret leaked into compressed content: %q", record.Content)
 	}
 }
@@ -343,15 +343,15 @@ func TestRedactAllReturnsInputWhenNoEnv(t *testing.T) {
 
 func TestManagerBoundsAndRedactsCompressionError(t *testing.T) {
 	store := &fakeStore{}
-	compressor := &fakeCompressor{err: errors.New("token supersecret " + strings.Repeat("z", 1000))}
+	compressor := &fakeCompressor{err: errors.New("token Super-Secret-Value-42 " + strings.Repeat("z", 1000))}
 	manager := newManager(store, compressor, 1)
-	manager.Env = []string{"DEPLOY_TOKEN=supersecret"}
+	manager.Env = []string{"DEPLOY_TOKEN=Super-Secret-Value-42"}
 
 	record, err := manager.Complete(context.Background(), doneTask("T1"), Facts{}, []Artifact{artifact(100)})
 	if err != nil {
 		t.Fatalf("Complete failed: %v", err)
 	}
-	if strings.Contains(record.CompressionError, "supersecret") {
+	if strings.Contains(record.CompressionError, "Super-Secret-Value-42") {
 		t.Errorf("secret leaked into compression error: %q", record.CompressionError)
 	}
 	if len(record.CompressionError) > maxErrorLen {
