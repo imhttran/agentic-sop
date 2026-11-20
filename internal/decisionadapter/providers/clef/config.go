@@ -8,8 +8,9 @@ import (
 
 // Defaults used when configuration is not supplied.
 //
-// Clef is OFF by default: the zero Config is disabled and must be explicitly
-// enabled by the operator (Enable=true or CLEF_ENABLED=1). Transport defaults
+// Clef is OFF by default: the zero Config is disabled, and ConfigFromEnv
+// leaves it disabled unless CLEF_ENABLED is "1"/"true"/"yes". An operator who
+// selects Clef by name gets EnabledWhenSelected instead. Transport defaults
 // MUST NOT implicitly enable Clef.
 const (
 	// DefaultBaseURL is the conventional local Ollama endpoint. It is only a
