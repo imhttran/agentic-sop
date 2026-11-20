@@ -121,6 +121,7 @@ func TestNotifyStatusConfirmedDeliveryIsActive(t *testing.T) {
 // TestNotifyStatusRemovedConfigurationIsUnavailable proves removing configuration
 // reports unavailable with an actionable reason.
 func TestNotifyStatusRemovedConfigurationIsUnavailable(t *testing.T) {
+	clearNotifyEnv(t)
 	dir := notifyFixture(t, config.NotifyChannelNone, "")
 	doc := notifyStatusJSON(t, dir)
 	if doc["availability"] != NotifyUnavailable {

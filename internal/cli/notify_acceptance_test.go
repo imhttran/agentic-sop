@@ -133,6 +133,7 @@ func TestAcceptanceNotifyStatusReportsConfigurationAndExhaustion(t *testing.T) {
 	})
 
 	t.Run("unconfigured reports unavailable", func(t *testing.T) {
+		clearNotifyEnv(t)
 		dir := notifyFixture(t, config.NotifyChannelNone, "")
 		var out, errb bytes.Buffer
 		if code := runNotify([]string{"status", "--json"}, &out, &errb, notifyDeps(dir)); code != exitOK {
