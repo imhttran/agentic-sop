@@ -175,7 +175,7 @@ jobs:
         run: bash scripts/checks/race-shard.sh --check
       - name: test -race
         # ponytail: the package suite exceeds the default 10 m per-package alarm on the
-        # runner under -race. Raise the alarm; cut test cost later.
+        # runner under -race. Raise the alarm; cut test cost later. Revisit when a race shard hits.
         env:
           SHARD: ${{ matrix.shard }}
           SOP_TEST_PARALLEL: "4"
