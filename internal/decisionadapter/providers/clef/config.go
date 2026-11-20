@@ -82,8 +82,9 @@ func (c Config) WithDefaults() Config {
 //	CLEF_ENABLED     explicit enable flag (default false; required to enable)
 //	CLEF_TRANSPORT   "systemone" (default) or "chat" (OpenAI /v1/chat/completions)
 //
-// CLEF_ENABLED is a deliberate opt-in: any other value than "1"/"true"/"yes"
-// (case-insensitive) leaves the provider disabled.
+// The package default stays off: ConfigFromEnv leaves the provider disabled unless
+// CLEF_ENABLED is "1"/"true"/"yes" (case-insensitive). An operator who selects
+// Clef by name gets EnabledWhenSelected instead.
 func ConfigFromEnv() Config {
 	return Config{
 		BaseURL:   envOr("OLLAMA_BASE_URL", DefaultBaseURL),
@@ -92,6 +93,19 @@ func ConfigFromEnv() Config {
 		Enable:    envBool("CLEF_ENABLED"),
 		Transport: envOr("CLEF_TRANSPORT", TransportSystemOne),
 	}.WithDefaults()
+}
+
+// EnabledWhenSelected reports whether Clef may serve once an operator has
+// selected it by name (-provider clef, SOP_DECISION_ADAPTER_PROVIDER=clef, or an
+// explicit SOP_DECISION_FALLBACK=clef). Naming it is the opt-in, so an unset or
+// empty CLEF_ENABLED allows it and "1"/"true"/"yes" allows it explicitly. Any
+// other value (0, false, off, or something unparseable) turns it off, so
+// CLEF_ENABLED=0 is a kill switch and a typo fails closed.
+func EnabledWhenSelected() bool {
+	if strings.TrimSpace(os.Getenv("CLEF_ENABLED")) == "" {
+		return true
+	}
+	return envBool("CLEF_ENABLED")
 }
 
 func envOr(key, fallback string) string {

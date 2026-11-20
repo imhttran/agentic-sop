@@ -5,9 +5,10 @@
 //
 //	decision.Provider -> internal/providers/clef -> POST /v1/systemone -> Ollama -> Clef
 //
-// /v1/systemone is the CLEF-002-selected transport. The unverified MLX/oMLX
-// clef-4bit runtime is NOT wired here and cannot be enabled: only the selected
-// transport has an implementation, and Clef is OFF by default.
+// /v1/systemone is the CLEF-002-selected transport (Ollama or oMLX serve it); an
+// OpenAI-style chat transport is an alternative (CLEF_TRANSPORT=chat). The zero
+// Config is disabled; the decision-adapter CLI enables Clef when an operator
+// selects it by name, and CLEF_ENABLED=0 turns it off (see EnabledWhenSelected).
 //
 // The adapter only translates and normalizes. It never defines or enforces SOP
 // policy; approval gates, execution thresholds, and safety enforcement belong
