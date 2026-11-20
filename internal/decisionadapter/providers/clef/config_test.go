@@ -131,3 +131,21 @@ func TestConfigWithDefaults(t *testing.T) {
 		t.Error("WithDefaults() cleared explicit Enable, want true")
 	}
 }
+
+func TestEnabledWhenSelected(t *testing.T) {
+	cases := []struct {
+		val  string
+		want bool
+	}{
+		{"", true}, {"  ", true}, {"1", true}, {"true", true}, {"YES", true},
+		{"0", false}, {"false", false}, {"no", false}, {"off", false}, {"nonsense", false},
+	}
+	for _, c := range cases {
+		t.Run("CLEF_ENABLED="+c.val, func(t *testing.T) {
+			t.Setenv("CLEF_ENABLED", c.val)
+			if got := EnabledWhenSelected(); got != c.want {
+				t.Errorf("EnabledWhenSelected() = %v, want %v", got, c.want)
+			}
+		})
+	}
+}

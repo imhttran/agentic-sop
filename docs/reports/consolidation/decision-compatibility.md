@@ -8,8 +8,9 @@ The unified decision layer keeps the reconciled CLEF / oMLX and Bespoke-Nimble
 implementations as normalized providers behind the single `decision.Provider`
 contract, and composes a bounded failover with no new framework:
 
-1. **Primary** — the configured provider (default `nimble`; `clef` is opt-in via
-   `CLEF_ENABLED`). Selected by `sop decision decide -provider <name>`.
+1. **Primary** — the configured provider (default `nimble`; naming `clef` is the
+   opt-in, and `CLEF_ENABLED=0` turns it off). Selected by
+   `sop decision decide -provider <name>`.
 2. **Backup** — when `SOP_DECISION_FALLBACK` names a different provider,
    `internal/decisionadapter/providers/fallback.Provider` serves the primary first
    and the backup only when the primary errors. `DECIDER_URL` and
@@ -43,8 +44,9 @@ policy.
   fallback is advisory-only (primary name preserved)**; **cancelled primary does not
   attempt the backup**; **deadline primary does not attempt the backup**; **both
   unavailable is an error, not a zero-value result**.
-- `internal/decisionadapter/cli`: clef selection is OFF unless `CLEF_ENABLED`; a
-  disabled clef is never accidentally selected; selection fail-closed paths.
+- `internal/decisionadapter/cli`: clef is never the default provider and naming it
+  enables it; an explicit `CLEF_ENABLED=0` (or an unparseable value) disables it
+  and fails closed; selection fail-closed paths.
 - `internal/decisionadapter/providers/{clef,nimble,julia}`: transport, translation,
   golden payload and governance tests (imported byte-exact).
 
@@ -61,6 +63,7 @@ policy.
 
 ## Precedence note
 
-`CLEF_ENABLED` remains the explicit opt-in; selecting `clef` without it yields an
-unavailable provider rather than serving decisions. No global model default or
+Naming `clef` is the opt-in. `CLEF_ENABLED=0` (or any value other than
+`1`/`true`/`yes`) is a kill switch that yields an unavailable provider rather
+than serving decisions. No global model default or
 advisory authority is changed.

@@ -14,33 +14,28 @@ import (
 	"github.com/imhttran/agentic-sop/internal/decisionadapter/providers/clef"
 )
 
-// TestNewProviderClefOffByDefault proves that selecting the clef provider
-// through the in-process selection seam constructs a Clef provider but does NOT
-// enable it unless CLEF_ENABLED is explicitly set.
-func TestNewProviderClefOffByDefault(t *testing.T) {
+// TestNewProviderClefEnabledBySelection proves that naming clef is the opt-in:
+// with CLEF_ENABLED unset, the selected Clef provider attempts to serve (it
+// reaches the backend) instead of failing as disabled. Clef is still never the
+// default provider; see TestDefaultProviderUnchangedWhenNothingSelected.
+func TestNewProviderClefEnabledBySelection(t *testing.T) {
 	t.Setenv("CLEF_ENABLED", "")
+	srv, hits := countingServer(t)
 
-	p, err := newProvider("clef", "", "", time.Second)
+	p, err := newProvider("clef", srv.URL, "", time.Second)
 	if err != nil {
 		t.Fatalf("newProvider(clef): unexpected error: %v", err)
-	}
-	if p == nil {
-		t.Fatal("newProvider(clef): got nil provider")
 	}
 	if got := p.Name(); got != clef.ProviderName {
 		t.Fatalf("provider name = %q, want %q", got, clef.ProviderName)
 	}
 
-	if p.Available(context.Background()) {
-		t.Fatal("clef provider reports Available=true without CLEF_ENABLED; must be OFF by default")
+	_, err = p.Decide(context.Background(), clefReq())
+	if errors.Is(err, clef.ErrDisabled) {
+		t.Fatalf("selected clef is disabled without CLEF_ENABLED: %v", err)
 	}
-
-	_, err = p.Decide(context.Background(), decision.DecisionRequest{})
-	if err == nil {
-		t.Fatal("Decide on disabled clef provider: expected error, got nil")
-	}
-	if !errors.Is(err, decision.ErrUnavailable) {
-		t.Fatalf("Decide error = %v, want ErrUnavailable", err)
+	if *hits == 0 {
+		t.Fatal("selected clef never reached the backend; it must attempt to serve")
 	}
 }
 
@@ -161,11 +156,12 @@ func TestFlagProviderDefaultIsNimble(t *testing.T) {
 	}
 }
 
-// TestDisabledClefNotAccidentallySelected proves no-accidental-selection: with
-// CLEF_ENABLED unset/empty/invalid the constructed Clef provider is never
-// available and its Decide is gated by ErrDisabled/KindUnavailable.
+// TestDisabledClefNotAccidentallySelected proves CLEF_ENABLED is still a kill
+// switch: with an explicit off or an unparseable value the constructed Clef
+// provider is never available and its Decide is gated by
+// ErrDisabled/KindUnavailable (a typo fails closed).
 func TestDisabledClefNotAccidentallySelected(t *testing.T) {
-	for _, val := range []string{"", "0", "false", "no", "off", "nonsense"} {
+	for _, val := range []string{"0", "false", "no", "off", "nonsense"} {
 		t.Run("CLEF_ENABLED="+val, func(t *testing.T) {
 			t.Setenv("CLEF_ENABLED", val)
 			p, err := newProvider("clef", "", "", time.Second)
@@ -187,18 +183,11 @@ func TestDisabledClefNotAccidentallySelected(t *testing.T) {
 	}
 }
 
-// TestSelectingClefDoesNotEnableItNorAffectOthers proves selection is separate
-// from enablement and is isolated from other providers.
-func TestSelectingClefDoesNotEnableItNorAffectOthers(t *testing.T) {
+// TestSelectingClefEnablesOnlyClef proves naming clef enables clef alone and is
+// isolated from other providers, and that an explicit SOP_DECISION_FALLBACK=clef
+// is also an opt-in.
+func TestSelectingClefEnablesOnlyClef(t *testing.T) {
 	t.Setenv("CLEF_ENABLED", "")
-
-	cp, err := newProvider("clef", "", "", time.Second)
-	if err != nil || cp == nil || cp.Name() != clef.ProviderName {
-		t.Fatalf("newProvider(clef) = %v, %v; want Clef provider", cp, err)
-	}
-	if cp.Available(context.Background()) {
-		t.Fatal("selecting clef enabled it; it must stay disabled without CLEF_ENABLED")
-	}
 
 	// Other providers are unaffected by Clef selection.
 	np, err := newProvider("nimble", "", "", time.Second)
@@ -208,6 +197,21 @@ func TestSelectingClefDoesNotEnableItNorAffectOthers(t *testing.T) {
 	jp, err := newProvider("julia", "", "", time.Second)
 	if err != nil || jp == nil || jp.Name() != "julia" {
 		t.Fatalf("newProvider(julia) = %v, %v; want julia provider", jp, err)
+	}
+
+	// Clef named only as the fallback is enabled too.
+	primary, _ := countingServer(t)
+	backup, backupHits := countingServer(t)
+	t.Setenv("SOP_DECISION_FALLBACK", "clef")
+	t.Setenv("DECIDER_URL", primary.URL)
+	t.Setenv("DECIDER_FALLBACK_URL", backup.URL)
+	fp, err := newProvider("nimble", "", "", time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = fp.Decide(context.Background(), clefReq())
+	if *backupHits == 0 {
+		t.Fatal("clef named as SOP_DECISION_FALLBACK never served; naming it must enable it")
 	}
 }
 
@@ -453,4 +457,24 @@ func TestDeciderModelsRoutePrimaryAndFallbackSeparately(t *testing.T) {
 	if !strings.Contains(primaryBody, "flag-model") || strings.Contains(primaryBody, "primary-model") {
 		t.Fatalf("-model flag must win for the primary: %q", primaryBody)
 	}
+}
+
+// clefReq is a minimal valid choice request for exercising Decide.
+func clefReq() decision.DecisionRequest {
+	return decision.DecisionRequest{State: "s", Questions: []decision.Question{
+		{ID: "q", Type: decision.QuestionChoice, Criteria: "c", Choices: []string{"a", "b"}},
+	}}
+}
+
+// countingServer answers every request with a 500 and counts them, so a test can
+// tell "Clef tried to serve" (hits > 0) from "Clef was disabled" (no request).
+func countingServer(t *testing.T) (*httptest.Server, *int) {
+	t.Helper()
+	var hits int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits++
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &hits
 }

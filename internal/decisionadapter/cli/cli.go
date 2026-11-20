@@ -197,9 +197,11 @@ func buildProvider(name, baseURL, model string, timeout time.Duration) (decision
 		cfg.Timeout = timeout
 		return julia.New(cfg, nil), nil
 	case "clef":
-		// Clef is OFF unless explicitly enabled via CLEF_ENABLED; selection
-		// constructs the provider but does not enable it.
+		// Reaching here means the operator named clef (flag, adapter provider
+		// setting, or SOP_DECISION_FALLBACK), which is the opt-in. CLEF_ENABLED=0
+		// still turns it off; Clef is never selected by default.
 		cfg := clef.ConfigFromEnv()
+		cfg.Enable = clef.EnabledWhenSelected()
 		if strings.TrimSpace(baseURL) != "" {
 			cfg.BaseURL = baseURL
 		}
@@ -351,16 +353,18 @@ Environment (clef):
   OLLAMA_BASE_URL     Ollama-compatible backend root (default http://localhost:11434)
   CLEF_MODEL          Clef model name (default "clef-flash")
   CLEF_TIMEOUT        request timeout (default 30s)
-  CLEF_ENABLED        explicit opt-in; Clef is OFF unless set to 1/true/yes
+  CLEF_ENABLED        optional; naming clef as the provider enables it. Set 0 (or
+                      any value other than 1/true/yes) to turn it off.
 
-  Clef is OFF by default and is only selected when enabled explicitly with
-  -provider clef AND CLEF_ENABLED=1. Selecting it without CLEF_ENABLED yields
-  an unavailable provider rather than serving decisions.
+  Clef is never selected by default (the default provider is nimble). Naming it
+  with -provider clef, SOP_DECISION_ADAPTER_PROVIDER=clef or
+  SOP_DECISION_FALLBACK=clef is enough to enable it; CLEF_ENABLED=0 disables it,
+  and a disabled Clef yields an unavailable provider rather than serving.
 
 Examples:
   sop decision decide -provider nimble -file tests/fixtures/risk-evaluation.json
   sop decision decide -provider julia -file tests/fixtures/risk-evaluation.json
-  CLEF_ENABLED=1 sop decision decide -provider clef -file tests/fixtures/risk-evaluation.json
+  sop decision decide -provider clef -file tests/fixtures/risk-evaluation.json
   sop decision decide -decision-id risk -choices LOW,MEDIUM,HIGH \
     -state "deploying a schema migration during business hours"
 `)
