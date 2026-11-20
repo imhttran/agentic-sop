@@ -100,11 +100,17 @@ func (t *httpChatTransport) Chat(ctx context.Context, req chatRequest) (chatResp
 
 // Models performs GET {base}/v1/models (the OpenAI listing) for availability.
 func (t *httpChatTransport) Models(ctx context.Context) ([]string, error) {
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, t.baseURL+"/v1/models", nil)
+	return openAIModels(ctx, t.client, t.baseURL)
+}
+
+// openAIModels lists model ids from GET {baseURL}/v1/models. oMLX serves only
+// this listing (no Ollama /api/tags); Ollama serves both.
+func openAIModels(ctx context.Context, client *http.Client, baseURL string) ([]string, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/v1/models", nil)
 	if err != nil {
 		return nil, fmt.Errorf("clef: build model request: %w", err)
 	}
-	resp, err := t.client.Do(httpReq)
+	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, err
 	}

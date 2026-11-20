@@ -95,7 +95,9 @@ type modelList struct {
 }
 
 // ListModels performs GET {baseURL}/api/tags and returns the reported model
-// names. It never issues an inference request.
+// names. A backend without that Ollama endpoint (oMLX answers 404) is listed
+// through the OpenAI-style /v1/models instead. It never issues an inference
+// request.
 func (t *httpTransport) ListModels(ctx context.Context) ([]string, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, t.baseURL+"/api/tags", nil)
 	if err != nil {
@@ -108,6 +110,9 @@ func (t *httpTransport) ListModels(ctx context.Context) ([]string, error) {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		return openAIModels(ctx, t.client, t.baseURL)
+	}
 	if resp.StatusCode != http.StatusOK {
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		return nil, &httpStatusError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(msg))}
