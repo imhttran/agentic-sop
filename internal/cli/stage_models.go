@@ -39,9 +39,7 @@ func applyStageModels(ctx context.Context, d *deps, cfg config.Config) error {
 			if class == "" {
 				continue
 			}
-			res, err := resolveModelLocality(ctx, model.Inputs{
-				Config: cfg.Models, Lookup: os.Getenv, CLIClass: string(class),
-			}, runtimeLocalityObserver(cfg))
+			res, err := resolveModelLocality(ctx, modelInputs(cfg, string(class)), runtimeLocalityObserver(cfg))
 			if err != nil {
 				return fmt.Errorf("model routing: stages.%s: %w", st, err)
 			}

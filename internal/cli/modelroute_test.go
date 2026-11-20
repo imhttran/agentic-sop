@@ -150,7 +150,7 @@ func modelRoutingEnvKeys() []string {
 		keys = append(keys, model.StageEnvKey(st), model.StageProviderEnvKey(st), model.StageNameEnvKey(st))
 	}
 	for _, c := range model.Classes {
-		for _, f := range []string{"PROVIDER", "NAME", "LOCALITY"} {
+		for _, f := range []string{"PROVIDER", "NAME", "LOCALITY", "BASE_URL", "API_KEY"} {
 			keys = append(keys, model.ClassEnvKey(c, f), model.ClassFallbackEnvKey(c, f))
 		}
 	}

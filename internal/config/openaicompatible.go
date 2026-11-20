@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"strings"
+
+	"github.com/imhttran/agentic-sop/internal/model"
 )
 
 // Configuration surface for the generic OpenAI-compatible provider identity.
@@ -18,10 +20,24 @@ const (
 	// EnvOpenAICompatibleBaseURL overrides the configured endpoint. It is
 	// deliberately distinct from SOP_MLX_BASE_URL / SOP_LLAMACPP_BASE_URL.
 	EnvOpenAICompatibleBaseURL = "SOP_OPENAI_COMPATIBLE_BASE_URL"
+	// EnvOpenAICompatibleAPIKey supplies the shared OpenRouter (or other
+	// OpenAI-compatible) credential. It is scoped to the shared endpoint's origin:
+	// see ResolveOpenAICompatibleRoute.
+	EnvOpenAICompatibleAPIKey = "SOP_OPENAI_COMPATIBLE_API_KEY"
 	// DefaultOpenAICompatibleBaseURL is the built-in endpoint used when neither
 	// the environment nor the configuration names one.
 	DefaultOpenAICompatibleBaseURL = "http://127.0.0.1:8000"
 )
+
+// ClassBaseURLEnvKey returns the optional per-class endpoint override, for
+// example SOP_MODEL_SMALL_BASE_URL. It takes precedence over the shared provider
+// endpoint for that class only.
+func ClassBaseURLEnvKey(c model.Class) string { return model.ClassEnvKey(c, "BASE_URL") }
+
+// ClassAPIKeyEnvKey returns the optional per-class credential, for example
+// SOP_MODEL_SMALL_API_KEY. It is used only when the class selects an endpoint
+// that needs its own key.
+func ClassAPIKeyEnvKey(c model.Class) string { return model.ClassEnvKey(c, "API_KEY") }
 
 // OpenAICompatibleEndpoint returns the endpoint configured for the generic
 // OpenAI-compatible provider, or the empty string when none is configured. An
@@ -51,4 +67,46 @@ func (c Config) ResolveOpenAICompatibleEndpoint() string {
 		return cfg
 	}
 	return DefaultOpenAICompatibleBaseURL
+}
+
+// ResolveOpenAICompatibleEndpointForClass returns the endpoint a class's
+// openai_compatible model is served at. An optional SOP_MODEL_<CLASS>_BASE_URL
+// takes precedence over the shared provider endpoint; when it is absent the
+// shared resolution (environment > configuration > default) is unchanged.
+func (c Config) ResolveOpenAICompatibleEndpointForClass(class model.Class) string {
+	if class.Valid() {
+		if v := strings.TrimSpace(os.Getenv(ClassBaseURLEnvKey(class))); v != "" {
+			return v
+		}
+	}
+	return c.ResolveOpenAICompatibleEndpoint()
+}
+
+// ResolveOpenAICompatibleRoute resolves the endpoint and credential for one
+// class's openai_compatible model. The credential is scoped to its destination:
+//
+//  1. an optional SOP_MODEL_<CLASS>_API_KEY is used for that class's endpoint;
+//  2. otherwise the shared SOP_OPENAI_COMPATIBLE_API_KEY is used only when the
+//     class's effective endpoint has the SAME origin as the shared endpoint;
+//  3. otherwise no credential is sent.
+//
+// A class endpoint override to a different origin (for example a local oMLX
+// server while the shared endpoint is OpenRouter) therefore never receives the
+// shared key. Neither endpoint nor key is logged.
+func (c Config) ResolveOpenAICompatibleRoute(class model.Class) (endpoint, apiKey string) {
+	shared := c.ResolveOpenAICompatibleEndpoint()
+	endpoint = c.ResolveOpenAICompatibleEndpointForClass(class)
+	if class.Valid() {
+		if v := strings.TrimSpace(os.Getenv(ClassAPIKeyEnvKey(class))); v != "" {
+			return endpoint, v
+		}
+	}
+	sharedKey := strings.TrimSpace(os.Getenv(EnvOpenAICompatibleAPIKey))
+	if sharedKey == "" {
+		return endpoint, ""
+	}
+	if model.SameOrigin(endpoint, shared) {
+		return endpoint, sharedKey
+	}
+	return endpoint, ""
 }

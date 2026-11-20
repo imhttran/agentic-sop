@@ -33,11 +33,7 @@ func loadDotEnv(dir string) error {
 // The returned result is for observability (the startup summary); policy never
 // reads it back.
 func applyModelRouting(ctx context.Context, cfg *config.Config, cliClass string) (model.Result, error) {
-	res, err := resolveModelLocality(ctx, model.Inputs{
-		Config:   cfg.Models,
-		Lookup:   os.Getenv,
-		CLIClass: cliClass,
-	}, runtimeLocalityObserver(*cfg))
+	res, err := resolveModelLocality(ctx, modelInputs(*cfg, cliClass), runtimeLocalityObserver(*cfg))
 	if err != nil {
 		return model.Result{}, err
 	}

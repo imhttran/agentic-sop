@@ -16,6 +16,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/provider/llamacpp"
 	"github.com/imhttran/agentic-sop/internal/provider/mlx"
 	"github.com/imhttran/agentic-sop/internal/provider/ollama"
+	"github.com/imhttran/agentic-sop/internal/provider/openai"
 )
 
 // providerProbeTimeout bounds a single provider health or discovery probe. It is
@@ -29,7 +30,37 @@ const providerProbeTimeout = 5 * time.Second
 // respect to SOP state - building a registry starts no execution and selects no
 // model class.
 func newProviderRegistry(cfg config.Config) (*provider.Registry, error) {
+	return newProviderRegistryFor(cfg, nil)
+}
+
+// providerOverride is a per-selection endpoint/credential pair for discovery. It
+// lets validation and availability probes ask the endpoint the selected model is
+// actually served at, rather than the shared provider endpoint.
+type providerOverride struct {
+	endpoint string
+	apiKey   string
+}
+
+// newProviderRegistryFor builds the registry with optional per-provider endpoint
+// overrides. An override wins over the shared resolution for that provider; the
+// credential is the one scoped to the override's destination.
+func newProviderRegistryFor(cfg config.Config, overrides map[provider.ID]providerOverride) (*provider.Registry, error) {
 	reg := provider.NewRegistry()
+	sharedEndpoint, sharedKey := cfg.ResolveOpenAICompatibleRoute(model.Class(""))
+	openAIEndpoint, openAIKey := sharedEndpoint, sharedKey
+	if o, ok := overrides[provider.OpenaiCompatible]; ok {
+		if ep := strings.TrimSpace(o.endpoint); ep != "" {
+			openAIEndpoint = ep
+		}
+		// The override's credential is authoritative. When it names an endpoint on a
+		// different origin and supplies no key, fail closed: never forward the shared
+		// key to another destination. A same-origin override may still use the shared
+		// key.
+		openAIKey = strings.TrimSpace(o.apiKey)
+		if openAIKey == "" && model.SameOrigin(openAIEndpoint, sharedEndpoint) {
+			openAIKey = sharedKey
+		}
+	}
 	entries := []provider.Provider{
 		ollama.New(endpointOr(cfg.Providers.Ollama.Endpoint, ollama.EnvBaseURL, ollama.DefaultBaseURL), providerProbeTimeout),
 		llamacpp.New(
@@ -38,6 +69,7 @@ func newProviderRegistry(cfg config.Config) (*provider.Registry, error) {
 			providerProbeTimeout,
 		),
 		mlx.New(endpointOr(cfg.Providers.MLX.Endpoint, mlx.EnvBaseURL, mlx.DefaultBaseURL), providerProbeTimeout),
+		openai.New(provider.OpenaiCompatible, openAIEndpoint, providerProbeTimeout).WithAPIKey(openAIKey),
 		command.New(),
 	}
 	for _, p := range entries {
@@ -177,7 +209,10 @@ func validateSelection(ctx context.Context, cfg config.Config, sel model.Selecti
 	if sel.Provider == string(provider.Command) {
 		return nil
 	}
-	reg, err := newProviderRegistry(cfg)
+	endpoint, key := cfg.ResolveOpenAICompatibleRoute(sel.Class)
+	reg, err := newProviderRegistryFor(cfg, map[provider.ID]providerOverride{
+		provider.OpenaiCompatible: {endpoint: endpoint, apiKey: key},
+	})
 	if err != nil {
 		return err
 	}
@@ -217,7 +252,10 @@ func localRuntimeProbe(cfg config.Config, sel model.Selection) (bool, string) {
 	if sel.Provider == string(provider.Command) {
 		return false, ""
 	}
-	reg, err := newProviderRegistry(cfg)
+	endpoint, key := cfg.ResolveOpenAICompatibleRoute(sel.Class)
+	reg, err := newProviderRegistryFor(cfg, map[provider.ID]providerOverride{
+		provider.OpenaiCompatible: {endpoint: endpoint, apiKey: key},
+	})
 	if err != nil {
 		return false, ""
 	}

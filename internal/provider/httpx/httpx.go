@@ -38,10 +38,17 @@ func NewClient(timeout time.Duration) *http.Client {
 // transport error (including context cancellation) is returned as-is so callers
 // can distinguish "could not reach" from "reached, non-2xx".
 func Get(ctx context.Context, client *http.Client, url string) (int, []byte, error) {
+	return GetWithHeaders(ctx, client, url, nil)
+}
+
+// GetWithHeaders is Get with optional request headers (for example an
+// Authorization header for a credentialed endpoint). A nil header map adds none.
+func GetWithHeaders(ctx context.Context, client *http.Client, url string, headers http.Header) (int, []byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return 0, nil, fmt.Errorf("build request: %w", err)
 	}
+	addHeaders(req, headers)
 	resp, err := client.Do(req)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
@@ -60,7 +67,13 @@ func Get(ctx context.Context, client *http.Client, url string) (int, []byte, err
 // GetJSON performs a GET and decodes a 2xx JSON body into out. A non-2xx status
 // becomes a bounded error; a transport error is returned wrapped.
 func GetJSON(ctx context.Context, client *http.Client, url string, out any) error {
-	return doJSON(ctx, client, http.MethodGet, url, nil, out)
+	return doJSON(ctx, client, http.MethodGet, url, nil, nil, out)
+}
+
+// GetJSONWithHeaders is GetJSON with optional request headers (for example an
+// Authorization header for a credentialed endpoint). A nil header map adds none.
+func GetJSONWithHeaders(ctx context.Context, client *http.Client, url string, headers http.Header, out any) error {
+	return doJSON(ctx, client, http.MethodGet, url, nil, headers, out)
 }
 
 // PostJSON performs a POST of a JSON body and decodes a 2xx JSON response into
@@ -70,10 +83,10 @@ func PostJSON(ctx context.Context, client *http.Client, url string, in, out any)
 	if err != nil {
 		return fmt.Errorf("encode request: %w", err)
 	}
-	return doJSON(ctx, client, http.MethodPost, url, payload, out)
+	return doJSON(ctx, client, http.MethodPost, url, payload, nil, out)
 }
 
-func doJSON(ctx context.Context, client *http.Client, method, url string, payload []byte, out any) error {
+func doJSON(ctx context.Context, client *http.Client, method, url string, payload []byte, headers http.Header, out any) error {
 	var body io.Reader
 	if payload != nil {
 		body = bytes.NewReader(payload)
@@ -82,6 +95,7 @@ func doJSON(ctx context.Context, client *http.Client, method, url string, payloa
 	if err != nil {
 		return fmt.Errorf("build request: %w", err)
 	}
+	addHeaders(req, headers)
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -114,6 +128,15 @@ func doJSON(ctx context.Context, client *http.Client, method, url string, payloa
 		return fmt.Errorf("decode response: %w", err)
 	}
 	return nil
+}
+
+// addHeaders adds every header value to req. It is a no-op for a nil map.
+func addHeaders(req *http.Request, headers http.Header) {
+	for k, vs := range headers {
+		for _, v := range vs {
+			req.Header.Add(k, v)
+		}
+	}
 }
 
 // NormalizeBaseURL trims whitespace and trailing slashes from a base URL.

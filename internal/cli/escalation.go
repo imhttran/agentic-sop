@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -327,12 +326,10 @@ func attemptFailureStage(res lifeResult) string {
 // yields a different class (the model layer's fallback policy) is rejected: silently
 // accepting it would downgrade, or mislabel, the escalation.
 func resolveClassSelection(ctx context.Context, cfg config.Config, class model.Class, reason string) (model.Selection, error) {
-	res, err := resolveModelLocality(ctx, model.Inputs{
-		Config:       cfg.Models,
-		Lookup:       os.Getenv,
-		RoutedClass:  class,
-		RoutedReason: reason,
-	}, runtimeLocalityObserver(cfg))
+	in := modelInputs(cfg, "")
+	in.RoutedClass = class
+	in.RoutedReason = reason
+	res, err := resolveModelLocality(ctx, in, runtimeLocalityObserver(cfg))
 	if err != nil {
 		return model.Selection{}, err
 	}

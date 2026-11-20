@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/config"
@@ -229,7 +230,8 @@ func defaultDeps() deps {
 				if err != nil {
 					return nil, err
 				}
-				a, err := agent.NewOpenAICompatibleExecution(openAICompatibleExecutionEndpoint(dir), model)
+				endpoint, key := openAICompatibleRouteFor(dir, class)
+				a, err := agent.NewOpenAICompatibleExecutionWithKey(endpoint, model, key)
 				if err != nil {
 					return nil, err
 				}
@@ -304,13 +306,26 @@ func applyCargoAgentTool(d deps, cfg config.Config) {
 // production composition root, so a test that injects its own newAgent keeps its
 // seam.
 func openAICompatibleExecutionEndpoint(dir string) string {
+	endpoint, _ := openAICompatibleRouteFor(dir, "")
+	return endpoint
+}
+
+// openAICompatibleRouteFor resolves the endpoint and credential for one class's
+// openai_compatible model from the project configuration (when present) and the
+// environment. A class's SOP_MODEL_<CLASS>_BASE_URL takes precedence over the
+// shared provider endpoint, and the credential is scoped to the effective
+// endpoint's origin (see config.ResolveOpenAICompatibleRoute). The returned
+// values are used only to construct that class's agent and are never logged.
+func openAICompatibleRouteFor(dir, class string) (endpoint, apiKey string) {
 	cfg, err := config.LoadDir(dir)
 	if err != nil {
-		// No configuration (or an unreadable one) leaves the environment > default
-		// tiers; the caller has already validated a present configuration.
-		return agent.OpenAICompatibleEndpointFromEnv()
+		// No configuration (or an unreadable one): the built-in configuration
+		// still resolves the environment, including a class endpoint override, with
+		// the same credential scoping.
+		def := config.Default()
+		cfg = &def
 	}
-	return cfg.ResolveOpenAICompatibleEndpoint()
+	return cfg.ResolveOpenAICompatibleRoute(model.Class(strings.TrimSpace(class)))
 }
 
 // Run parses args and executes a single command, writing normal output to
