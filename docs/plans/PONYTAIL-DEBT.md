@@ -211,7 +211,7 @@ Change no timeout value and no workflow step.
 
 ### Deliverables
 
-- .github/workflows/ci.yml
+- None
 
 ### Dependencies
 
@@ -222,18 +222,21 @@ Change no timeout value and no workflow step.
 - The CI marker names the trigger `Revisit when a race shard hits`.
 - The comment keeps the `ponytail:` prefix.
 - The `SOP_TEST_TIMEOUT` value is unchanged.
+- The marker keeps the per-package-alarm ceiling text.
 
 ### Acceptance Checks
 
 - `git grep -q "Revisit when a race shard hits" -- .github/workflows/ci.yml`
 - `git grep -q "ponytail: " -- .github/workflows/ci.yml`
 - `git grep -q "SOP_TEST_TIMEOUT" -- .github/workflows/ci.yml`
+- `git grep -q "per-package alarm" -- .github/workflows/ci.yml`
 
 ### Acceptance Mapping
 
 - criterion 1: check 1
 - criterion 2: check 2
 - criterion 3: check 3
+- criterion 4: check 4
 
 ## Ledger Snapshot
 
