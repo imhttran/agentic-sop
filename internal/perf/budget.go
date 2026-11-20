@@ -22,10 +22,11 @@ var ErrTokenBudgetExceeded = errors.New("token budget exceeded")
 // refuses the request when the run's reported tokens have reached the budget,
 // and fails closed when usage cannot be measured: no usage collector on ctx,
 // or a provider that did not report usage for an earlier call.
-// ponytail: checked before each request, so the request that crosses the
-// budget still completes; the overshoot is bounded by one request's input plus
+// ponytail: checked before each request, so the request that crosses the budget
+// still completes; the overshoot is bounded by one request's input plus
 // SOP_AGENT_MAX_OUTPUT_TOKENS. It is a token cap, not a dollar cap: SOP has no
-// pricing data.
+// pricing data. Revisit when pricing data becomes available (switch to a dollar
+// cap), or when one request overshoots by more than SOP_AGENT_MAX_OUTPUT_TOKENS.
 func CheckTokenBudget(ctx context.Context) error {
 	raw := strings.TrimSpace(os.Getenv(EnvMaxTotalTokens))
 	if raw == "" {
