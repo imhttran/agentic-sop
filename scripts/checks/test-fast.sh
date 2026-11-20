@@ -44,6 +44,7 @@
 #   SOP_TEST_PLATFORM   linux|darwin|other, overrides uname-based detection
 #   SOP_TEST_RAM_DIR    RAM-backed probe directory (default /dev/shm)
 #   SOP_TEST_GO_BIN     go binary to invoke (default go)
+#   SOP_TEST_PACKAGES   space-separated package patterns to test (default ./...)
 
 set -euo pipefail
 
@@ -65,6 +66,7 @@ no_ram="${SOP_TEST_NO_RAM:-0}"
 min_free_mb="${SOP_TEST_MIN_FREE_MB:-512}"
 ram_dir="${SOP_TEST_RAM_DIR:-/dev/shm}"
 go_bin="${SOP_TEST_GO_BIN:-go}"
+packages="${SOP_TEST_PACKAGES:-./...}"
 print_plan=0
 go_args=()
 
@@ -218,12 +220,12 @@ trap cleanup EXIT INT TERM
 
 echo "test-fast: platform=$platform source=$source ram=$ram_used" >&2
 echo "test-fast: TMPDIR=$session" >&2
-echo "test-fast: $go_bin test ./... -p $parallel -count=1 -timeout $timeout ${go_args[*]:-}" >&2
+echo "test-fast: $go_bin test $packages -p $parallel -count=1 -timeout $timeout ${go_args[*]:-}" >&2
 
 # --- Run the suite -----------------------------------------------------------
 # TMPDIR is set only for this child process. The exit status is propagated
 # verbatim; a failed test run exits non-zero.
 status=0
-TMPDIR="$session" "$go_bin" test ./... -p "$parallel" -count=1 -timeout "$timeout" ${go_args[@]+"${go_args[@]}"} || status=$?
+TMPDIR="$session" "$go_bin" test $packages -p "$parallel" -count=1 -timeout "$timeout" ${go_args[@]+"${go_args[@]}"} || status=$?
 
 exit "$status"

@@ -38,7 +38,7 @@ jobs:
       # the wrapper falls back to the system temp directory (and says why) when it
       # does not. Parallelism matches the four-core runner and the timeout matches
       # go test's default, so this is the same suite under the same limits. The
-      # race-detector job below runs the same suite under -race.
+      # race-detector shards below run the same suite under -race.
       - name: test (RAM-backed TMPDIR)
         env:
           SOP_TEST_PARALLEL: "4"
@@ -155,25 +155,45 @@ jobs:
           export SOP_SECURITY_E2E_RULES="$tools/semgrep-rules"
           bash scripts/checks/stage2-gate-e2e.sh
 
-  # The suite under the race detector, which the lifecycle and scheduler tests rely on.
-  race:
-    name: race detector
+  # The suite under the race detector, which the lifecycle and scheduler tests rely on,
+  # split across two runners (scripts/checks/race-shard.sh). Same RAM-backed TMPDIR
+  # runner as the ordinary suite: SQLite I/O under -race is the slow part.
+  race-shard:
+    name: race detector shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
+      - name: shards cover every package once
+        run: bash scripts/checks/race-shard.sh --check
       - name: test -race
-        # ponytail: the package suite runs ~134 s locally under -race and exceeds the
-        # default 10 m per-package alarm on the runner. Raise the alarm; cut test cost later.
-        # Same RAM-backed TMPDIR runner as the ordinary suite: SQLite I/O under -race is
-        # the slow part. It falls back to disk (and says why) if /dev/shm is unusable.
+        # ponytail: the package suite exceeds the default 10 m per-package alarm on the
+        # runner under -race. Raise the alarm; cut test cost later.
         env:
+          SHARD: ${{ matrix.shard }}
           SOP_TEST_PARALLEL: "4"
           SOP_TEST_TIMEOUT: "30m"
-        run: ./scripts/checks/test-fast.sh -- -race
+        run: |
+          SOP_TEST_PACKAGES="$(bash scripts/checks/race-shard.sh "$SHARD" | tr '\n' ' ')" \
+            ./scripts/checks/test-fast.sh -- -race
+
+  # Keeps the required status check named "race detector" while the work runs in shards.
+  race:
+    name: race detector
+    needs: race-shard
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULT: ${{ needs.race-shard.result }}
+        run: test "$RESULT" = success
 
   # The tagged JEV evidence acceptance checks. They are build-tagged out of the ordinary
   # suite (so `go test ./...` stays green before an evidence artifact exists); this job runs
