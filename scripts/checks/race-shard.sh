@@ -4,14 +4,14 @@
 #
 # The heavy packages are pinned so the shards stay balanced; every other package,
 # including any added later, alternates between the shards, so none can be missed.
-# shortcut: weights are hand-picked from one CI run; re-pin if a shard drifts.
+# shortcut: weights are hand-picked from CI runs (contention skews them); re-pin if a shard drifts.
 set -euo pipefail
 
 shard() {
   go list ./... | awk -v mod="$(go list -m)" -v n="$1" '
     BEGIN {
-      split("internal/cli internal/retrievalgate", a, " ");                           for (i in a) pin[mod "/" a[i]] = 1
-      split("internal/ollamaagent internal/toolharness internal/dqharness", b, " ");  for (i in b) pin[mod "/" b[i]] = 2
+      split("internal/cli internal/retrievalgate internal/dqharness internal/dist", a, " ");  for (i in a) pin[mod "/" a[i]] = 1
+      split("internal/ollamaagent internal/toolharness", b, " ");                              for (i in b) pin[mod "/" b[i]] = 2
     }
     { s = ($0 in pin) ? pin[$0] : (++k % 2) + 1; if (s == n) print }'
 }
