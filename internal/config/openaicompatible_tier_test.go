@@ -78,6 +78,31 @@ func TestResolveOpenAICompatibleRouteSameOrigin(t *testing.T) {
 	}
 }
 
+// TestResolveOpenAICompatibleRouteIPv6Origins is the regression for the reviewed
+// bracket-dropping bug: two distinct IPv6 destinations must not share the shared
+// key, while equivalent spellings of the same destination must.
+func TestResolveOpenAICompatibleRouteIPv6Origins(t *testing.T) {
+	clearOpenAICompatibleEnv(t)
+	t.Setenv(EnvOpenAICompatibleAPIKey, "shared-key")
+	cfg := Default()
+
+	// [::1]:8000 and [::1:8000] are different hosts; dropping the brackets once
+	// made both read as "::1:8000" and forwarded the shared key to the override.
+	t.Setenv(EnvOpenAICompatibleBaseURL, "http://[::1]:8000")
+	t.Setenv(model.ClassEnvKey(model.ClassSmall, "BASE_URL"), "http://[::1:8000]")
+	if _, key := cfg.ResolveOpenAICompatibleRoute(model.ClassSmall); key != "" {
+		t.Errorf("distinct IPv6 origins key = %q, want empty", key)
+	}
+
+	// The same IPv6 origin in equivalent spellings (default port, zero padding,
+	// hex case, different path) keeps the shared key.
+	t.Setenv(EnvOpenAICompatibleBaseURL, "https://[2001:db8::1]:443/api")
+	t.Setenv(model.ClassEnvKey(model.ClassSmall, "BASE_URL"), "https://[2001:DB8:0:0:0:0:0:1]/v1")
+	if _, key := cfg.ResolveOpenAICompatibleRoute(model.ClassSmall); key != "shared-key" {
+		t.Errorf("equivalent IPv6 origins key = %q, want shared key", key)
+	}
+}
+
 // TestResolveOpenAICompatibleEndpointForClassPrecedence proves the class override
 // takes precedence over the shared endpoint, and an absent override preserves the
 // existing environment > configuration > default resolution.

@@ -13,6 +13,9 @@ func TestOriginNormalization(t *testing.T) {
 		{"http://127.0.0.1:8000", "http://127.0.0.1:8000", true},
 		{"http://127.0.0.1:80", "http://127.0.0.1", true},
 		{"https://openrouter.ai:8443", "https://openrouter.ai:8443", true},
+		{"http://[::1]:8000", "http://[::1]:8000", true},
+		{"http://[::1:8000]", "http://[::1:8000]", true},
+		{"https://[2001:DB8:0:0:0:0:0:1]/x", "https://[2001:db8::1]", true},
 		{"", "", false},
 		{"openrouter.ai/api", "", false},
 		{"://bad", "", false},
@@ -36,6 +39,14 @@ func TestSameOrigin(t *testing.T) {
 		{"http://127.0.0.1:8000", "http://127.0.0.1:8000/v1", true},
 		{"https://openrouter.ai", "https://openrouter.ai.example.com", false},
 		{"", "https://openrouter.ai", false},
+		// The review finding: dropping IPv6 brackets made these distinct hosts
+		// compare equal and leaked the shared key across origins.
+		{"http://[::1]:8000", "http://[::1:8000]", false},
+		{"http://[::1]:8000", "http://[::1]:8001", false},
+		// Equivalent spellings of the same IPv6 origin stay equal: default port,
+		// zero padding, and hex case do not change the address.
+		{"https://[2001:db8::1]:443/a", "https://[2001:DB8:0:0:0:0:0:1]/b", true},
+		{"https://[::1]/x", "https://[0:0:0:0:0:0:0:1]:443", true},
 	}
 	for _, tc := range cases {
 		if got := SameOrigin(tc.a, tc.b); got != tc.want {
