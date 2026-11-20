@@ -141,6 +141,13 @@ if [ "${SOP_SECURITY_INTEGRATION_PROVISION_ONLY:-0}" = "1" ]; then
 fi
 
 cd "$root"
+# Run only the tagged tests. The tag also compiles in both packages' whole ordinary
+# suites, which the main CI job already runs; re-running them here only adds minutes.
+# The list comes from the tagged files themselves, so a new tagged test is picked up
+# without editing this script.
+tagged_files="$(grep -l '^//go:build.*security_integration' internal/security/*_test.go internal/cli/*_test.go)"
+tagged_tests="$(grep -ho '^func Test[A-Za-z0-9_]*' $tagged_files | sed 's/^func //' | paste -sd'|' -)"
+[ -n "$tagged_tests" ] || die "no security_integration tests found"
 SOP_SECURITY_SEMGREP_BIN="$semgrep_bin" \
 SOP_SECURITY_GITLEAKS_BIN="$gitleaks_bin" \
 SOP_SECURITY_INTEGRATION_REQUIRED=1 \
@@ -150,4 +157,4 @@ SOP_SECURITY_CARGO_AUDIT_VERSION="$cargo_audit_version" \
 SOP_SECURITY_CARGO_ADVISORY_DB="$root/internal/security/testdata/cargo-audit/advisory-db" \
 SOP_SECURITY_OSV_BIN="$osv_bin" \
 SOP_SECURITY_OSV_VERSION="$osv_version" \
-  go test -tags=security_integration -count=1 -v ./internal/security/ ./internal/cli/
+  go test -tags=security_integration -count=1 -v -run "^($tagged_tests)\$" ./internal/security/ ./internal/cli/
