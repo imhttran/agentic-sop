@@ -53,6 +53,16 @@ func OpenAICompatibleEndpointFromEnv() string {
 // when set, is used only for the Authorization header and is never logged or
 // recorded.
 func NewOpenAICompatibleExecution(endpoint, configuredModel string) (Agent, error) {
+	return NewOpenAICompatibleExecutionWithKey(endpoint, configuredModel, os.Getenv(EnvOpenAICompatibleAPIKey))
+}
+
+// NewOpenAICompatibleExecutionWithKey is NewOpenAICompatibleExecution with an
+// explicitly resolved credential. The composition root uses it to scope a
+// per-class endpoint to its own key (or to omit the shared key when the class
+// endpoint has a different origin). An empty apiKey sends no Authorization
+// header. The key is used only for the Authorization header and is never logged
+// or recorded.
+func NewOpenAICompatibleExecutionWithKey(endpoint, configuredModel, apiKey string) (Agent, error) {
 	endpoint = strings.TrimSpace(endpoint)
 	if endpoint == "" {
 		endpoint = defaultOpenAICompatibleBaseURL
@@ -73,5 +83,5 @@ func NewOpenAICompatibleExecution(endpoint, configuredModel string) (Agent, erro
 	if err != nil {
 		return nil, err
 	}
-	return NewOpenAICompatible(ProviderOpenAICompatible, endpoint, model, os.Getenv(EnvOpenAICompatibleAPIKey), timeout)
+	return NewOpenAICompatible(ProviderOpenAICompatible, endpoint, model, apiKey, timeout)
 }

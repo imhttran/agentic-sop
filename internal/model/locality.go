@@ -2,6 +2,8 @@ package model
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"strings"
 )
 
@@ -45,6 +47,109 @@ func (s LocalitySource) String() string { return string(s) }
 // "cloud" is not.
 const cloudSuffix = ":cloud"
 
+// OpenRouterOrigin is the exact HTTPS origin that identifies the OpenRouter
+// service. It is compared against a parsed, normalized origin, never against a
+// substring of the raw URL or a model name.
+const OpenRouterOrigin = "https://openrouter.ai"
+
+// Origin parses raw and returns its normalized origin (scheme://host[:port]),
+// with the scheme lowercased, an IP-literal host canonicalized, a default port
+// removed, and an IPv6 host bracketed, or ok=false when raw is not an absolute URL
+// with a scheme and host. It is the display form of originIdentity; comparisons
+// use the separate fields so bracket handling can never make two hosts compare
+// equal.
+func Origin(raw string) (string, bool) {
+	o, ok := parseOrigin(raw)
+	if !ok {
+		return "", false
+	}
+	return o.String(), true
+}
+
+// originIdentity is a parsed origin: scheme, canonical hostname, and effective
+// port as separate fields. Comparing the fields (never a re-joined string) keeps
+// IPv6 literals unambiguous: [::1]:8000 and [::1:8000] are different hosts.
+//
+// The zero value is not valid; parseOrigin reports validity.
+type originIdentity struct {
+	scheme   string
+	hostname string
+	port     string
+}
+
+// parseOrigin parses raw into its normalized scheme, hostname, and effective
+// port. It is the single origin parser used by both credential scoping and
+// OpenRouter locality inference.
+//
+// Normalization: the scheme is lowercased; an IP-literal host is canonicalized
+// through net.ParseIP (so 2001:0DB8::1 and 2001:db8:0:0:0:0:0:1 agree) and a
+// name host is lowercased; an explicit default port (443 for https, 80 for http)
+// is dropped. The path, query, userinfo, and fragment never affect the origin.
+func parseOrigin(raw string) (originIdentity, bool) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return originIdentity{}, false
+	}
+	scheme := strings.ToLower(u.Scheme)
+	hostname := strings.ToLower(u.Hostname())
+	if hostname == "" {
+		return originIdentity{}, false
+	}
+	if ip := net.ParseIP(hostname); ip != nil {
+		hostname = ip.String()
+	}
+	port := u.Port()
+	if (scheme == "https" && port == "443") || (scheme == "http" && port == "80") {
+		port = ""
+	}
+	return originIdentity{scheme: scheme, hostname: hostname, port: port}, true
+}
+
+// String renders the origin, bracketing an IPv6 hostname so the display form is
+// unambiguous.
+func (o originIdentity) String() string {
+	host := o.hostname
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	if o.port != "" {
+		return o.scheme + "://" + host + ":" + o.port
+	}
+	return o.scheme + "://" + host
+}
+
+// SameOrigin reports whether a and b resolve to the same normalized origin. An
+// unparseable endpoint has no origin, so the result is false (fail closed).
+func SameOrigin(a, b string) bool {
+	oa, okA := parseOrigin(a)
+	ob, okB := parseOrigin(b)
+	return okA && okB && oa == ob
+}
+
+// InferEndpointLocality infers a model's locality from the endpoint it will be
+// served at, returning ok=false when no reliable inference applies. It returns
+// cloud only for the openai_compatible provider whose endpoint origin is exactly
+// OpenRouterOrigin. A loopback URL, an arbitrary model name, or any lookalike
+// host (for example https://openrouter.ai.example.com or http://openrouter.ai)
+// is not evidence. It is pure: it does no I/O.
+func InferEndpointLocality(provider, endpoint string) (Locality, bool) {
+	if strings.TrimSpace(provider) != "openai_compatible" {
+		return "", false
+	}
+	o, ok := parseOrigin(endpoint)
+	if !ok || o != openRouterIdentity {
+		return "", false
+	}
+	return LocalityCloud, true
+}
+
+// openRouterIdentity is OpenRouterOrigin parsed into the same normalized fields
+// the inference compares, so the constant and the comparison cannot drift.
+var openRouterIdentity = func() originIdentity {
+	o, _ := parseOrigin(OpenRouterOrigin)
+	return o
+}()
+
 // InferLocality infers a model's locality from its provider and name, returning
 // ok=false when no reliable inference applies. It returns cloud only for the
 // ollama provider and a name ending in the exact ":cloud" suffix. Every other
@@ -79,6 +184,10 @@ type LocalityRef struct {
 	Role     LocalityRole
 	Provider string
 	Model    string
+	// Endpoint is the effective endpoint the reference would be served at, used
+	// only for endpoint-origin locality inference (see InferEndpointLocality). It
+	// is never printed, persisted, or treated as runtime evidence.
+	Endpoint string
 }
 
 // ModelSetting returns the exact configuration key that sets this reference's
@@ -205,6 +314,9 @@ func ResolveLocality(ref LocalityRef, explicit Locality, evidence map[LocalityEv
 		runtimeLoc = idx[evidenceKey{provider: strings.TrimSpace(ref.Provider), model: strings.TrimSpace(ref.Model)}]
 	}
 	inferredLoc, inferredOK := InferLocality(ref.Provider, ref.Model)
+	if !inferredOK {
+		inferredLoc, inferredOK = InferEndpointLocality(ref.Provider, ref.Endpoint)
+	}
 
 	// Fail-closed cross-check first: runtime evidence and inference must agree.
 	if runtimeLoc != "" && inferredOK && runtimeLoc != inferredLoc {

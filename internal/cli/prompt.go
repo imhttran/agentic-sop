@@ -629,12 +629,10 @@ func promptRouting(ctx context.Context, cfg config.Config, d deps, tri earlyGate
 		checkpoints = append(checkpoints, "task_triage")
 	}
 	dec := router.Decide(sig)
-	res, err := resolveModelLocality(ctx, model.Inputs{
-		Config:       cfg.Models,
-		Lookup:       os.Getenv,
-		RoutedClass:  dec.Class,
-		RoutedReason: router.ReasonsText(dec.Reasons),
-	}, runtimeLocalityObserver(cfg))
+	in := modelInputs(cfg, "")
+	in.RoutedClass = dec.Class
+	in.RoutedReason = router.ReasonsText(dec.Reasons)
+	res, err := resolveModelLocality(ctx, in, runtimeLocalityObserver(cfg))
 	if err != nil {
 		return nil, false, err
 	}

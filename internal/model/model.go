@@ -549,6 +549,11 @@ type Inputs struct {
 	// caller, keyed by provider and model. The model package performs no network
 	// I/O: it reads this map only. A nil map means no runtime evidence.
 	LocalityEvidence map[LocalityEvidence]Locality
+	// EndpointFor returns the effective endpoint a provider/class route will be
+	// served at, used only for endpoint-origin locality inference. It is nil when
+	// the caller supplies no endpoints, which disables that inference. It is never
+	// runtime evidence and its result is never persisted.
+	EndpointFor func(provider string, class Class) string
 }
 
 // Selection is the resolved model selection: the class, the provider and model
@@ -573,6 +578,11 @@ type Selection struct {
 	// Reason is the deterministic explanation of the selection (see the Reason*
 	// constants). It is a fixed phrase, never model prose.
 	Reason string `json:"reason"`
+	// BaseURL is the effective endpoint the selection will be served at, or empty
+	// when the caller supplied no endpoint resolver. It is a non-secret runtime
+	// input (never a credential) and is omitted from persisted evidence so routing
+	// artifacts keep their previous shape.
+	BaseURL string `json:"-"`
 }
 
 // Result is the outcome of resolution. Active is false when no routing layer was
@@ -617,15 +627,15 @@ func Resolve(in Inputs) (Result, error) {
 		return Result{}, err
 	}
 
-	primary, err := entryForWithEvidence(class, in.Config, env, in.LocalityEvidence)
+	primary, err := entryForWithEvidence(class, in.Config, env, in.LocalityEvidence, in.EndpointFor)
 	if err != nil {
 		return Result{}, err
 	}
 	if primary.complete() {
-		sel := selectionFor(class, primary, sourceFor(class, in.Config, env, cli, in.RoutedClass, in.LocalityEvidence), reason, false)
+		sel := selectionFor(class, primary, sourceFor(class, in.Config, env, cli, in.RoutedClass, in.LocalityEvidence, in.EndpointFor), reason, false)
 		// The local-first runtime fallback is a CANDIDATE only: it is reported here
 		// and applied by the caller, never by Resolve.
-		fb, ok, err := localFallback(class, in.Config, env, primary, in.LocalityEvidence)
+		fb, ok, err := localFallback(class, in.Config, env, primary, in.LocalityEvidence, in.EndpointFor)
 		if err != nil {
 			return Result{}, err
 		}
@@ -644,7 +654,7 @@ func Resolve(in Inputs) (Result, error) {
 		fallback = in.Config.FallbackClass
 	}
 	if fallback != class {
-		fb, err := entryForWithEvidence(fallback, in.Config, env, in.LocalityEvidence)
+		fb, err := entryForWithEvidence(fallback, in.Config, env, in.LocalityEvidence, in.EndpointFor)
 		if err != nil {
 			return Result{}, err
 		}
@@ -653,7 +663,7 @@ func Resolve(in Inputs) (Result, error) {
 				return Result{}, fmt.Errorf("model routing: class %q is local but has no model; refusing to fall back to the cloud model %q for class %q (set %s=true to allow)",
 					class, fb.model, fallback, EnvAllowCloudFallbackForLocal)
 			}
-			return Result{Active: true, Selection: selectionFor(fallback, fb, sourceFor(fallback, in.Config, env, "", "", in.LocalityEvidence), ReasonFallbackClass, true)}, nil
+			return Result{Active: true, Selection: selectionFor(fallback, fb, sourceFor(fallback, in.Config, env, "", "", in.LocalityEvidence, in.EndpointFor), ReasonFallbackClass, true)}, nil
 		}
 	}
 
@@ -698,6 +708,10 @@ type entry struct {
 	locality       Locality
 	localitySource LocalitySource
 	nameSource     Source
+	// baseURL is the effective endpoint for this entry, resolved from the
+	// caller's EndpointFor. It is empty when the caller supplied no resolver and is
+	// never persisted.
+	baseURL string
 }
 
 // complete reports whether an entry fully names a usable model.
@@ -714,7 +728,7 @@ func (e entry) complete() bool {
 // so a partial class never masquerades as operator configuration. When the
 // primary locality is unresolved and the class also has a configured fallback
 // whose locality is unresolved, the error lists both references.
-func entryForWithEvidence(c Class, config, env Route, evidence map[LocalityEvidence]Locality) (entry, error) {
+func entryForWithEvidence(c Class, config, env Route, evidence map[LocalityEvidence]Locality, endpointFor func(provider string, class Class) string) (entry, error) {
 	var e entry
 	cc, ecc := config.classConfig(c), env.classConfig(c)
 	mentioned := primaryMentioned(cc) || primaryMentioned(ecc)
@@ -724,7 +738,8 @@ func entryForWithEvidence(c Class, config, env Route, evidence map[LocalityEvide
 	if !ecc.empty() {
 		applyClassConfig(&e, ecc, SourceEnv)
 	}
-	ref := LocalityRef{Class: c, Role: LocalityRolePrimary, Provider: e.provider, Model: e.model}
+	e.baseURL = endpointForRoute(endpointFor, e.provider, c)
+	ref := LocalityRef{Class: c, Role: LocalityRolePrimary, Provider: e.provider, Model: e.model, Endpoint: e.baseURL}
 	if !mentioned {
 		applyClassConfig(&e, DefaultRoute().classConfig(c), SourceDefault)
 		// The default layer set the locality; record its provenance and stop.
@@ -740,7 +755,7 @@ func entryForWithEvidence(c Class, config, env Route, evidence map[LocalityEvide
 		// Fail closed, but name every unresolved reference for the class: when
 		// the class also has a configured fallback whose locality is unresolved,
 		// one *LocalityUnknownError lists both references.
-		return entry{}, withConfiguredFallbackRefs(c, config, env, e, evidence, err)
+		return entry{}, withConfiguredFallbackRefs(c, config, env, e, evidence, endpointFor, err)
 	}
 	e.locality = res.Locality
 	e.localitySource = res.Source
@@ -755,8 +770,8 @@ func entryForWithEvidence(c Class, config, env Route, evidence map[LocalityEvide
 // settings. A fallback that is not configured, or whose locality resolves,
 // leaves the primary error unchanged; any other fallback resolution failure (a
 // *LocalityConflictError) stays fail-closed as its own error.
-func withConfiguredFallbackRefs(c Class, config, env Route, primary entry, evidence map[LocalityEvidence]Locality, primaryErr error) error {
-	_, _, fbErr := fallbackEntry(c, config, env, primary, evidence)
+func withConfiguredFallbackRefs(c Class, config, env Route, primary entry, evidence map[LocalityEvidence]Locality, endpointFor func(provider string, class Class) string, primaryErr error) error {
+	_, _, fbErr := fallbackEntry(c, config, env, primary, evidence, endpointFor)
 	if fbErr == nil {
 		return primaryErr
 	}
@@ -802,11 +817,11 @@ func primaryMentioned(cc ClassConfig) bool {
 // ok=false when none applies. It applies only to a LOCAL class with a complete
 // fallback model; a cloud class never has one, so a cloud selection is never a
 // candidate for the runtime fallback.
-func localFallback(c Class, config, env Route, primary entry, evidence map[LocalityEvidence]Locality) (Selection, bool, error) {
+func localFallback(c Class, config, env Route, primary entry, evidence map[LocalityEvidence]Locality, endpointFor func(provider string, class Class) string) (Selection, bool, error) {
 	if primary.locality != LocalityLocal {
 		return Selection{}, false, nil
 	}
-	fb, ok, err := fallbackEntry(c, config, env, primary, evidence)
+	fb, ok, err := fallbackEntry(c, config, env, primary, evidence, endpointFor)
 	if err != nil || !ok {
 		return Selection{}, false, err
 	}
@@ -821,7 +836,7 @@ func localFallback(c Class, config, env Route, primary entry, evidence map[Local
 //
 // A fallback with no model is not configured, so ok=false. An unset provider
 // inherits the class's primary provider, and an unset locality defaults to cloud.
-func fallbackEntry(c Class, config, env Route, primary entry, evidence map[LocalityEvidence]Locality) (entry, bool, error) {
+func fallbackEntry(c Class, config, env Route, primary entry, evidence map[LocalityEvidence]Locality, endpointFor func(provider string, class Class) string) (entry, bool, error) {
 	var e entry
 	// The built-in fallback is the base layer, but its cloud locality is a DEFAULT,
 	// not an operator-provided explicit value. Keep it aside and clear it before
@@ -851,7 +866,8 @@ func fallbackEntry(c Class, config, env Route, primary entry, evidence map[Local
 	if e.provider == "" {
 		e.provider = primary.provider
 	}
-	ref := LocalityRef{Class: c, Role: LocalityRoleFallback, Provider: e.provider, Model: e.model}
+	e.baseURL = endpointForRoute(endpointFor, e.provider, c)
+	ref := LocalityRef{Class: c, Role: LocalityRoleFallback, Provider: e.provider, Model: e.model, Endpoint: e.baseURL}
 
 	// A built-in-only fallback keeps its built-in cloud locality with source
 	// default. A fallback a layer configures resolves through ResolveLocality: an
@@ -892,13 +908,23 @@ func applyFallback(e *entry, f FallbackConfig) {
 
 // selectionFor builds a Selection from a merged entry.
 func selectionFor(c Class, e entry, source Source, reason string, fallback bool) Selection {
-	return Selection{Class: c, Provider: e.provider, Model: e.model, Locality: e.locality, LocalitySource: e.localitySource, Source: source, Fallback: fallback, Reason: reason}
+	return Selection{Class: c, Provider: e.provider, Model: e.model, Locality: e.locality, LocalitySource: e.localitySource, Source: source, Fallback: fallback, Reason: reason, BaseURL: e.baseURL}
+}
+
+// endpointForRoute resolves one route's effective endpoint through a caller-supplied
+// resolver, or returns empty when there is none. It is used only for locality
+// inference; the value is never persisted.
+func endpointForRoute(endpointFor func(provider string, class Class) string, provider string, c Class) string {
+	if endpointFor == nil {
+		return ""
+	}
+	return strings.TrimSpace(endpointFor(provider, c))
 }
 
 // sourceFor names the layer that supplied the selection: the CLI override when it
 // chose the class, the router when it chose the class, otherwise the layer that
 // supplied the model name, otherwise the built-in default.
-func sourceFor(c Class, config, env Route, cli string, routed Class, evidence map[LocalityEvidence]Locality) Source {
+func sourceFor(c Class, config, env Route, cli string, routed Class, evidence map[LocalityEvidence]Locality, endpointFor func(provider string, class Class) string) Source {
 	if strings.TrimSpace(cli) != "" {
 		return SourceCLI
 	}
@@ -908,7 +934,7 @@ func sourceFor(c Class, config, env Route, cli string, routed Class, evidence ma
 	// Resolve with the same evidence the selection resolved with, so a class whose
 	// locality comes from runtime evidence still attributes the layer that
 	// supplied its model name instead of discarding the resolution error.
-	e, _ := entryForWithEvidence(c, config, env, evidence)
+	e, _ := entryForWithEvidence(c, config, env, evidence, endpointFor)
 	if s := e.nameSource; s != "" {
 		return s
 	}

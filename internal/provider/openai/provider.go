@@ -28,6 +28,7 @@ type Provider struct {
 	baseURL         string
 	client          *http.Client
 	configuredModel string
+	apiKey          string
 }
 
 // New returns a provider for id at baseURL. An empty baseURL is retained and
@@ -51,6 +52,25 @@ func (p *Provider) WithConfiguredModel(name string) *Provider {
 	return p
 }
 
+// WithAPIKey scopes a credential to this endpoint for the read-only discovery
+// probes. It is used only for the Authorization header and is never logged or
+// reported. An empty key adds no header.
+func (p *Provider) WithAPIKey(key string) *Provider {
+	p.apiKey = strings.TrimSpace(key)
+	return p
+}
+
+// authHeaders returns the request headers for this endpoint, or nil when no
+// credential is scoped to it.
+func (p *Provider) authHeaders() http.Header {
+	if p.apiKey == "" {
+		return nil
+	}
+	h := http.Header{}
+	h.Set("Authorization", "Bearer "+p.apiKey)
+	return h
+}
+
 // ID returns the provider identity.
 func (p *Provider) ID() provider.ID { return p.id }
 
@@ -59,7 +79,7 @@ func (p *Provider) Health(ctx context.Context) provider.HealthResult {
 	if p.baseURL == "" {
 		return provider.HealthResult{Status: provider.HealthUnavailable, Message: "no endpoint configured"}
 	}
-	status, _, err := httpx.Get(ctx, p.client, p.baseURL+"/v1/models")
+	status, _, err := httpx.GetWithHeaders(ctx, p.client, p.baseURL+"/v1/models", p.authHeaders())
 	if err != nil {
 		return provider.HealthResult{Status: provider.HealthUnavailable, Message: "unreachable"}
 	}
@@ -84,7 +104,7 @@ func (p *Provider) Models(ctx context.Context) ([]provider.ModelInfo, error) {
 			ID string `json:"id"`
 		} `json:"data"`
 	}
-	if err := httpx.GetJSON(ctx, p.client, p.baseURL+"/v1/models", &out); err != nil {
+	if err := httpx.GetJSONWithHeaders(ctx, p.client, p.baseURL+"/v1/models", p.authHeaders(), &out); err != nil {
 		return p.configuredFallback()
 	}
 	infos := make([]provider.ModelInfo, 0, len(out.Data))
