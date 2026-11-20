@@ -5,7 +5,7 @@
 # SOP invokes this as:
 #   export SOP_AGENT_PROVIDER=command
 #   export SOP_AGENT_COMMAND="sh scripts/agents/sop-agent.sh"
-#   sop run docs/plans/PLAN-Agent-Harness-V2.md
+#   sop run docs/plans/PLAN-SOP-RUN-ACCEPT-001.md
 #
 # It reads SOP's JSON request on stdin and writes the response on stdout. Claude
 # runs non-interactively in the current directory (the repository) with file edits
