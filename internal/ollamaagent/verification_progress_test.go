@@ -29,7 +29,7 @@ func TestRequiredValidationCommandIsVerificationProgress(t *testing.T) {
 	needSandboxAvailable(t)
 	dir := t.TempDir()
 	writeGoModule(t, dir)
-	testCommand := `{"tool":"run_command","args":{"command":"go test ./..."}}`
+	testCommand := `{"tool":"run_command","args":{"command":"go list ./..."}}`
 	vetCommand := `{"tool":"run_command","args":{"command":"go vet ./..."}}`
 	script := []string{testCommand, vetCommand, testCommand, vetCommand, testCommand, vetCommand}
 	f, srv := newFakeOllama(t, script...)
@@ -41,7 +41,7 @@ func TestRequiredValidationCommandIsVerificationProgress(t *testing.T) {
 
 	req := implementRequest()
 	req.DiscoveryIterations = 1 // the discovery window contributes one reset only
-	req.ValidationCommands = []string{"go test ./...", "go vet ./..."}
+	req.ValidationCommands = []string{"go list ./...", "go vet ./..."}
 
 	_, err := New(cfg, dir).Execute(context.Background(), req)
 	if err == nil {
@@ -62,7 +62,7 @@ func TestUnrequiredCommandDoesNotEarnVerificationProgress(t *testing.T) {
 	needSandboxAvailable(t)
 	dir := t.TempDir()
 	writeGoModule(t, dir)
-	testCommand := `{"tool":"run_command","args":{"command":"go test ./..."}}`
+	testCommand := `{"tool":"run_command","args":{"command":"go list ./..."}}`
 	vetCommand := `{"tool":"run_command","args":{"command":"go vet ./..."}}`
 	script := []string{testCommand, vetCommand, testCommand, vetCommand, testCommand, vetCommand}
 	f, srv := newFakeOllama(t, script...)
