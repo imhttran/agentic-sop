@@ -88,6 +88,25 @@ func TestDeliverablePathsExistingForms(t *testing.T) {
 	}
 }
 
+func TestDeliverablePathsKeepsDotDirectory(t *testing.T) {
+	for in, want := range map[string][]string{
+		".github/workflows/ci.yml":   {".github/workflows/ci.yml"},
+		"internal/cli/outcome.go.":   {"internal/cli/outcome.go"},
+		"`.github/workflows/ci.yml`": {".github/workflows/ci.yml"},
+	} {
+		got := deliverablePaths(in)
+		if len(got) != len(want) {
+			t.Errorf("deliverablePaths(%q) = %v, want %v", in, got, want)
+			continue
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Errorf("deliverablePaths(%q) = %v, want %v", in, got, want)
+			}
+		}
+	}
+}
+
 func TestDeliverableCriteriaOnePerLine(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "internal/provider"), 0o755); err != nil {

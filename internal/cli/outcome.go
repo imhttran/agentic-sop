@@ -845,9 +845,34 @@ func deliverablePaths(s string) []string {
 		if len(fields) == 0 {
 			continue
 		}
-		add(strings.Trim(fields[0], "`\"'.,"))
+		add(trimDeliverableToken(fields[0]))
 	}
 	return out
+}
+
+// trimDeliverableToken normalizes a bare deliverable token. It strips at most one
+// pair of enclosing backticks or quotes, then removes only trailing sentence
+// punctuation ('.' or ','). It never removes a leading dot, so a dot-directory
+// path such as .github/workflows/ci.yml keeps its leading dot.
+func trimDeliverableToken(tok string) string {
+	tok = trimEnclosingQuotes(tok)
+	tok = strings.TrimRight(tok, ".")
+	tok = strings.TrimRight(tok, ",")
+	return tok
+}
+
+// trimEnclosingQuotes strips at most one matching pair of enclosing backticks,
+// double quotes, or single quotes/apostrophes from tok. A mismatched pair is left
+// unchanged.
+func trimEnclosingQuotes(tok string) string {
+	if len(tok) < 2 {
+		return tok
+	}
+	first, last := tok[0], tok[len(tok)-1]
+	if first == last && (first == '`' || first == '"' || first == '\'') {
+		return tok[1 : len(tok)-1]
+	}
+	return tok
 }
 
 // backtickSpans returns the contents of each `backtick`-delimited span in s, in order.
