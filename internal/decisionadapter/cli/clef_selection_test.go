@@ -403,3 +403,54 @@ func TestDeciderURLsRoutePrimaryAndFallbackSeparately(t *testing.T) {
 		t.Fatalf("hits primary=%d backup=%d shared=%d; want primary>0, backup>0, shared=0", primaryHits, backupHits, sharedHits)
 	}
 }
+
+// TestDeciderModelsRoutePrimaryAndFallbackSeparately proves DECIDER_MODEL names the
+// primary's model and DECIDER_FALLBACK_MODEL the backup's, overriding each
+// provider's own *_MODEL, and that the -model flag still wins for the primary.
+func TestDeciderModelsRoutePrimaryAndFallbackSeparately(t *testing.T) {
+	var primaryBody, backupBody string
+	capture := func(dst *string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			b, _ := io.ReadAll(r.Body)
+			*dst = string(b)
+			http.Error(w, "boom", http.StatusInternalServerError)
+		}))
+	}
+	primary, backup := capture(&primaryBody), capture(&backupBody)
+	defer primary.Close()
+	defer backup.Close()
+
+	req := decision.DecisionRequest{State: "s", Questions: []decision.Question{
+		{ID: "q", Type: decision.QuestionChoice, Criteria: "c", Choices: []string{"a", "b"}},
+	}}
+	run := func(flagModel string) {
+		primaryBody, backupBody = "", ""
+		p, err := newProvider("clef", "", flagModel, 2*time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = p.Decide(context.Background(), req)
+	}
+
+	t.Setenv("CLEF_ENABLED", "1")
+	t.Setenv("CLEF_MODEL", "clef-own")
+	t.Setenv("NIMBLE_MODEL", "nimble-own")
+	t.Setenv("DECIDER_URL", primary.URL)
+	t.Setenv("DECIDER_FALLBACK_URL", backup.URL)
+	t.Setenv("SOP_DECISION_FALLBACK", "nimble")
+	t.Setenv("DECIDER_MODEL", "primary-model")
+	t.Setenv("DECIDER_FALLBACK_MODEL", "backup-model")
+
+	run("")
+	if !strings.Contains(primaryBody, "primary-model") || !strings.Contains(backupBody, "backup-model") {
+		t.Fatalf("env models not used: primary=%q backup=%q", primaryBody, backupBody)
+	}
+	if strings.Contains(primaryBody+backupBody, "clef-own") || strings.Contains(primaryBody+backupBody, "nimble-own") {
+		t.Fatalf("provider *_MODEL must not win over DECIDER_*_MODEL: primary=%q backup=%q", primaryBody, backupBody)
+	}
+
+	run("flag-model")
+	if !strings.Contains(primaryBody, "flag-model") || strings.Contains(primaryBody, "primary-model") {
+		t.Fatalf("-model flag must win for the primary: %q", primaryBody)
+	}
+}

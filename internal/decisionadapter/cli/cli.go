@@ -150,12 +150,16 @@ const availableProviders = "nimble, julia, clef"
 // different provider, wraps it in a primary->backup failover chain. The chain
 // reuses the same provider implementations; it adds no new framework.
 func newProvider(name, baseURL, model string, timeout time.Duration) (decision.Provider, error) {
-	// DECIDER_URL / DECIDER_FALLBACK_URL are role-based, so the primary and the
-	// backup can sit on different servers (e.g. Clef on oMLX, Nimble on Ollama)
-	// even though both providers otherwise share OLLAMA_BASE_URL. The -base-url
-	// flag still wins for the primary.
+	// DECIDER_URL / DECIDER_FALLBACK_URL and DECIDER_MODEL / DECIDER_FALLBACK_MODEL
+	// are role-based, so the primary and the backup can sit on different servers
+	// and run different models (e.g. Clef on oMLX, pplx-decider-flash on Ollama)
+	// even though the providers otherwise share OLLAMA_BASE_URL and read their own
+	// *_MODEL. The -base-url and -model flags still win for the primary.
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = os.Getenv("DECIDER_URL")
+	}
+	if strings.TrimSpace(model) == "" {
+		model = os.Getenv("DECIDER_MODEL")
 	}
 	primary, err := buildProvider(name, baseURL, model, timeout)
 	if err != nil {
@@ -165,7 +169,7 @@ func newProvider(name, baseURL, model string, timeout time.Duration) (decision.P
 	if fb == "" || strings.EqualFold(fb, strings.TrimSpace(name)) {
 		return primary, nil
 	}
-	backup, err := buildProvider(fb, os.Getenv("DECIDER_FALLBACK_URL"), "", timeout)
+	backup, err := buildProvider(fb, os.Getenv("DECIDER_FALLBACK_URL"), os.Getenv("DECIDER_FALLBACK_MODEL"), timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -322,7 +326,10 @@ Flags (decide):
 Environment (any provider):
   DECIDER_URL           base URL for the selected (primary) provider; the -base-url flag wins
   DECIDER_FALLBACK_URL  base URL for the SOP_DECISION_FALLBACK provider
-  Both override OLLAMA_BASE_URL, so the two can live on different servers.
+  DECIDER_MODEL         model for the selected provider; the -model flag wins
+  DECIDER_FALLBACK_MODEL model for the SOP_DECISION_FALLBACK provider
+  They override OLLAMA_BASE_URL and each provider's own *_MODEL, so the two can
+  live on different servers and run different models.
 
 Environment (nimble):
   OLLAMA_BASE_URL     Ollama-compatible backend root (default http://localhost:11434)
