@@ -136,8 +136,10 @@ func probeProductionInvocation(name string) error {
 // environment drops credential-named variables: the sandbox already denies
 // network and credential reads, so a sandboxed command cannot use them. It
 // fails closed: no backend means no run.
-// ponytail: every sandboxed build starts with a cold build cache; seeding it
-// from a trusted snapshot would make it warm again.
+// ponytail: every sandboxed build starts with a cold build cache; seeding it from
+// a trusted snapshot would make it warm again. Revisit when a sandboxed build takes
+// longer than twice an unsandboxed build of the same commit, or when a race shard
+// approaches SOP_TEST_TIMEOUT.
 func isolate(root string, argv []string) (wrapped, env []string, detail string, cleanup func(), err error) {
 	prefix, detail, cache, err := sandboxArgv(root)
 	if err != nil {
@@ -266,9 +268,10 @@ type credentialPath struct {
 // resolved, or a set relative override, fails closed, matching the rest of the
 // sandbox, so the command never runs unsandboxed.
 // ponytail: the denies match paths, so a credential inside a writable dir (the
-// root or temp, for example KUBECONFIG pointing into the repo) can be renamed,
-// or its parent dir moved, and then read; failing closed on such paths would
-// close that if it ever matters.
+// root or temp, for example KUBECONFIG pointing into the repo) can be renamed, or
+// its parent dir moved, and then read. Revisit when a new credential path is added
+// under a writable root, or a credential is read after a rename or move: deny
+// those paths then.
 func homeCredentials() ([]credentialPath, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -330,7 +333,8 @@ const (
 // and a dangling symlink is skipped. Any other error, or a walk past the bounds, fails
 // closed.
 // ponytail: a socket created after the scan, or deeper than the depth bound, is not
-// masked. Upgrade: mask at connect time, or hide the home tree.
+// masked. Revisit when a sandboxed tool creates sockets at runtime, or a socket is
+// observed beyond the depth bound: mask at connect time, or hide the home tree, then.
 func homeSocketPaths() ([]credentialPath, error) {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
@@ -405,9 +409,10 @@ func homeSocketPaths() ([]credentialPath, error) {
 // bound read-write, a private /tmp and an empty /run (hiding host sockets such
 // as Docker's), the SOP state dir read-only, and a private network namespace
 // in which only the sandbox's own loopback exists.
-// ponytail: a Unix socket outside /tmp and /run that the bounded home scan
-// does not reach (too deep, or outside $HOME) stays connectable; a deny-default
-// view would close that.
+// ponytail: a Unix socket outside /tmp and /run that the bounded home scan does not
+// reach (too deep, or outside $HOME) stays connectable. Revisit when the sandbox
+// moves to a deny-default view, or a socket connect escapes the sandbox; a
+// deny-default view closes both.
 func bubblewrapArgs(root string, writable []string, denyRead []credentialPath) []string {
 	args := []string{
 		"--ro-bind", "/", "/",
