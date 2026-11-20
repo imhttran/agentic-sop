@@ -5,9 +5,8 @@ top-level documentation index is [../README.md](../README.md).
 
 A completed plan stays in `plans/` rather than moving to `history/plans/` when SOP
 or the repository still references its path: the archive under `.agent-sdlc/archive/`
-records these sources, and the example commands in `scripts/agents/sop-agent.sh` name
-one of them. Moving such a plan would break `sop run`/`resume`/`reconcile`, so the
-path is kept and the status is declared here. Files that SOP has recorded as COMPLETE
+records these sources. Moving such a plan would break `sop run`/`resume`/`reconcile`,
+so the path is kept and the status is declared here. Files that SOP has recorded as COMPLETE
 or SUPERSEDED live under [../history/plans/](../history/plans/README.md) once no
 active plan references them. Run `sop status` for the active plan in your checkout;
 this index does not record operator-local lifecycle state.
