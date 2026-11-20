@@ -74,7 +74,7 @@ Change no executable code.
 Replace the four `ponytail:` notes in `internal/toolharness/isolation.go` with
 named triggers. Keep each `ponytail:` prefix and each marker's position.
 
-Write these comments. Keep each quoted trigger phrase on one physical line.
+Write these comments. Keep each trigger phrase inside its marker block.
 
 The build-cache marker:
 
@@ -91,8 +91,8 @@ The home-credential marker:
 // ponytail: the denies match paths, so a credential inside a writable dir (the
 // root or temp, for example KUBECONFIG pointing into the repo) can be renamed, or
 // its parent dir moved, and then read. Revisit when a new credential path is added
-// under a writable root, or a credential is read after a rename or move: fail
-// closed on those paths then.
+// under a writable root, or a credential is read after a rename or move: deny
+// those paths then.
 ```
 
 The home-socket marker:
@@ -127,7 +127,7 @@ Change no executable code.
 - The build-cache marker names the trigger `Revisit when a sandboxed build takes`.
 - The home-credential marker names the trigger `Revisit when a new credential path is added`.
 - The home-socket marker names the trigger `Revisit when a sandboxed tool creates sockets`.
-- The `/tmp` socket marker names the trigger `Revisit when the sandbox moves to a deny-default view`.
+- The `/tmp` socket marker names the deny-default-view trigger.
 - Every comment keeps the `ponytail:` prefix.
 - The package still builds.
 
@@ -136,7 +136,7 @@ Change no executable code.
 - `git grep -q "Revisit when a sandboxed build takes" -- internal/toolharness/isolation.go`
 - `git grep -q "Revisit when a new credential path is added" -- internal/toolharness/isolation.go`
 - `git grep -q "Revisit when a sandboxed tool creates sockets" -- internal/toolharness/isolation.go`
-- `git grep -q "Revisit when the sandbox moves to a deny-default view" -- internal/toolharness/isolation.go`
+- `git grep -q "deny-default view" -- internal/toolharness/isolation.go`
 - `git grep -q "ponytail: " -- internal/toolharness/isolation.go`
 - `go build ./internal/toolharness`
 
