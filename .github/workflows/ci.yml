@@ -38,7 +38,7 @@ jobs:
       # the wrapper falls back to the system temp directory (and says why) when it
       # does not. Parallelism matches the four-core runner and the timeout matches
       # go test's default, so this is the same suite under the same limits. The
-      # race-detector job below remains the separate, disk-backed -race run.
+      # race-detector job below runs the same suite under -race.
       - name: test (RAM-backed TMPDIR)
         env:
           SOP_TEST_PARALLEL: "4"
@@ -168,7 +168,12 @@ jobs:
       - name: test -race
         # ponytail: the package suite runs ~134 s locally under -race and exceeds the
         # default 10 m per-package alarm on the runner. Raise the alarm; cut test cost later.
-        run: go test -race -timeout 30m ./...
+        # Same RAM-backed TMPDIR runner as the ordinary suite: SQLite I/O under -race is
+        # the slow part. It falls back to disk (and says why) if /dev/shm is unusable.
+        env:
+          SOP_TEST_PARALLEL: "4"
+          SOP_TEST_TIMEOUT: "30m"
+        run: ./scripts/checks/test-fast.sh -- -race
 
   # The tagged JEV evidence acceptance checks. They are build-tagged out of the ordinary
   # suite (so `go test ./...` stays green before an evidence artifact exists); this job runs
