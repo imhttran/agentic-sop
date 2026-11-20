@@ -150,6 +150,13 @@ const availableProviders = "nimble, julia, clef"
 // different provider, wraps it in a primary->backup failover chain. The chain
 // reuses the same provider implementations; it adds no new framework.
 func newProvider(name, baseURL, model string, timeout time.Duration) (decision.Provider, error) {
+	// DECIDER_URL / DECIDER_FALLBACK_URL are role-based, so the primary and the
+	// backup can sit on different servers (e.g. Clef on oMLX, Nimble on Ollama)
+	// even though both providers otherwise share OLLAMA_BASE_URL. The -base-url
+	// flag still wins for the primary.
+	if strings.TrimSpace(baseURL) == "" {
+		baseURL = os.Getenv("DECIDER_URL")
+	}
 	primary, err := buildProvider(name, baseURL, model, timeout)
 	if err != nil {
 		return nil, err
@@ -158,7 +165,7 @@ func newProvider(name, baseURL, model string, timeout time.Duration) (decision.P
 	if fb == "" || strings.EqualFold(fb, strings.TrimSpace(name)) {
 		return primary, nil
 	}
-	backup, err := buildProvider(fb, "", "", timeout)
+	backup, err := buildProvider(fb, os.Getenv("DECIDER_FALLBACK_URL"), "", timeout)
 	if err != nil {
 		return nil, err
 	}
@@ -311,6 +318,11 @@ Flags (decide):
   -decision-id string question id for the single-question form (default "example")
   -timeout duration   request timeout (default 30s)
   -json               print the DecisionResult as JSON
+
+Environment (any provider):
+  DECIDER_URL           base URL for the selected (primary) provider; the -base-url flag wins
+  DECIDER_FALLBACK_URL  base URL for the SOP_DECISION_FALLBACK provider
+  Both override OLLAMA_BASE_URL, so the two can live on different servers.
 
 Environment (nimble):
   OLLAMA_BASE_URL     Ollama-compatible backend root (default http://localhost:11434)

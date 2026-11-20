@@ -367,3 +367,39 @@ func assertDecisionKind(t *testing.T, err error, want decision.ErrorKind) {
 		t.Errorf("errors.Is(%v, %v) = false, want true", err, sentinel)
 	}
 }
+
+// TestDeciderURLsRoutePrimaryAndFallbackSeparately proves DECIDER_URL feeds the
+// primary and DECIDER_FALLBACK_URL feeds the backup, overriding the shared
+// OLLAMA_BASE_URL, so Clef (oMLX) and Nimble (Ollama) can differ.
+func TestDeciderURLsRoutePrimaryAndFallbackSeparately(t *testing.T) {
+	var primaryHits, backupHits, sharedHits int
+	count := func(n *int) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			*n++
+			http.Error(w, "boom", http.StatusInternalServerError)
+		}))
+	}
+	primary, backup, shared := count(&primaryHits), count(&backupHits), count(&sharedHits)
+	defer primary.Close()
+	defer backup.Close()
+	defer shared.Close()
+
+	t.Setenv("CLEF_ENABLED", "1")
+	t.Setenv("OLLAMA_BASE_URL", shared.URL)
+	t.Setenv("DECIDER_URL", primary.URL)
+	t.Setenv("DECIDER_FALLBACK_URL", backup.URL)
+	t.Setenv("SOP_DECISION_FALLBACK", "nimble")
+
+	p, err := newProvider("clef", "", "", 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := decision.DecisionRequest{State: "s", Questions: []decision.Question{
+		{ID: "q", Type: decision.QuestionChoice, Criteria: "c", Choices: []string{"a", "b"}},
+	}}
+	_, _ = p.Decide(context.Background(), req)
+
+	if primaryHits == 0 || backupHits == 0 || sharedHits != 0 {
+		t.Fatalf("hits primary=%d backup=%d shared=%d; want primary>0, backup>0, shared=0", primaryHits, backupHits, sharedHits)
+	}
+}
