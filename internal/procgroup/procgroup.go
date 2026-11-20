@@ -14,8 +14,10 @@ const waitDelay = 2 * time.Second
 // Bind starts cmd in its own process group and, when cmd's context ends, kills
 // the group. On platforms without process groups only the child is killed.
 // cmd must come from exec.CommandContext.
-// ponytail: security, toolharness, agent, evaltarget, controller/sopclient and
-// decision/commandprofile keep their own copies; move them here when next touched.
+// ponytail: the exec/process-group binding is copied into security, toolharness,
+// agent, evaltarget, controller/sopclient and decision/commandprofile; each copy
+// can drift. Revisit when a change to waitDelay, SysProcAttr, killGroup or
+// cmd.Cancel has to land in more than one copy: consolidate here first.
 func Bind(cmd *exec.Cmd) {
 	cmd.WaitDelay = waitDelay
 	cmd.SysProcAttr = sysProcAttr()
