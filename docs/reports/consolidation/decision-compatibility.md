@@ -12,7 +12,9 @@ contract, and composes a bounded failover with no new framework:
    `CLEF_ENABLED`). Selected by `sop decision decide -provider <name>`.
 2. **Backup** — when `SOP_DECISION_FALLBACK` names a different provider,
    `internal/decisionadapter/providers/fallback.Provider` serves the primary first
-   and the backup only when the primary errors.
+   and the backup only when the primary errors. `DECIDER_URL` and
+   `DECIDER_FALLBACK_URL` set each one's base URL (overriding the shared
+   `OLLAMA_BASE_URL`), so the two can run on different servers.
 3. **Deterministic SOP fallback** — SOP's own deterministic decision provider is
    the terminal authority; the advisory provider can only add attention.
 

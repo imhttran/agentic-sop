@@ -942,6 +942,16 @@ Two optional policy blocks describe how SOP decides to proceed without a human.
   closed at load. A `.env` in the folder `sop` is run from also applies (see
   above), including for controller-launched runs, which run `sop` in the
   project folder.
+- **Adapter backend URLs and failover.** These are read by the adapter process
+  (`sop decision decide` / `sop-decision-adapter`), which inherits SOP's
+  environment, not by SOP's own config loader. `SOP_DECISION_FALLBACK` names a
+  second provider that serves only when the selected one errors.
+  `DECIDER_URL` sets the selected provider's base URL (the `-base-url` flag
+  still wins) and `DECIDER_FALLBACK_URL` sets the fallback's. Both are
+  role-based and override each provider's own default (`OLLAMA_BASE_URL`), so a
+  primary and a fallback can run on different servers, for example Clef on oMLX
+  (`http://127.0.0.1:8000`) with Nimble on Ollama (`http://127.0.0.1:11434`).
+  With neither set, both providers share `OLLAMA_BASE_URL` as before.
 - **Live inference authorization.** Running a real adapter incurs inference and is
   gated (Gate W3-4); enabling the adapter by default is a separate production-policy
   decision (Gate W3-3).
