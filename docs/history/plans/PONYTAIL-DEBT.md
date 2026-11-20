@@ -1,6 +1,6 @@
 # Ponytail Debt — Adopt Concrete Revisit Triggers
 
-**Status:** ACTIVE.
+**Status:** Implemented (PD-001–PD-004; PRs #552–#556).
 **Baseline:** `main` at `f4610c0e`.
 
 ## Project

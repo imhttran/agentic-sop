@@ -1,6 +1,6 @@
 # SOP Redaction and Deliverable-Path Fixes
 
-**Status:** PROPOSED.
+**Status:** Implemented (RDP-001–RDP-003; PRs #557–#559).
 **Baseline:** `main` at `f4610c0e`.
 
 ## Project
