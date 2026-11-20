@@ -52,6 +52,25 @@ A text-only Ollama/llama.cpp endpoint alone is **not** a coding agent and cannot
 
 The MLX/oMLX provider follows this rule only on the opt-in governed path. With `SOP_MLX_TOOL_LOOP=true`, the `tool` harness connects the OpenAI-compatible model output to the existing bounded tool loop, so `IMPLEMENT` and `FIX` reuse the same `toolharness` executor, permission checks, mutation observation, and iteration limits as Ollama. Without the flag, the MLX/oMLX path remains text-only and MUST NOT advertise a mutating capability.
 
+On that governed path, `SOP_MLX_NATIVE_TOOLS=true` selects the provider's native
+tool protocol in place of SOP's JSON-in-content protocol. It is off by default, so
+the JSON-in-content behavior is unchanged. Native mode MUST:
+
+- declare only the tools the current capability and phase permit, through the
+  OpenAI-compatible `tools` field with `tool_choice=auto`; the finalize phase
+  declares none;
+- omit `response_format` and the JSON-in-content tool instructions;
+- execute exactly one tool call per turn and return each tool result with the
+  original `tool_call_id`;
+- fail closed on a turn carrying multiple calls or a call without a
+  `tool_call_id`, rather than leave an id unanswered;
+- return a denied native call to the model as a tool result carrying its original
+  `tool_call_id`.
+
+Native and JSON-in-content turns share the same bounded executor, permission
+checks, mutation tracking, iteration limits, and final outcome contract; only the
+wire representation of a tool turn differs.
+
 ## 7. Provider-Neutral Interface and Capability Detection
 
 The boundary MUST expose a provider-neutral interface — conceptually `Execute(task, context) -> result`, `Review(diff, criteria) -> findings`, `Fix(task, findings) -> result` — so the workflow does not depend on one model or harness. Each provider MUST declare its capabilities; a checked wrapper MUST reject, naming the supported set, an unsupported-capability request. A run MUST check up front that the provider can `IMPLEMENT` before any task and MUST reject one that cannot. See [EXECUTION.md](EXECUTION.md).
