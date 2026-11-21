@@ -31,14 +31,15 @@ The freeze cannot be executed until:
    [DECISION-RECORD-002](DECISION-RECORD-002-HISTORICAL-DISPOSITIONS.md).**
 3. The eligibility rule is recorded (decision 3). **MET 2026-11-21 — conservative; see
    [DECISION-RECORD-003](DECISION-RECORD-003-ELIGIBILITY.md).**
-4. The amendment decision is recorded (decision 4).
+4. The amendment decision is recorded (decision 4). **MET 2026-11-21 — rejected; see
+   [DECISION-RECORD-004](DECISION-RECORD-004-PROTOCOL-AMENDMENT.md).**
 5. The seeder is designated (decision 5).
 6. The two human adjudicators are designated and their authorship checks are recorded
    (decision 6).
 7. The thresholds and cost ceiling are approved (decision 7).
 
-Preconditions 1–3 are met (owner, inclusion list, and eligibility rule recorded 2026-11-21).
-Preconditions 4–7 remain open.
+Preconditions 1–4 are met (owner, inclusion list, eligibility rule, and amendment decision
+recorded 2026-11-21). Preconditions 5–7 remain open.
 
 The operator's freeze authorization is decision 8. Execution authorization is decision 9
 and is separate.

@@ -2,12 +2,13 @@
 
 **Type:** Decision-record draft (non-normative). It prepared record entries for the first six
 decisions of the [OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md). Decisions 1–3
-were recorded by the operator on 2026-11-21 in
+were approved and Decision 4 was rejected on 2026-11-21 in
 [DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md),
-[DECISION-RECORD-002](DECISION-RECORD-002-HISTORICAL-DISPOSITIONS.md), and
-[DECISION-RECORD-003](DECISION-RECORD-003-ELIGIBILITY.md); Decisions 4–6 remain unrecorded
-drafts.
-**Status:** **PARTIALLY RECORDED — Decisions 1–3 approved 2026-11-21; Decisions 4–6 remain draft.**
+[DECISION-RECORD-002](DECISION-RECORD-002-HISTORICAL-DISPOSITIONS.md),
+[DECISION-RECORD-003](DECISION-RECORD-003-ELIGIBILITY.md), and
+[DECISION-RECORD-004](DECISION-RECORD-004-PROTOCOL-AMENDMENT.md); Decisions 5–6 remain
+unrecorded drafts.
+**Status:** **PARTIALLY RECORDED — Decisions 1–3 approved and Decision 4 rejected 2026-11-21; Decisions 5–6 remain draft.**
 **Baseline:** `origin/main` @ `5a94dfe1`.
 **Protocol:** [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](../EGM-GOLDFISH-REVIEW-ASSESSMENT.md).
 **Decision package:** [OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md).
@@ -35,7 +36,7 @@ the operator records it. Decision 1 names Tom Tran; the remaining drafts use `<o
 | 1 | Corpus owner | **Designated: Tom Tran (2026-11-21)** | One named human who is not an adjudicator; the operator may serve | — | **Yes** — DECISION-RECORD-001 |
 | 2 | Historical inclusion and exclusion | **Recorded 2026-11-21** — see DECISION-RECORD-002 | Confirm the exclusions and holds; classify the extracted leads explicitly; keep unverified entries out of every floor | 1 | **Yes** — DECISION-RECORD-002 |
 | 3 | Strict versus partial eligibility| **Recorded 2026-11-21** — conservative; seeded set additional| Keep the conservative reading until the corpus can meet both floors without relaxing the recall denominator| 2, 4       | **Yes** — DECISION-RECORD-003|
-| 4 | Proposed protocol amendment | PROPOSED, not applied | Defer until the corpus owner records independent support for each partial, then decide with the actual counts | 1, 3 | **No** |
+| 4 | Proposed protocol amendment| **REJECTED (unnecessary) 2026-11-21**| Rejected as unnecessary under Decision 3| 1, 3       | **Rejected** — DECISION-RECORD-004|
 | 5 | Independent seeder | Not designated; 0 of about 8 and 0 of about 6 cases | One named human who is not an adjudicator; record the sealed-manifest location and access list | — | **No** |
 | 6 | Two independent human adjudicators | None identified; operator treated as an author | Two external humans who did not author or directly edit any corpus case; record the authorship checks | 5, 1 | **No** |
 
@@ -155,37 +156,32 @@ provisionally and the strict shortfall would have remained 12 plans / 11 defects
 
 ## 5. Decision 4 — Proposed protocol amendment
 
-**Verified current state.** [PROPOSED-PROTOCOL-AMENDMENT.md](PROPOSED-PROTOCOL-AMENDMENT.md)
-is PROPOSED and not applied. It changes the plan-floor meaning, not the numeric thresholds.
-Its own §5 shows that even with all 10 partial candidates frozen determinable the corpus
-reaches 10 plans / 10 defects, a shortfall of 5 and 5.
+**Status: REJECTED (unnecessary) 2026-11-21.** Recorded in
+[DECISION-RECORD-004](DECISION-RECORD-004-PROTOCOL-AMENDMENT.md); the preparation analysis
+below is preserved.
 
-**Recommended option.** Defer until the corpus owner records independent support for each
-partial, then decide with the actual counts in hand. The amendment cannot raise either count
-by itself.
+**Verified current state (at preparation).**
+[PROPOSED-PROTOCOL-AMENDMENT.md](PROPOSED-PROTOCOL-AMENDMENT.md) was PROPOSED and not
+applied. It changes the plan-floor meaning, not the numeric thresholds. Its own §5 shows
+that even with all 10 partial candidates frozen determinable the corpus reaches 10 plans /
+10 defects, a shortfall of 5 and 5.
+
+**Recorded option.** Rejected as unnecessary under Decision 3.
 
 **Dependencies.** Decisions 1 and 3. Applying it also requires the owner to record the
 independent support for each frozen candidate.
 
-**Exact text to record:**
+**Recorded text.** The rejection and its rationale are in
+[DECISION-RECORD-004](DECISION-RECORD-004-PROTOCOL-AMENDMENT.md) §1–§2.
 
-> Amendment decision: `approve | reject | revise | defer`.
-> If approve or revise, the exact normative wording to add to the assessment and the
-> manifest fields that change: `<verbatim>`.
-> If defer, the condition for reconsideration: `<condition>`.
->
-> Approval block
-> `approved: false`
-> `identity: null`
-> `date: null`
+**Effect of the recorded decision.** The plan-floor interpretation is settled; the defect
+floor and the registered protocol are unchanged.
 
-**Effect if recorded.** The plan-floor interpretation is settled. The defect floor is
-unchanged either way.
+**Consequence of deferral (no longer applicable).** The conservative reading would have
+applied.
 
-**Consequence of deferral.** The conservative reading applies.
-
-**Explicitly not approved.** The amendment is not applied and the numeric thresholds are not
-changed by this draft.
+**Recorded elsewhere.** The amendment is rejected in DECISION-RECORD-004; it is not applied
+and no numeric threshold changes.
 
 ## 6. Decision 5 — Independent seeder
 

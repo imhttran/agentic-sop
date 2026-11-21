@@ -208,7 +208,7 @@ The full options, trade-offs, validity effects, and deferral consequences are in
 | 1   | Corpus owner                       | **Designated: Tom Tran (2026-11-21)**                                                            | Recorded in DECISION-RECORD-001; not an adjudicator                          |
 | 2   | Historical inclusion and exclusion | **Recorded 2026-11-21** — see DECISION-RECORD-002 for the full disposition set                   | Recorded; no candidate promoted or adjudicated                               |
 | 3   | Strict versus partial eligibility  | **Recorded 2026-11-21** — conservative; seeded set additional                                    | Recorded in DECISION-RECORD-003; the amendment remains pending               |
-| 4   | Proposed protocol amendment        | Proposed, not applied                                                                            | No operator approve, reject, or revise decision                              |
+| 4   | Proposed protocol amendment        | **REJECTED (unnecessary) 2026-11-21**                                                            | Recorded in DECISION-RECORD-004; protocol unchanged                          |
 | 5   | Independent seeder                 | Not designated                                                                                   | No seeder, no sealed manifest, no seeded or no-known-defect cases            |
 | 6   | Two independent human adjudicators | None identified; operator treated as an author                                                   | No two independent humans; PASS is unreachable                               |
 | 7   | Thresholds and cost limits         | Pre-registered, unapproved                                                                       | No approved threshold or hard cost ceiling; no post-first-run change rule    |
@@ -659,3 +659,17 @@ plans and 11 defects; the 11 partials remain outside the denominator; the adjudi
 is 0 and no candidate is promoted. The corpus remains **NOT FROZEN**, the experiment **NOT YET
 READY**, and H1/H2 **NOT ESTABLISHED**. Decision 4 remains open; freeze preconditions 1–3 are
 met and 4–7 remain open.
+
+## 15. Decision 4 recorded (current)
+
+**Decision 4 — Proposed protocol amendment: REJECTED (unnecessary) 2026-11-21.** Decision 3
+already records the conservative rule the amendment proposed, so the amendment would change
+no count. The registered protocol is byte-identical (SHA-256 `abba919e…`) and is not amended.
+The record is
+[DECISION-RECORD-004-PROTOCOL-AMENDMENT.md](DECISION-RECORD-004-PROTOCOL-AMENDMENT.md).
+
+The proposed strict corpus remains 3 plans / 4 defects and the proposed partial corpus 11
+plans / 11 defects; the adjudicated count is 0 and no candidate is promoted. The corpus
+remains **NOT FROZEN**, the experiment **NOT YET READY**, and H1/H2 **NOT ESTABLISHED**.
+Decision 3 remains in force; Decisions 5–9 remain open. Freeze preconditions 1–4 are met and
+5–7 remain open.

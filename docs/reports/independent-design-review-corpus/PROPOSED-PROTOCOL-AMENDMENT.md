@@ -1,6 +1,9 @@
 # Proposed Protocol Amendment — Corpus Eligibility for Partially Determinable Plans
 
-**Status:** PROPOSED — not approved, not applied.
+**Status:** **REJECTED (unnecessary) 2026-11-21** — not applied; see
+[DECISION-RECORD-004](DECISION-RECORD-004-PROTOCOL-AMENDMENT.md). The proposal and its
+rationale are preserved below as historical evidence; its §5–§6 figures predate Decisions 2
+and 3. The registered protocol is unchanged.
 **Baseline:** `origin/main` @ `1b61db6427e73ab18cab532834504359ea41de04`.
 **Authoritative protocol:** [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](../EGM-GOLDFISH-REVIEW-ASSESSMENT.md).
 **Corpus evidence:** [READINESS.md](READINESS.md), [candidates.json](candidates.json).
