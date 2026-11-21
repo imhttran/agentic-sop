@@ -4,13 +4,17 @@
 corpus, its evidence states, and whether it is ready for a corpus-owner freeze. It is not
 an experiment result and does not authorize the conditional PRD.
 **Baseline:** `origin/main` @ `ade6864a`, plus the restored pilot evidence commit. The
-manifest records the earlier `1b61db64` baseline for its candidate revisions.
+current post-Workstream B baseline is `origin/main` @ `a10edc28`, the merge of PR #574;
+the later §9 reconciliation uses it. The manifest records the earlier `1b61db64` baseline
+for its candidate revisions.
 **Manifest:** [candidates.json](candidates.json).
 **Candidate verification:** [CANDIDATE-VERIFICATION.md](CANDIDATE-VERIFICATION.md).
 **Preparation plan:** [CORPUS-PREPARATION-PLAN.md](CORPUS-PREPARATION-PLAN.md).
 **Operator decision package:** [OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md).
 **Freeze procedure:** [FREEZE-PROCEDURE.md](FREEZE-PROCEDURE.md).
 **Pilot evidence:** [INDEPENDENT-DESIGN-REVIEW-PILOT-RESULTS.md](../INDEPENDENT-DESIGN-REVIEW-PILOT-RESULTS.md).
+**Workstream B evidence:** [INDEPENDENT-DESIGN-REVIEW-EXECUTION-PATH-VERIFICATION.md](../INDEPENDENT-DESIGN-REVIEW-EXECUTION-PATH-VERIFICATION.md).
+**Workstream B reconciliation:** [WORKSTREAM-B-RECONCILIATION.md](WORKSTREAM-B-RECONCILIATION.md).
 **Protocol:** [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](../EGM-GOLDFISH-REVIEW-ASSESSMENT.md).
 **Feasibility report:** [INDEPENDENT-DESIGN-REVIEW-EXPERIMENT-FEASIBILITY.md](../INDEPENDENT-DESIGN-REVIEW-EXPERIMENT-FEASIBILITY.md).
 **Plan of record:** [PLAN-Independent-Design-Review-Feasibility.md](../../plans/PLAN-Independent-Design-Review-Feasibility.md).
@@ -27,7 +31,9 @@ This summary is part of a five-document package:
 - [OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md) — the nine decisions, their
   evidence, options, and consequences.
 - [FREEZE-PROCEDURE.md](FREEZE-PROCEDURE.md) — the freeze record and post-freeze mutation
-  controls, not executed.
+  controls, with the current freeze-readiness assessment in §8; not executed.
+- [WORKSTREAM-B-RECONCILIATION.md](WORKSTREAM-B-RECONCILIATION.md) — the merged Workstream B
+  evidence mapped onto the protocol's execution-readiness requirements.
 - This summary.
 
 The package is evidence preparation. It does not freeze, approve, nominate, or execute.
@@ -93,7 +99,7 @@ candidates `IDR-H-003`, `IDR-H-004`, `IDR-H-006`, `IDR-E-001`–`IDR-E-004`,
 count. This count is **proposed**, not frozen.
 
 | Measure                                  | Count |
-| ---------------------------------------- | ----- |
+| ------------------------------------------------------------------ | ----- |
 | Candidate manifest entries               | 23    |
 | Evidence state `VERIFIED`                | 5     |
 | Evidence state `PROPOSED`                | 7     |
@@ -105,7 +111,13 @@ count. This count is **proposed**, not frozen.
 | Proposed inclusion `exclude`             | 8     |
 | Strict determinable defects              | 0     |
 | Partially determinable defects           | 10    |
-| Pending corpus-owner review              | 2     |
+| Pending corpus-owner review (verified defect, no pre-defect input) | 2     |
+
+The `hold` count of 5 is not the same as the two held candidates: it is the manifest's
+inclusion field and comprises the 2 verified-defect holds (`IDR-H-001`, `IDR-H-005`) plus
+the 3 unverified holds (`IDR-E-006`, `IDR-E-010`, `IDR-E-012`). Only the 2 verified-defect
+holds are described as "held pending corpus-owner review"; the 3 unverified entries have
+no identified parent artifact and count toward no floor either.
 
 ## 4. Evidence gaps and shortfall
 
@@ -187,17 +199,24 @@ adjudicator. The designations and the authorship checks are decisions 1 and 6 in
 The full options, trade-offs, validity effects, and deferral consequences are in
 [OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md). None is decided here.
 
-| # | Decision | Current state |
-| --- | --- | --- |
-| 1 | Corpus owner | Not designated |
-| 2 | Historical inclusion and exclusion | 0 strict, 10 partial, 2 held, 8 excluded, 3 unverified; 6 leads uncounted |
-| 3 | Strict versus partial eligibility | Conservative reading applied |
-| 4 | Proposed protocol amendment | Proposed, not applied |
-| 5 | Independent seeder | Not designated |
-| 6 | Two independent human adjudicators | None identified; operator treated as an author |
-| 7 | Thresholds and cost limits | Pre-registered, unapproved |
-| 8 | Corpus and instruction freeze | **NOT FROZEN**; procedure prepared, not executed |
-| 9 | Full experiment execution | Not authorized |
+| #   | Decision                           | Current state                                                                                    | Blocking evidence                                                            |
+| --- | ---------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| 1   | Corpus owner                       | Not designated                                                                                   | No named human and no independence statement; the freeze record has no owner |
+| 2   | Historical inclusion and exclusion | 0 strict, 10 partial, 2 verified-defect holds, 3 unverified holds, 8 excluded; 6 leads uncounted | No confirmed inclusion/exclusion list; the six leads are not extracted       |
+| 3   | Strict versus partial eligibility  | Conservative reading applied                                                                     | No recorded eligibility rule; the amendment is not approved                  |
+| 4   | Proposed protocol amendment        | Proposed, not applied                                                                            | No operator approve, reject, or revise decision                              |
+| 5   | Independent seeder                 | Not designated                                                                                   | No seeder, no sealed manifest, no seeded or no-known-defect cases            |
+| 6   | Two independent human adjudicators | None identified; operator treated as an author                                                   | No two independent humans; PASS is unreachable                               |
+| 7   | Thresholds and cost limits         | Pre-registered, unapproved                                                                       | No approved threshold or hard cost ceiling; no post-first-run change rule    |
+| 8   | Corpus and instruction freeze      | **NOT FROZEN**; procedure prepared, not executed                                                 | Decisions 1–7 not recorded; corpus incomplete; instructions draft            |
+| 9   | Full experiment execution          | Not authorized                                                                                   | Workstream B merged but EP-15 open; freeze and decisions 1–8 not recorded    |
+
+Workstream B evidence is merged (PR #574), so it no longer appears as a missing report in
+this table. It is recorded as a freeze dependency in
+[WORKSTREAM-B-RECONCILIATION.md](WORKSTREAM-B-RECONCILIATION.md): EP-15 is UNVERIFIED,
+EP-16 and EP-02/EP-09/EP-10/EP-12 are PARTIAL, and the merge resolves none of them. The
+exact operator action for each decision is in
+[OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md).
 
 The strict shortfall remains 15 plans and 15 determinable defects; the partial-inclusive
 shortfall is 5 and 5.
@@ -218,26 +237,73 @@ ready to freeze because:
 - The seeded and no-known-defect cases do not exist.
 - No two independent human adjudicators are identified.
 - The classification amendment is not approved.
-- Workstream B remains pending.
+- Workstream B evidence is merged but leaves EP-15 UNVERIFIED and several requirements
+  PARTIAL; see §8.1.
 
 ### 8.1 Workstream B dependency
 
-Workstream B (the independent Linux provider and execution report) remains pending. The
-two four-call pilots provide routing, token, isolation, and timing observations, but they do
-not replace that report and are excluded from the experiment dataset. The pilot limitations
-are recorded in
-[INDEPENDENT-DESIGN-REVIEW-PILOT-RESULTS.md](../INDEPENDENT-DESIGN-REVIEW-PILOT-RESULTS.md):
-Pilot A's external timing record is invalid, and Pilot B's ACP-ZED runs are contaminated by
-the gap report in the clone.
+Workstream B is no longer pending as a missing report. PR #574 (merge `a10edc28`) merged
+the execution-path verification and the `promptRunID` collision fix. That evidence records
+the execution infrastructure as READY for controlled execution of arms A and B, including
+concurrent calls, and gives the freeze record code-, test- and synthetic-runtime-backed
+answers for configuration, isolation, timing method and evidence persistence.
+
+It does not clear the freeze dependency, because:
+
+- EP-15 (provider-side concurrency and parallel-batch latency) is UNVERIFIED.
+- EP-02 (provider-attested model identity), EP-09 (retry accounting), EP-10 (raw reply
+  persistence), EP-12 (parallel timing) and EP-16 (observed repository inspection) are
+  PARTIAL.
+- One unintended real cloud call occurred during the verification (EP-13 check); the
+  report discloses it, and it is not experiment data.
+- The two four-call pilots remain excluded; Pilot A's external timing record is invalid,
+  and Pilot B's ACP-ZED runs are contaminated by the gap report in the clone.
+
+The mapping is in [WORKSTREAM-B-RECONCILIATION.md](WORKSTREAM-B-RECONCILIATION.md).
 
 ### 8.2 Full-experiment readiness verdict
 
 **NOT YET READY.** The historical corpus is 0 strict and 10 partial, the seeded and
 no-known-defect cases are not constructed, no two independent human adjudicators are
-designated, the eligibility amendment is unapproved, the thresholds are unapproved,
-Workstream B is pending, and the corpus is not frozen.
+designated, the eligibility amendment is unapproved, the thresholds are unapproved, the
+corpus is not frozen, and EP-15 remains an open execution dependency. Workstream B intake
+is complete, but its open items do not close any of these conditions.
 
 Workstream A can proceed to a corpus-owner review of the manifest. It must not label the
 corpus `FROZEN` without the operator's decision and the corpus owner's recorded freeze. The
 freeze record and post-freeze controls are specified in
 [FREEZE-PROCEDURE.md](FREEZE-PROCEDURE.md) and have not been executed.
+
+## 9. Post-Workstream B reconciliation (current)
+
+This section is later than the readiness package above and records the current state. It
+does not rewrite the earlier counts; it reconciles them with the merged evidence.
+
+**Chronology (preserved):**
+
+1. Initial feasibility assessment (`64101f9e`).
+2. Two four-call pilots (2026-11-21), excluded from the dataset.
+3. Corpus verification and readiness package (PRs #569–#572).
+4. Merged Workstream B verification (PR #574, merge `a10edc28`).
+5. This post-Workstream B assessment.
+
+**Current counts (unchanged):** 23 manifest entries; 5 `VERIFIED`, 7 `PROPOSED`, 3
+`UNVERIFIED`, 8 `EXCLUDED`; 0 strict proposed determinable; 10 proposed partially
+determinable; 2 verified-defect holds; 3 unverified holds; 8 excluded. Shortfall: 15 plans
+and 15 determinable defects strict, or 5 and 5 if all 10 partial candidates are
+independently frozen determinable.
+
+**Current verdicts:**
+
+| Measure                       | Verdict                                                  |
+| ----------------------------- | -------------------------------------------------------- |
+| Corpus                        | **NOT FROZEN**                                           |
+| Corpus-owner freeze readiness | **NOT READY**                                            |
+| Full experiment               | **NOT YET READY**                                        |
+| H1/H2 outcomes                | **NOT ESTABLISHED**                                      |
+| Workstream B intake           | **COMPLETE**, with EP-15 UNVERIFIED and PARTIAL items    |
+| Execution path                | **READY** for controlled arms A/B, including concurrency |
+
+**What changed since §8:** only the Workstream B intake status. No candidate was promoted,
+no case was constructed, no adjudicator was named, no threshold or eligibility rule was
+approved, and the corpus was not frozen.
