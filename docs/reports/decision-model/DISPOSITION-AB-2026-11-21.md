@@ -1,12 +1,18 @@
 # Decision-model A/B — Inkling-2-Mini-4bit vs Qwen3-4B-4bit
 
 **Type:** Focused decision-provider benchmark report (non-normative).
-**Status:** HARNESS IMPLEMENTED, ONE MODEL MEASURED, ONE MODEL UNAVAILABLE.
+**Status:** QWEN BASELINE MEASURED; CANDIDATE UNAVAILABLE (MODEL LOAD FAILURE). COMPARISON BASELINE-ONLY; REPLACEMENT DECISION OPEN.
 **Question:** Should `Inkling-2-Mini-4bit` replace `Qwen3-4B-4bit` for SOP's
 structured-decision role on the M3 Max with 96 GB unified memory?
 **Scope:** The production structured-decision provider path only. No production
 default, `.env`, routing policy, model list, frozen DME corpus, or prior result is
 changed. The model replacement decision is left to the operator.
+
+**Comparison status:** this is a **Qwen baseline-only** comparison. The candidate is
+advertised but cannot be loaded; its HTTP 409 is a **model load failure**, not a
+quality result. No candidate accuracy or latency exists, and no model was
+substituted. The replacement decision remains **open** until the requested Inkling
+build completes the same frozen evaluation.
 
 ## 1. Production path reused
 
@@ -92,7 +98,7 @@ only, so time-to-first-answer-content, decode speed, and model-load duration are
 endpoint applies its own settings, identically to both models. (The production
 SystemOne transport has no `max-tokens` field.)
 
-### 4.1 Inkling-2-Mini-4bit is UNAVAILABLE
+### 4.1 Inkling-2-Mini-4bit is UNAVAILABLE (MODEL LOAD FAILURE)
 
 The model is advertised but cannot load. The exact warm-up failure, recorded in
 `run-full.json` / `run-quick.json`:
@@ -102,7 +108,9 @@ HTTP 409: {"error":{"message":"Model 'Inkling-2-Mini-4bit' is unavailable after 
 ```
 
 No Inkling measurement exists, and no other model was substituted. The harness
-continued with the available model and recorded the failure.
+continued with the available model and recorded the failure. **This is a model load
+failure, not a quality result:** it is not evidence that the candidate decides well
+or badly. The comparison is therefore baseline-only.
 
 ## 5. Measured results — Qwen3-4B-4bit
 
@@ -191,10 +199,11 @@ irreversible operation. The smoke run has two analogous misses:
 
 ## 7. Recommendation
 
-**INSUFFICIENT EVIDENCE to replace Qwen3-4B-4bit with Inkling-2-Mini-4bit.** The
-candidate model cannot be loaded by the running oMLX instance, so no held-out
-accuracy, consequential-error, or latency comparison exists. Keep the current
-model default unchanged.
+**INSUFFICIENT EVIDENCE — QWEN BASELINE ONLY.** The candidate cannot be loaded by
+the running oMLX instance, so no held-out accuracy, consequential-error, or latency
+comparison exists. Keep the current model default unchanged; the replacement
+decision remains **open** until the requested Inkling build completes the same
+frozen evaluation.
 
 The measured incumbent is not a strong decision classifier on this corpus either:
 24/36 held-out (66.7%), with 5 consequential misses including an unsafe automatic
@@ -205,7 +214,12 @@ operator latency budget.
 
 ## 8. Artifacts and reproduction
 
-Artifacts from the live run are in `/tmp/decision-ab-20261121/` (not committed):
+The live artifacts are preserved in the repository's decision-model evidence
+directory, with a baseline-only record and a `SHA256SUMS` manifest:
+
+[`evals/decision-model/disposition-ab-2026-11-21/`](../../../evals/decision-model/disposition-ab-2026-11-21/README.md)
+
+The original run also left a working copy in `/tmp/decision-ab-20261121/`.
 
 ```text
 REPORT-quick.md        attempts-quick.jsonl   run-quick.json    summary-quick.json
@@ -216,6 +230,12 @@ REPORT-full.md         attempts-full.jsonl    run-full.json     summary-full.jso
 including timeouts and errors, with case id, model, concurrency, expected/actual
 action, first-pass schema validity, correctness, elapsed ms, error category,
 token counts, and null-for-unavailable timing fields.
+
+Reusable invocation: the shipped skill is
+[`skills/decision-ab/SKILL.md`](../../../skills/decision-ab/SKILL.md) (`/decision-ab`).
+It is wired into the canonical skill surface, the installer, and the Claude Code
+plugin mirror, and its contract is tested by `internal/skill/decision_ab_test.go`.
+The measured run used the same commands below.
 
 Copy-ready commands:
 

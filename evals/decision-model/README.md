@@ -209,3 +209,12 @@ the held-out split is never used for tuning.
 
 Live results and the model-availability finding:
 [DISPOSITION-AB-2026-11-21.md](../../docs/reports/decision-model/DISPOSITION-AB-2026-11-21.md).
+
+The preserved live artifacts are **Qwen baseline only**: the candidate was
+advertised but failed to load, so that HTTP 409 is a model load failure, not a
+quality result. The replacement decision remains open until the candidate completes
+the same frozen evaluation.
+
+- Evidence and `SHA256SUMS`:
+  [disposition-ab-2026-11-21/](disposition-ab-2026-11-21/README.md)
+- Reusable invocation: [skills/decision-ab/SKILL.md](../../skills/decision-ab/SKILL.md)
