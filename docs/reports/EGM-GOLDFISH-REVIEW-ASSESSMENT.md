@@ -20,10 +20,10 @@ scoped implementation decision, and PASS alone does not authorize structured
 findings, disposition APIs, or new orchestration.
 
 **Basis:** SOP `origin/main` @ `ad8a9c6c`. The code paths are unchanged since the
-`1e8cb005` baseline; `git log 1e8cb005..ad8a9c6c` contains only the two documentation
-merges. References were read as shallow clones outside the checkout: EGM `34ff1179`
-(an earlier draft read `8e2a5ed`; the claims below were re-checked at `34ff1179`),
-Superpowers `22f0b46`, OpenSpec `0c737dc`. Nothing was installed.
+`1e8cb005` baseline; `git log 1e8cb005..ad8a9c6c` lists only two documentation merges
+and their two documentation commits. References were read as shallow clones outside
+the checkout: EGM `34ff1179`, Superpowers `22f0b46`, OpenSpec `0c737dc`. Nothing was
+installed.
 
 ## 1. Verified architecture
 
@@ -66,9 +66,14 @@ wi.Content, OutputRequirements}` with `OutputRequirements` fixed to "Return conc
   text; without typed JEV evidence it resolves to MEDIUM; `--model-class` overrides it
   (`PROMPT-EXECUTION.md` §5). Provider and model come from `models.<class>.*` config
   and the `SOP_AGENT_PROVIDER` / `SOP_AGENT_MODEL` variables
-  (`internal/agent/provider.go`). The precedence of those variables against
-  class routing for a prompt was **not** traced and must be confirmed by the
-  `routing` section of `metadata.json` in the pilot (§6.4).
+  (`internal/agent/provider.go`). The prompt path builds the agent with the selected
+  model, but `FromConfig` resolves `SOP_AGENT_MODEL` > provider-specific environment >
+  configured model, and the `modelEnvOverride` guard in `applyStageModels` checks only
+  pinned stages and the sensitive model; it does not check the prompt's routed `sel`
+  (`internal/cli/prompt.go`, `internal/cli/stage_models.go`). `routing.model` can
+  therefore record the selected model while another is served. The experiment MUST unset
+  the override variables and cross-check the served model key in `tokens` (§5.1, §6.1);
+  the pilot confirms the check works but does not defer the requirement.
 - Observability: `metadata.json` carries `routing` (class, provider, model) and
   `tokens` by model "as the servers reported it", omitted when no call reported usage
   (`prompt.go:775-788`). No duration field was found; latency has to be timed outside
@@ -110,8 +115,10 @@ wi.Content, OutputRequirements}` with `OutputRequirements` fixed to "Return conc
 - That a fresh context on the same model avoids the author model's blind spots.
   Nothing in SOP or EGM measures this.
 
-**Gap that survives these limits:** no SOP path asks a model to challenge the design
-itself. Code review takes the task as given; the ad-hoc path has no design rubric.
+**Gap that survives these limits:** no SOP path was found that asks a model to challenge
+the design itself. Code review takes the task as given; the ad-hoc path has no design
+rubric. This is a search-based finding: no path was found in `docs`, `skills` and
+`internal`, which is not proof of absence.
 
 The linked PRD proposes a **separate design-review path**. Its independence
 requirements are narrower than the existing `sop run` path: the PRD requires the
@@ -141,11 +148,12 @@ defects.
 Superpowers' agent-driven process control; EGM's interactive triage modes (SOP has the
 approval gate) and its style/structure personas.
 
-EGM's own quality claims are unproven here: in the scenario file read
-(`skills/egm-review/test_scenarios.yaml`, first ~50 lines, at `34ff1179`) the
-assertions are pattern checks on flow and wording, not measured defect detection. The
-remainder was not read. This table is the authoritative capability comparison; the
-PRD summarizes it and links here rather than maintaining a second matrix.
+EGM's own quality claims are unproven here. At `34ff1179`, all 12 scenarios in
+`skills/egm-review/test_scenarios.yaml` are `eval_type: deterministic` pattern checks
+on flow and wording, not measured defect detection. The phrase "precision and recall"
+appears once, in the file-table description in `docs/designs/review.md`; no measured
+result is reported. This table is the authoritative capability comparison; the PRD
+summarizes it and links here rather than maintaining a second matrix.
 
 ## 4. Experiment: question and arms
 
@@ -174,10 +182,15 @@ request file.
   diversity only if B and D both ran under the identical request.
 
 **B×3 control definition.** The control is three independent B calls per plan per
-repetition, not the union of the three repetitions. The H1 B run MAY serve as one of
-the three control runs (7 calls per plan per repetition) or be separate (8 calls).
-The choice is fixed before the pilot and recorded in the run manifest. This is a
-design clarification, not a threshold change; nothing has been run.
+repetition, not the union of the three repetitions. For H2, the control's recall for a
+plan and repetition is the **union** of the three independent B runs' confirmed
+defects, matching C's union of three scoped reviewers. The mean of the three
+individual B runs is reported separately as a diagnostic; across repetitions, recall
+is the mean per §5.5. The H1 B run MAY serve as one of the three control runs (7 calls
+per plan per repetition) or be separate (8 calls). H1 uses the single designated B run;
+it does not use the best of the three control runs. The designation is recorded in the
+manifest before the run. This is a design clarification, not a threshold change;
+nothing has been run.
 
 **Rubric provenance.** Rubrics are written for this experiment from the published
 method, frozen, and hashed before any run. EGM persona files are not installed or
@@ -192,14 +205,36 @@ vendored. If their text is quoted, it is credited (Apache-2.0).
 - Plan text is untrusted data passed as the request; the rubric is the operator's.
 - Controlled and recorded per run: SOP binary commit; harness; provider, model and
   endpoint; `--model-class` (set explicitly in every call); provider-reported
-  parameters where available. Because SOP exposes no sampling controls, repetition (§5.5)
-  carries the variance measurement.
+  parameters where available. SOP's prompt metadata exposes `routing` and `tokens`, not
+  sampling parameters; read sampling parameters from provider-side logs when available,
+  otherwise record them as unavailable and rely on reproducibility. Because SOP exposes
+  no sampling controls, repetition (§5.5) carries the variance measurement.
+- **Model override variables.** Before every run, unset `SOP_AGENT_MODEL` and the
+  provider-specific override (`SOP_OLLAMA_MODEL`, `SOP_LLAMACPP_MODEL`, `SOP_MLX_MODEL`,
+  or `SOP_OPENAI_COMPATIBLE_MODEL`). The prompt path builds the agent with the selected
+  model, but `FromConfig` lets these variables override it, and the `modelEnvOverride`
+  guard does not check the prompt's routed `sel`. Record the unset state in the run
+  manifest.
+- **Served-model check.** For every run, compare `routing.model` in `metadata.json`
+  with the model key(s) in `tokens`. A mismatch, or more than one served model,
+  invalidates the run for model attribution. A run with a detected mismatch is
+  invalidated before unblinding and MAY be rerun once with the environment corrected,
+  provided the replacement is recorded and the choice is not based on findings. If the
+  replacement also mismatches, the comparison is INCONCLUSIVE. If `tokens` is absent,
+  the served-model check and the cost criterion are INCONCLUSIVE; the run is not counted
+  as a confirmed model match. A provider that reports no usage may be run, but H1 and H2
+  are INCONCLUSIVE for it; it is admissible only for H3 (exploratory) or a labelled
+  feasibility run.
 - One model per arm for the whole experiment. A provider or model change
   mid-experiment invalidates the affected runs.
+- **Concurrency.** The pilot records whether the provider executes parallel requests
+  concurrently. If it serializes them, the latency cap uses the sequential sum for C.
 - Run order is randomized and interleaved across arms and repetitions so provider drift
   is not confounded with arm. The full-run order is generated and recorded in the run
-  manifest before the first full-run call. The pilot is excluded; if the pilot changes
-  the protocol, the full run starts from a new frozen manifest.
+  manifest before the first full-run call. The pilot is excluded from the dataset. A
+  pilot that only confirms the existing protocol does not change the manifest; any
+  change to the corpus, order, rubric, thresholds, provider or model after the pilot
+  starts a new frozen manifest and invalidates the affected full runs.
 
 ### 5.2 Isolation from the answer (leakage control)
 
@@ -237,7 +272,14 @@ Fixed and written down before the first run:
 - **Defect record:** id, plan path and sha256, parent commit, location, description,
   class, severity (blocks implementation / changes approach / minor), evidence pointer,
   source (historical or seeded). Minimum to run: 15 known defects across at least 15
-  plans; below that, every result is INCONCLUSIVE.
+  plans with known defects; the no-known-defect set is additional and does not count
+  toward this floor. Below the floor, every recall comparison is INCONCLUSIVE.
+- **Corpus ownership.** The operator (or a designated corpus owner) verifies each
+  path, parent revision and evidence pointer, records the frozen corpus, and confirms
+  it before the first run. The adjudicator does not verify or select the corpus.
+- **Role separation.** The roles are the operator/corpus owner, the seeder, the
+  adjudicator and the analyst. The seeder is neither the adjudicator nor the corpus
+  owner. The analyst holds the key and does not adjudicate.
 
 ### 5.4 Blinded adjudication, deduplication, false positives
 
@@ -250,17 +292,20 @@ Fixed and written down before the first run:
 - Deduplication is done by the adjudicator and is the only merge step. The adjudicator
   does not see arm labels; duplicate labels reference finding IDs. A separate analyst
   holds the key and applies the within-arm deduplication after adjudication: a duplicate
-  is removed only when its original is in the same arm. Identical findings in different
-  arms remain distinct, because each arm is evaluated separately. Duplicate occurrences
-  are removed from both the numerator and the denominator of every metric, so a repeated
-  invalid finding cannot change the false-positive rate through repetition or shuffle
-  order. No merge tooling is built.
+  is removed only when its original is in the same arm. The analyst's within-arm merge
+  is a deterministic post-step performed before metrics; it may only remove duplicate
+  occurrences and cannot add or remove non-duplicate findings. Identical findings in
+  different arms remain distinct, because each arm is evaluated separately. Duplicate
+  occurrences are removed from both the numerator and the denominator of every
+  finding-based metric, so a repeated invalid finding cannot change the false-positive
+  rate through repetition or shuffle order. No merge tooling is built.
 - The adjudicator is not the author of the plan or the seeder of its defect.
-- **Independence.** A human adjudicates. A second person independently adjudicates a
-  random 20% sample of findings and agreement is reported (Cohen's kappa). A model may
-  serve only as a third check, never as the sole adjudicator. If only one human is
-  available, that limitation is recorded and the best attainable outcome is "suggestive",
-  never PASS.
+- **Independence.** A human adjudicates. A second person independently adjudicates the
+  larger of 20 findings or a random 20% sample, and agreement is reported (Cohen's
+  kappa). If fewer than 20 findings exist in total, kappa is reported but the outcome
+  cannot PASS. A model may serve only as a third check, never as the sole adjudicator.
+  If only one human is available, that limitation is recorded and the outcome is
+  INCONCLUSIVE; it may be described as suggestive, but it is never PASS.
 - **Adjudication is evidence work, not an approval.** It creates no SOP approval
   record and changes no lifecycle state. The protocol records findings and judgments;
   it does not record an operator decision to implement.
@@ -282,6 +327,9 @@ Fixed and written down before the first run:
 
 ### 5.6 Metrics
 
+The finding-based metrics (recall, precision, false-positive rate and
+reproducibility) use the within-arm deduplicated set defined in §5.4.
+
 | Metric                 | Definition                                                                                                         |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | Recall                 | known defects matched by distinct findings ÷ known defects, per arm                                                |
@@ -293,8 +341,9 @@ Fixed and written down before the first run:
 | Adjudication agreement | kappa on the double-adjudicated sample                                                                             |
 
 If a provider does not report tokens, cost for that arm is recorded as unavailable and
-the cost criterion is INCONCLUSIVE. Output size in characters may be reported as a
-labelled proxy, not as cost.
+the cost criterion is INCONCLUSIVE. The hypothesis cannot return PASS without a
+measured cost; the recall result may be reported separately. Output size in characters
+may be reported as a labelled proxy, not as cost.
 
 ### 5.7 Statistics
 
@@ -311,18 +360,37 @@ labelled proxy, not as cost.
 Thresholds are fixed before the first run. The values below are proposals to be
 approved before it.
 
+**Pre-run revision note (2026-11-21).** H2 now uses the same recall rule as H1
+(≥25% relative and ≥3 more confirmed known defects) against the B×3 control. This
+supersedes the earlier PRD draft's separate fan-out rule (≥15% over B1; that draft
+stated the absolute "2 more" requirement only for the rubric comparison). No run has
+started, so the change is made before the protocol is frozen; it is recorded here
+rather than applied silently. The revised thresholds remain unapproved until the
+operator approves them before the first run; the approval is recorded in the run
+manifest, which also records the approved threshold text and its sha256. This note also
+records the pre-run clarifications made in the same revision:
+the model-mismatch rerun rule (§5.1), the 20-finding kappa floor (§5.4, §6.1), the H1
+designated-run rule (§4), and the cost/latency precedence rule (§6.2).
+
 ### 6.1 Validity conditions (checked first)
 
 The experiment is **INCONCLUSIVE** for the affected comparison if any of these holds:
 
-- fewer than 15 known defects, or fewer than 15 plans;
-- kappa below 0.6 on the double-adjudicated sample, or no second adjudicator and the
-  claim would be PASS;
+- fewer than 15 known defects, or fewer than 15 plans with known defects;
+- kappa below 0.6 on the double-adjudicated sample, fewer than 20 double-adjudicated
+  findings when the claim would be PASS, or no second adjudicator and the claim would
+  be PASS;
 - more than 10% of runs failed, or arms have unequal failure rates by more than 5
   points;
-- `metadata.json` routing differs from the intended provider, model or class for any
-  run in the comparison;
-- token counts unavailable (cost criterion only);
+- `metadata.json` routing differs from the intended provider, model or class;
+  `SOP_AGENT_MODEL` or the provider-specific model variable was set; or the served
+  model key in `tokens` does not match `routing.model`, in a run that was not replaced
+  under the §5.1 rerun rule, for any run in the comparison;
+- token counts unavailable (the hypothesis is INCONCLUSIVE; recall may be reported
+  separately but cannot yield PASS);
+- a provider-reported sampling parameter changed within an arm; where the provider
+  reports no parameters, the drift is recorded as a limitation and reproducibility is
+  the only guard;
 - the order, corpus, rubric or thresholds changed after the first run.
 
 ### 6.2 Outcome rules, applied in this order
@@ -341,6 +409,10 @@ The experiment is **INCONCLUSIVE** for the affected comparison if any of these h
 The hard caps in step 1 are point-estimate stop rules, not interval tests; the PASS rule
 in step 2 uses the interval lower bound. The asymmetry is deliberate: a cost or
 false-positive breach stops the arm, while a recall claim requires interval evidence.
+If the cost criterion is INCONCLUSIVE because `tokens` is unavailable, the cost hard cap
+is not applied and the hypothesis is INCONCLUSIVE; it is not a PASS. A hard-cap breach in
+step 1 takes precedence over a recall PASS in step 2. The latency cap uses the
+parallel-batch wall-clock for C; the sequential sum is diagnostic only.
 
 H1 and H2 are judged independently with their own comparator (A for B; the B×3 control
 for C). The comparator and the cost/latency cap for each hypothesis are:
@@ -352,7 +424,9 @@ for C). The comparator and the cost/latency cap for each hypothesis are:
 | H3 (alternate model, exploratory) | B_D / C_D vs B / C | same-request B and C under the other model        | report only                     | report only | report only       |
 
 The cost and latency caps are relative to A in both H1 and H2; the B×3 control's own
-cost is part of the experiment, not the denominator. A hard-cap FAIL is recorded per
+cost is part of the experiment, not the denominator. The C cost cap is relative to A, not
+B×3, because A is the operational baseline; report C/A and C/B×3 both, so an arm cheaper
+than the control is visible even when it exceeds the cap. A hard-cap FAIL is recorded per
 hypothesis. A PASS on H1 and a FAIL on H2 means only the rubric is eligible for a
 scoped decision; neither outcome authorizes the other hypothesis.
 
@@ -370,8 +444,13 @@ scoped decision; neither outcome authorizes the other hypothesis.
 - Run arms A and B once on two plans.
 - Confirm in `metadata.json` that provider, model and class match intent for each run.
 - Confirm the token fields are populated for the chosen provider.
-- Confirm whether the `SOP_AGENT_MODEL` / `SOP_AGENT_PROVIDER` variables or
-  `models.<class>.*` config decides the model for a prompt.
+- Confirm the pre-run requirement: `SOP_AGENT_MODEL` and the provider-specific model
+  variable are unset, `routing.model` matches the intended model, and the `tokens` key
+  matches `routing.model`. The pilot validates the check; the requirement applies to
+  every run.
+- The two-plan pilot cannot exercise the 20-finding double-adjudication floor or kappa;
+  it validates metadata, model attribution and token plumbing only. The kappa and
+  finding-count validity conditions are evaluated in the full run.
 - Confirm Arm D is feasible without configuration changes to SOP.
 - Pilot results are not part of the dataset.
 
@@ -379,8 +458,8 @@ scoped decision; neither outcome authorizes the other hypothesis.
 
 The planned call budget is the corpus size × arms × repetitions, plus the pilot and
 any optional Arm D. The target corpus is 26–29 plans (12–15 historical, about 8
-seeded, about 6 no-known-defect); the minimum is 15 plans and 15 known defects. Three
-repetitions are run per plan per arm.
+seeded, about 6 no-known-defect); the minimum is 15 plans with known defects and 15
+known defects. Three repetitions are run per plan per arm.
 
 | Configuration                                      | Calls per plan per repetition | 15 plans × 3 | 26 plans × 3 | 29 plans × 3 |
 | -------------------------------------------------- | ----------------------------- | ------------ | ------------ | ------------ |
@@ -392,12 +471,24 @@ repetitions are run per plan per arm.
 | Optional D, B×3 + C                                | +6                            | +270         | +468         | +522         |
 | Optional D, B_H1 + B×3 + C                         | +7                            | +315         | +546         | +609         |
 
-The pilot adds 4 calls: arms A and B once on two plans. Pilot results are excluded
-from the dataset. Including the pilot, the base experiment is 319–613 calls at the
-default 7-call design, or 364–700 at the disjoint 8-call design. Optional Arm D adds
-180–609 calls depending on whether it runs B+C, B×3+C, or B_H1+B×3+C, so the total
-range is 499–1,309 calls. State the exact configuration in the run manifest before
-the first call.
+Combined totals including the 4-call pilot:
+
+| Configuration (including pilot) | 15 plans | 26 plans | 29 plans |
+| ------------------------------- | -------- | -------- | -------- |
+| Base, default 7-call            | 319      | 550      | 613      |
+| Base, disjoint 8-call           | 364      | 628      | 700      |
+| Base + D (B+C), default         | 499      | 862      | 961      |
+| Base + D (B×3+C), default       | 589      | 1,018    | 1,135    |
+| Base + D (B_H1+B×3+C), default  | 634      | 1,096    | 1,222    |
+| Base + D (B+C), disjoint        | 544      | 940      | 1,048    |
+| Base + D (B×3+C), disjoint      | 634      | 1,096    | 1,222    |
+| Base + D (B_H1+B×3+C), disjoint | 679      | 1,174    | 1,309    |
+
+The pilot adds 4 calls: arms A and B once on two plans. Pilot results are excluded from
+the dataset, and the combined table above includes those 4 calls. The optional-D rows
+are increments to the base configuration; the pilot is already included and is not
+added again. The total range is 499–1,309 calls. State the exact configuration in the
+run manifest before the first call.
 
 These are call counts, not token costs. Token cost is measured from `metadata.json`
 per plan; if the provider does not report tokens, the cost criterion is INCONCLUSIVE
@@ -436,7 +527,9 @@ double-adjudicated sample are recorded.
   unapproved and unimplemented; structured findings, disposition APIs, evidence
   persistence, and orchestration each require a separate governance decision. A PASS
   on H2 would support a separate decision on multiple reviewers; it does not authorize
-  merge or de-duplication tooling.
+  merge or de-duplication tooling. The conditional PRD's served-model and
+  missing-evidence requirements are protocol alignment; they remain subject to the same
+  authorization boundary.
 - **FAIL and INCONCLUSIVE are distinct** and neither authorizes implementation. FAIL
   means a measured negative or hard-cap result; INCONCLUSIVE means the validity
   conditions or interval precision do not support a decision. Both leave SOP

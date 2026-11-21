@@ -79,11 +79,11 @@ the operator has recorded an authorization decision.
 
 Every current-state claim below was traced in this working tree at baseline commit
 `ad8a9c6c` by reading the named file and function. The code paths are unchanged from
-the `1e8cb005` baseline; `git log 1e8cb005..ad8a9c6c` contains only the two
-documentation merges. The review input for the proposal itself was documentation-only,
-so the review could not open those files; the citations are for the reader, not a
-substitute for the source. No behavior was run to produce these claims; they describe
-code paths and call sites as written.
+the `1e8cb005` baseline; `git log 1e8cb005..ad8a9c6c` lists only two documentation
+merges and their two documentation commits. The review input for the proposal itself
+was documentation-only, so the review could not open those files; the citations are
+for the reader, not a substitute for the source. No behavior was run to produce these
+claims; they describe code paths and call sites as written.
 
 ### 2.3 Observed gaps in the current code paths (static trace)
 
@@ -210,9 +210,11 @@ in the assessment; do not conflate them.
 - **FR-4 — Design rubric.** The prompt MUST ask design questions, at minimum:
   problem and goal fit; unstated assumptions and undefined terms; failure modes and
   recovery; security and data handling; testability and acceptance evidence;
-  implementation readiness, including whether referenced paths and symbols exist;
   maintainability, including unnecessary complexity, duplication, and ownership
-  boundaries; reuse of existing capabilities; and scope or YAGNI violations.
+  boundaries; reuse of existing capabilities; and scope or YAGNI violations. The
+  implementation-readiness check MUST verify referenced paths and symbols only when the
+  reviewer has repository access or the declared references contain them. When it cannot
+  verify them, the review MUST report that limit as missing evidence.
 - **FR-5 — Structured output.** The response MUST be parsed into the existing
   report (severity, title, detail, file, line, suggestion). A malformed response
   MUST follow the existing bounded malformed-output boundary.
@@ -229,9 +231,13 @@ in the assessment; do not conflate them.
 - **FR-9 — Provider and model independence.** The design review MUST run on any
   provider that declares `REVIEW`. Pinning MUST use the routing surface of the chosen
   entry point: `models.stages.review` for a review-stage path, or `--model-class` and
-  the class table for a prompt path. No new configuration key is required. The
-  implementation MUST record the actual provider and model; it MUST NOT claim a stage
-  pin for a prompt-path implementation.
+  the class table for a prompt path. No new configuration key is required. A text-only
+  provider may be unable to verify repository paths and symbols; the review MUST report
+  that as missing evidence rather than infer existence. The implementation MUST record
+  the actual provider and model and MUST verify that the served model key in the run's
+  provider-reported token record, when present, matches the resolved model. It MUST NOT
+  claim a stage pin for a prompt-path implementation, and it MUST record the attribution
+  as unverified when no served-model evidence exists.
 - **FR-10 — Failure is not a clean review.** A provider failure, timeout, or
   unparseable response MUST be reported as "review not completed" with a non-zero
   exit. It MUST NOT be reported as a clean review or as an empty findings list.
@@ -351,7 +357,8 @@ shape OD-1 and OD-2 select; they do not require a particular one.
   credential.
 - **AC-5** Tests cover path confinement, symlink rejection, and redaction.
 - **AC-6** A test covers provider/model pinning through the routing surface of the
-  chosen entry point, with no new configuration key.
+  chosen entry point, with no new configuration key, and covers the served-model
+  mismatch check (resolved model vs. the provider-reported token key, when present).
 - **AC-7** An operator can run the review on a real plan and adjudicate the
   findings from the printed output and the evidence artifact.
 - **AC-8** The command, artifact, rubric version, and non-goals are documented in the
