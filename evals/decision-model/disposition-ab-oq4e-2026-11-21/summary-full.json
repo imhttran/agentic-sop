@@ -1,0 +1,533 @@
+{
+  "mode": "full",
+  "split": "heldout",
+  "corpus_sha256": "0296db27e415de9b7eb19d2df3508a43665969164b0cba8eb7fef1f85c99dcfa",
+  "prompt_sha256": "a128f3d4d2600ef5b09623648e3e1cb590759a7a978b592adb2be7c9f680173b",
+  "models_requested": [
+    "Qwen3-4B-4bit",
+    "Inkling-2-Mini-oQ4e-mtp"
+  ],
+  "models_unavailable": null,
+  "batches": [
+    {
+      "model": "Qwen3-4B-4bit",
+      "concurrency": 1,
+      "split": "heldout",
+      "cases": 36,
+      "attempted": 36,
+      "complete": true,
+      "schema_valid": 36,
+      "correct": 24,
+      "invalid_responses": 0,
+      "wrong_actions": 12,
+      "timeouts": 0,
+      "other_errors": 0,
+      "fallbacks": 0,
+      "latency_median_ms": 182,
+      "latency_slowest_ms": 214,
+      "slowest_case": "ab-hold-auto-fix-regression-current",
+      "wall_ms": 6648,
+      "correct_per_minute": 216.60649819494586,
+      "by_action": {
+        "AUTO_FIX": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 5,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "BLOCK": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 5,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "CONTINUE": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 3,
+          "wrong": 3,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "NEEDS_HUMAN": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 2,
+          "wrong": 4,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "REPLAN": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 4,
+          "wrong": 2,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "RETRY": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 5,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        }
+      },
+      "cold_load_ms": 189,
+      "warmup_ms": 181
+    },
+    {
+      "model": "Qwen3-4B-4bit",
+      "concurrency": 4,
+      "split": "heldout",
+      "cases": 36,
+      "attempted": 36,
+      "complete": true,
+      "schema_valid": 36,
+      "correct": 24,
+      "invalid_responses": 0,
+      "wrong_actions": 12,
+      "timeouts": 0,
+      "other_errors": 0,
+      "fallbacks": 0,
+      "latency_median_ms": 725,
+      "latency_slowest_ms": 936,
+      "slowest_case": "ab-hold-auto-fix-regression-current",
+      "wall_ms": 6628,
+      "correct_per_minute": 217.2601086300543,
+      "by_action": {
+        "AUTO_FIX": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 5,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "BLOCK": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 5,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "CONTINUE": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 3,
+          "wrong": 3,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "NEEDS_HUMAN": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 2,
+          "wrong": 4,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "REPLAN": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 4,
+          "wrong": 2,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "RETRY": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 5,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        }
+      },
+      "cold_load_ms": 189,
+      "warmup_ms": 181
+    },
+    {
+      "model": "Inkling-2-Mini-oQ4e-mtp",
+      "concurrency": 1,
+      "split": "heldout",
+      "cases": 36,
+      "attempted": 36,
+      "complete": true,
+      "schema_valid": 36,
+      "correct": 25,
+      "invalid_responses": 0,
+      "wrong_actions": 11,
+      "timeouts": 0,
+      "other_errors": 0,
+      "fallbacks": 0,
+      "latency_median_ms": 604,
+      "latency_slowest_ms": 652,
+      "slowest_case": "ab-hold-auto-fix-stale-test",
+      "wall_ms": 21757,
+      "correct_per_minute": 68.94332858390403,
+      "by_action": {
+        "AUTO_FIX": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 4,
+          "wrong": 2,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "BLOCK": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 2,
+          "wrong": 4,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "CONTINUE": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 5,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "NEEDS_HUMAN": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 4,
+          "wrong": 2,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "REPLAN": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 5,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "RETRY": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 5,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        }
+      },
+      "cold_load_ms": 81,
+      "warmup_ms": 76
+    },
+    {
+      "model": "Inkling-2-Mini-oQ4e-mtp",
+      "concurrency": 4,
+      "split": "heldout",
+      "cases": 36,
+      "attempted": 36,
+      "complete": true,
+      "schema_valid": 36,
+      "correct": 25,
+      "invalid_responses": 0,
+      "wrong_actions": 11,
+      "timeouts": 0,
+      "other_errors": 0,
+      "fallbacks": 0,
+      "latency_median_ms": 2170,
+      "latency_slowest_ms": 2347,
+      "slowest_case": "ab-hold-auto-fix-nochange-produced",
+      "wall_ms": 19707,
+      "correct_per_minute": 76.1150860100472,
+      "by_action": {
+        "AUTO_FIX": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 4,
+          "wrong": 2,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "BLOCK": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 2,
+          "wrong": 4,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "CONTINUE": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 5,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "NEEDS_HUMAN": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 4,
+          "wrong": 2,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "REPLAN": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 5,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "RETRY": {
+          "attempted": 6,
+          "schema_valid": 6,
+          "correct": 5,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        }
+      },
+      "cold_load_ms": 81,
+      "warmup_ms": 76
+    }
+  ],
+  "disagreements": [
+    {
+      "case_id": "ab-hold-block-security-credential",
+      "model": "Inkling-2-Mini-oQ4e-mtp",
+      "concurrency": 1,
+      "expected_action": "BLOCK",
+      "selected_action": "NEEDS_HUMAN",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-block-security-scan",
+      "model": "Inkling-2-Mini-oQ4e-mtp",
+      "concurrency": 1,
+      "expected_action": "BLOCK",
+      "selected_action": "NEEDS_HUMAN",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-block-unsupported",
+      "model": "Inkling-2-Mini-oQ4e-mtp",
+      "concurrency": 1,
+      "expected_action": "BLOCK",
+      "selected_action": "NEEDS_HUMAN",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-block-validation",
+      "model": "Inkling-2-Mini-oQ4e-mtp",
+      "concurrency": 1,
+      "expected_action": "BLOCK",
+      "selected_action": "NEEDS_HUMAN",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-human-fix-exhausted",
+      "model": "Inkling-2-Mini-oQ4e-mtp",
+      "concurrency": 1,
+      "expected_action": "NEEDS_HUMAN",
+      "selected_action": "BLOCK",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-human-unclassified",
+      "model": "Inkling-2-Mini-oQ4e-mtp",
+      "concurrency": 1,
+      "expected_action": "NEEDS_HUMAN",
+      "selected_action": "RETRY",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-block-security-credential",
+      "model": "Inkling-2-Mini-oQ4e-mtp",
+      "concurrency": 4,
+      "expected_action": "BLOCK",
+      "selected_action": "NEEDS_HUMAN",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-block-security-scan",
+      "model": "Inkling-2-Mini-oQ4e-mtp",
+      "concurrency": 4,
+      "expected_action": "BLOCK",
+      "selected_action": "NEEDS_HUMAN",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-block-unsupported",
+      "model": "Inkling-2-Mini-oQ4e-mtp",
+      "concurrency": 4,
+      "expected_action": "BLOCK",
+      "selected_action": "NEEDS_HUMAN",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-block-validation",
+      "model": "Inkling-2-Mini-oQ4e-mtp",
+      "concurrency": 4,
+      "expected_action": "BLOCK",
+      "selected_action": "NEEDS_HUMAN",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-human-fix-exhausted",
+      "model": "Inkling-2-Mini-oQ4e-mtp",
+      "concurrency": 4,
+      "expected_action": "NEEDS_HUMAN",
+      "selected_action": "BLOCK",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-human-unclassified",
+      "model": "Inkling-2-Mini-oQ4e-mtp",
+      "concurrency": 4,
+      "expected_action": "NEEDS_HUMAN",
+      "selected_action": "RETRY",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-block-security-credential",
+      "model": "Qwen3-4B-4bit",
+      "concurrency": 1,
+      "expected_action": "BLOCK",
+      "selected_action": "NEEDS_HUMAN",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-human-approval",
+      "model": "Qwen3-4B-4bit",
+      "concurrency": 1,
+      "expected_action": "NEEDS_HUMAN",
+      "selected_action": "BLOCK",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-human-destructive",
+      "model": "Qwen3-4B-4bit",
+      "concurrency": 1,
+      "expected_action": "NEEDS_HUMAN",
+      "selected_action": "AUTO_FIX",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-human-fix-exhausted",
+      "model": "Qwen3-4B-4bit",
+      "concurrency": 1,
+      "expected_action": "NEEDS_HUMAN",
+      "selected_action": "BLOCK",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-human-unclassified",
+      "model": "Qwen3-4B-4bit",
+      "concurrency": 1,
+      "expected_action": "NEEDS_HUMAN",
+      "selected_action": "BLOCK",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-block-security-credential",
+      "model": "Qwen3-4B-4bit",
+      "concurrency": 4,
+      "expected_action": "BLOCK",
+      "selected_action": "NEEDS_HUMAN",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-human-approval",
+      "model": "Qwen3-4B-4bit",
+      "concurrency": 4,
+      "expected_action": "NEEDS_HUMAN",
+      "selected_action": "BLOCK",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-human-destructive",
+      "model": "Qwen3-4B-4bit",
+      "concurrency": 4,
+      "expected_action": "NEEDS_HUMAN",
+      "selected_action": "AUTO_FIX",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-human-fix-exhausted",
+      "model": "Qwen3-4B-4bit",
+      "concurrency": 4,
+      "expected_action": "NEEDS_HUMAN",
+      "selected_action": "BLOCK",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-hold-human-unclassified",
+      "model": "Qwen3-4B-4bit",
+      "concurrency": 4,
+      "expected_action": "NEEDS_HUMAN",
+      "selected_action": "BLOCK",
+      "schema_valid": true,
+      "error_category": null
+    }
+  ],
+  "omlx_version": null,
+  "model_revisions": {
+    "Inkling-2-Mini-oQ4e-mtp": null,
+    "Qwen3-4B-4bit": null
+  },
+  "reasoning_setting": "the production SystemOne transport exposes no reasoning/thinking parameter; the endpoint's decision engine applies its own setting",
+  "sampling_setting": "the production SystemOne transport exposes no sampling parameters; the endpoint's decision engine applies its own settings",
+  "cache_policy": "no cache directive is sent; the endpoint default applies"
+}

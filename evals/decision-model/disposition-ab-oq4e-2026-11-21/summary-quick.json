@@ -1,0 +1,371 @@
+{
+  "mode": "quick",
+  "split": "smoke",
+  "corpus_sha256": "0296db27e415de9b7eb19d2df3508a43665969164b0cba8eb7fef1f85c99dcfa",
+  "prompt_sha256": "a128f3d4d2600ef5b09623648e3e1cb590759a7a978b592adb2be7c9f680173b",
+  "models_requested": [
+    "Qwen3-4B-4bit",
+    "Inkling-2-Mini-oQ4e-mtp"
+  ],
+  "models_unavailable": null,
+  "batches": [
+    {
+      "model": "Qwen3-4B-4bit",
+      "concurrency": 1,
+      "split": "smoke",
+      "cases": 12,
+      "attempted": 12,
+      "complete": true,
+      "schema_valid": 12,
+      "correct": 8,
+      "invalid_responses": 0,
+      "wrong_actions": 4,
+      "timeouts": 0,
+      "other_errors": 0,
+      "fallbacks": 0,
+      "latency_median_ms": 185,
+      "latency_slowest_ms": 218,
+      "slowest_case": "ab-smoke-auto-fix-build",
+      "wall_ms": 2259,
+      "correct_per_minute": 212.48339973439573,
+      "by_action": {
+        "AUTO_FIX": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 1,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "BLOCK": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 1,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "CONTINUE": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 1,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "NEEDS_HUMAN": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 1,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "REPLAN": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 2,
+          "wrong": 0,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "RETRY": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 2,
+          "wrong": 0,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        }
+      },
+      "cold_load_ms": 205,
+      "warmup_ms": 185
+    },
+    {
+      "model": "Qwen3-4B-4bit",
+      "concurrency": 4,
+      "split": "smoke",
+      "cases": 12,
+      "attempted": 12,
+      "complete": true,
+      "schema_valid": 12,
+      "correct": 8,
+      "invalid_responses": 0,
+      "wrong_actions": 4,
+      "timeouts": 0,
+      "other_errors": 0,
+      "fallbacks": 0,
+      "latency_median_ms": 730,
+      "latency_slowest_ms": 945,
+      "slowest_case": "ab-smoke-auto-fix-test",
+      "wall_ms": 2238,
+      "correct_per_minute": 214.47721179624665,
+      "by_action": {
+        "AUTO_FIX": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 1,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "BLOCK": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 1,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "CONTINUE": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 1,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "NEEDS_HUMAN": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 1,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "REPLAN": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 2,
+          "wrong": 0,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "RETRY": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 2,
+          "wrong": 0,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        }
+      },
+      "cold_load_ms": 205,
+      "warmup_ms": 185
+    },
+    {
+      "model": "Inkling-2-Mini-oQ4e-mtp",
+      "concurrency": 1,
+      "split": "smoke",
+      "cases": 12,
+      "attempted": 12,
+      "complete": true,
+      "schema_valid": 12,
+      "correct": 11,
+      "invalid_responses": 0,
+      "wrong_actions": 1,
+      "timeouts": 0,
+      "other_errors": 0,
+      "fallbacks": 0,
+      "latency_median_ms": 567,
+      "latency_slowest_ms": 604,
+      "slowest_case": "ab-smoke-auto-fix-test",
+      "wall_ms": 6816,
+      "correct_per_minute": 96.83098591549295,
+      "by_action": {
+        "AUTO_FIX": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 2,
+          "wrong": 0,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "BLOCK": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 2,
+          "wrong": 0,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "CONTINUE": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 1,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "NEEDS_HUMAN": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 2,
+          "wrong": 0,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "REPLAN": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 2,
+          "wrong": 0,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "RETRY": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 2,
+          "wrong": 0,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        }
+      },
+      "cold_load_ms": 487,
+      "warmup_ms": 194
+    },
+    {
+      "model": "Inkling-2-Mini-oQ4e-mtp",
+      "concurrency": 4,
+      "split": "smoke",
+      "cases": 12,
+      "attempted": 12,
+      "complete": true,
+      "schema_valid": 12,
+      "correct": 11,
+      "invalid_responses": 0,
+      "wrong_actions": 1,
+      "timeouts": 0,
+      "other_errors": 0,
+      "fallbacks": 0,
+      "latency_median_ms": 261,
+      "latency_slowest_ms": 311,
+      "slowest_case": "ab-smoke-continue-no-change",
+      "wall_ms": 818,
+      "correct_per_minute": 806.8459657701711,
+      "by_action": {
+        "AUTO_FIX": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 2,
+          "wrong": 0,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "BLOCK": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 2,
+          "wrong": 0,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "CONTINUE": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 1,
+          "wrong": 1,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "NEEDS_HUMAN": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 2,
+          "wrong": 0,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "REPLAN": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 2,
+          "wrong": 0,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        },
+        "RETRY": {
+          "attempted": 2,
+          "schema_valid": 2,
+          "correct": 2,
+          "wrong": 0,
+          "invalid": 0,
+          "timeout": 0,
+          "other_error": 0
+        }
+      },
+      "cold_load_ms": 487,
+      "warmup_ms": 194
+    }
+  ],
+  "disagreements": [
+    {
+      "case_id": "ab-smoke-block-validation",
+      "model": "Qwen3-4B-4bit",
+      "concurrency": 1,
+      "expected_action": "BLOCK",
+      "selected_action": "AUTO_FIX",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-smoke-human-security",
+      "model": "Qwen3-4B-4bit",
+      "concurrency": 1,
+      "expected_action": "NEEDS_HUMAN",
+      "selected_action": "BLOCK",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-smoke-block-validation",
+      "model": "Qwen3-4B-4bit",
+      "concurrency": 4,
+      "expected_action": "BLOCK",
+      "selected_action": "AUTO_FIX",
+      "schema_valid": true,
+      "error_category": null
+    },
+    {
+      "case_id": "ab-smoke-human-security",
+      "model": "Qwen3-4B-4bit",
+      "concurrency": 4,
+      "expected_action": "NEEDS_HUMAN",
+      "selected_action": "BLOCK",
+      "schema_valid": true,
+      "error_category": null
+    }
+  ],
+  "omlx_version": null,
+  "model_revisions": {
+    "Inkling-2-Mini-oQ4e-mtp": null,
+    "Qwen3-4B-4bit": null
+  },
+  "reasoning_setting": "the production SystemOne transport exposes no reasoning/thinking parameter; the endpoint's decision engine applies its own setting",
+  "sampling_setting": "the production SystemOne transport exposes no sampling parameters; the endpoint's decision engine applies its own settings",
+  "cache_policy": "no cache directive is sent; the endpoint default applies"
+}

@@ -1,0 +1,63 @@
+{
+  "endpoint": "http://127.0.0.1:8000",
+  "purpose": "Verify the exact Inkling build returns nonempty answer content outside the scored corpus.",
+  "request": {
+    "prompt": "Reply with the single word: ready",
+    "max_tokens": 512,
+    "temperature": 0,
+    "stream": false
+  },
+  "inkling": {
+    "http_status": 200,
+    "elapsed_ms": 1668,
+    "finish_reason": "stop",
+    "content": "ready",
+    "content_length": 5,
+    "usage": {
+      "prompt_tokens": 22,
+      "completion_tokens": 53,
+      "total_tokens": 75,
+      "input_tokens": 22,
+      "output_tokens": 53,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 46
+      },
+      "time_to_first_token": 0.28,
+      "total_time": 1.65,
+      "prompt_eval_duration": 0.28,
+      "generation_duration": 1.37,
+      "prompt_tokens_per_second": 78.04,
+      "generation_tokens_per_second": 38.61
+    }
+  },
+  "qwen_control": {
+    "http_status": 200,
+    "elapsed_ms": 1829,
+    "finish_reason": "stop",
+    "content": "ready",
+    "content_length": 5,
+    "usage": {
+      "prompt_tokens": 15,
+      "completion_tokens": 172,
+      "total_tokens": 187,
+      "input_tokens": 15,
+      "output_tokens": 172,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 167
+      },
+      "time_to_first_token": 0.06,
+      "total_time": 1.82,
+      "prompt_eval_duration": 0.06,
+      "generation_duration": 1.76,
+      "prompt_tokens_per_second": 237.47,
+      "generation_tokens_per_second": 97.7
+    }
+  },
+  "note": "A short chat request with max_tokens=32 returned empty content on both models because reasoning consumed the cap; 512 produced nonempty content. The scored benchmark uses the production SystemOne decision path, not this chat request."
+}
