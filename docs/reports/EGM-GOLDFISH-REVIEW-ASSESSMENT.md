@@ -186,7 +186,9 @@ repetition, not the union of the three repetitions. For H2, the control's recall
 plan and repetition is the **union** of the three independent B runs' confirmed
 defects, matching C's union of three scoped reviewers. The mean of the three
 individual B runs is reported separately as a diagnostic; across repetitions, recall
-is the mean per §5.5. The H1 B run MAY serve as one of the three control runs (7 calls
+is the mean per §5.5. For the control, latency is the parallel-batch wall-clock of the
+three B runs and token cost is the sum of the three runs, matching C's three-call
+aggregation. The H1 B run MAY serve as one of the three control runs (7 calls
 per plan per repetition) or be separate (8 calls). H1 uses the single designated B run;
 it does not use the best of the three control runs. The designation is fixed in the
 manifest before the run by a random or pre-agreed rule, not selected from the three
@@ -209,9 +211,10 @@ vendored. If their text is quoted, it is credited (Apache-2.0).
   the rubric instructs the reviewer to treat the plan as data. SOP does not enforce an
   instruction/data boundary on the ad-hoc path: the whole request is passed as
   `agent.Request.Task`, and the agent wrapper adds its own prompt block. This is a
-  prompt-engineering control, not enforced isolation. The pilot tests the delimiter; a
-  suspected prompt injection invalidates the run rather than being adjudicated as a
-  finding.
+  prompt-engineering control, not enforced isolation. The pilot tests the delimiter. A
+  suspected injection is recorded as a validity threat, not used to exclude a run after
+  the fact; no run is removed on that basis, and the pre-registered decision rules are
+  unchanged.
 - **Harness.** One harness is used for the whole experiment and recorded in the
   manifest. Its repository-access behavior is named: a text-only harness has no
   repository access; the Ollama REVIEW harness performs a bounded read-only inspection
@@ -248,10 +251,11 @@ vendored. If their text is quoted, it is credited (Apache-2.0).
   counts.
 - One model per arm for the whole experiment. A provider or model change
   mid-experiment invalidates the affected runs.
-- **Concurrency.** The pilot records whether the provider executes parallel requests
+- **Concurrency.** The full run records whether the provider executes parallel requests
   concurrently. The latency cap uses the measured parallel-batch wall-clock for C, which
   already reflects any provider-side serialization; the sequential sum is diagnostic
-  only.
+  only. C latency is first measured in the full run; a missing or invalid C timing makes
+  H2 INCONCLUSIVE.
 - Run order is randomized and interleaved across arms and repetitions so provider drift
   is not confounded with arm. The full-run order is generated and recorded in the run
   manifest before the first full-run call. The pilot is excluded from the dataset. A
@@ -282,7 +286,9 @@ Fixed and written down before the first run:
   `docs/reports/CONV-001-convergence-baseline.md`. These three paths resolved in the
   baseline tree at `ad8a9c6c`; existence is not evidence of the defect. The final corpus
   is frozen only after each path, parent revision and evidence pointer is checked; an
-  unresolved path is replaced, not shipped. A later correction does not by itself show
+  unresolved path is replaced, not shipped. If replacements cannot reach the
+  15-determinable-defect floor, the run is deferred; the floor is not lowered. A later
+  correction does not by itself show
   that a review could have found the defect. At corpus freeze, the corpus owner records
   whether each defect was determinable from the document and its parent revision, with a
   one-line basis, in the defect record. The adjudicator applies the pre-registered record
@@ -298,10 +304,10 @@ Fixed and written down before the first run:
   class, severity (blocks implementation / changes approach / minor), evidence pointer,
   source (historical or seeded), and a determinable judgment (yes/no, one-line basis)
   recorded at freeze. The recall denominator is the pre-registered determinable set; it
-  is fixed at freeze and is not changed by adjudication. Minimum to run: 15 known
-  defects across at least 15 plans with known defects; the no-known-defect set is
-  additional and does not count toward this floor. Below the floor, every recall
-  comparison is INCONCLUSIVE.
+  is fixed at freeze and is not changed by adjudication. Minimum to run: 15 determinable
+  known defects (the recall denominator) across at least 15 plans with known defects; the
+  no-known-defect set is additional and does not count toward this floor. Below the floor,
+  every recall comparison is INCONCLUSIVE.
 - **Per-plan count.** The manifest records the number of known defects per plan; no hard
   cap is imposed, but the per-plan counts are reported with the recall results.
 - **Corpus ownership.** The corpus owner records the frozen corpus before the first run;
@@ -335,19 +341,19 @@ Fixed and written down before the first run:
   larger of 20 findings or a random 20% sample, and agreement is reported (Cohen's
   kappa). If fewer than 20 findings exist in total, kappa is reported but the outcome
   cannot PASS. A model may serve only as a third check, never as the sole adjudicator.
-- **Minimum staffing.** A PASS requires five distinct people: corpus owner, seeder,
-  analyst, adjudicator and second adjudicator. All five are distinct; in particular, the
-  seeder, analyst and adjudicator are not the corpus owner, and the adjudicator and
-  second adjudicator are not the seeder or each other. If two independent human
+- **Minimum staffing.** A PASS requires two distinct human adjudicators who are not
+  authors of any plan in the corpus. They must be distinct from each other and from the
+  seeder of any defect they adjudicate. The corpus owner, seeder and analyst may overlap
+  with each other and with the operator, but none of them may be an adjudicator, and the
+  adjudicators remain blind. A model may not be an adjudicator. If two independent human
   adjudicators are not available, the best attainable outcome is INCONCLUSIVE.
-- **Role duties.** The corpus owner selects and freezes the corpus, records each
-  determinability judgment, and is not the author of any plan in the corpus; the seeder
-  creates the seeded defects and the sealed manifest; the analyst holds the unblinding
-  key and applies the within-run merge; the adjudicator labels findings; the second
-  adjudicator independently re-adjudicates the sample. The operator MAY be the corpus
-  owner. The operator MUST NOT be the seeder, the adjudicator or the second adjudicator.
-  The operator MAY be the analyst only when a different person is the corpus owner;
-  otherwise the operator is the corpus owner and a different analyst is required.
+- **Role duties.** The corpus owner selects and freezes the corpus and records each
+  determinability judgment; the seeder creates the seeded defects and the sealed
+  manifest; the analyst holds the unblinding key and applies the within-run merge; the
+  adjudicators label findings; the second adjudicator re-adjudicates the sample. An
+  author is a human who wrote or directly edited the plan text; approving a plan does not
+  make someone its author. The corpus owner and seeder are not adjudicators, and the
+  seeder of a defect is not an adjudicator of that defect.
 - **Adjudication is evidence work, not an approval.** It creates no SOP approval
   record and changes no lifecycle state. The protocol records findings and judgments;
   it does not record an operator decision to implement.
@@ -371,7 +377,8 @@ Fixed and written down before the first run:
   never enter any per-run metric. Confirmed findings are findings that match a known
   defect or are adjudicated valid and not on the list; invalid, immaterial and duplicate
   occurrences are excluded. Both confirmed classes count in the reproducibility
-  numerator and denominator.
+  numerator and denominator. Reproducibility is computed per plan; the PASS gate uses the
+  median across plans, and the pooled share is reported separately.
 - A failed call (timeout, transport error, unparseable result) is recorded as a failed
   run and counted, not dropped, and is not retried beyond what SOP itself does
   (`REVIEW.md` §6.4: a failure to review is not a finding).
@@ -443,7 +450,7 @@ approved before it.
   known defects, and its cost cap falls from 2× A to 1.5× A.
 - H2 uses the same recall rule as H1 (≥25% relative and ≥3 more confirmed known
   defects) against the B×3 control, replacing the earlier ≥15%-over-B1 fan-out rule;
-  its cost cap is 3.5× A.
+  its cost cap is 3.5× A, replacing the earlier 3× A cap.
 
 No run has started, so the changes are made before the protocol is frozen; they are
 recorded here rather than applied silently. The revised thresholds remain unapproved
@@ -459,7 +466,8 @@ rule (§6.2).
 
 The experiment is **INCONCLUSIVE** for the affected comparison if any of these holds:
 
-- fewer than 15 known defects, or fewer than 15 plans with known defects;
+- fewer than 15 determinable known defects (the recall denominator), or fewer than 15
+  plans with known defects;
 - kappa below 0.6 on the double-adjudicated sample, or no second adjudicator and the
   claim would be PASS;
 - more than 10% of runs failed, or arms have unequal failure rates by more than 5
@@ -516,11 +524,15 @@ for C). The comparator and the cost/latency cap for each hypothesis are:
 | H3 (alternate model, exploratory) | B_D / C_D vs B / C | same-request B and C under the other model        | report only                     | report only | report only       |
 
 The cost and latency caps are relative to A in both H1 and H2; the B×3 control's own
-cost is part of the experiment, not the denominator. The C cost cap is relative to A, not
+cost is part of the experiment, not the denominator. The latency cap compares the median
+of the paired A runs with the median of the arm's runs; A is not a single invocation when
+the comparison has multiple runs. The C cost cap is relative to A, not
 B×3, because A is the operational baseline; report C/A and C/B×3 both, so an arm cheaper
 than the control is visible even when it exceeds the cap. A hard-cap FAIL is recorded per
 hypothesis. A PASS on H1 and a FAIL on H2 means only the rubric is eligible for a
-scoped decision; neither outcome authorizes the other hypothesis.
+scoped decision; neither outcome authorizes the other hypothesis. The false-positive cap
+is anchored to A for both hypotheses so an arm is not rewarded for a control with a
+higher false-positive rate; the B×3 control's own rate is reported.
 
 ### 6.3 What each outcome allows
 

@@ -24,6 +24,9 @@ implementation until:
    orchestration); and
 3. OD-1 and OD-2 in §14 are resolved.
 
+The assessment's §5.4 (staffing and role separation) and §5.8 (run manifest) are the
+authoritative definitions; this PRD links to them and does not restate them.
+
 A PASS on the rubric experiment does not by itself authorize structured findings, a
 disposition API, evidence persistence, or new orchestration.
 
@@ -368,10 +371,10 @@ shape OD-1 and OD-2 select; they do not require a particular one.
 - **AC-10** Implementation is not authorized by this PRD alone. Authorization requires
   a PASS on the relevant hypothesis and a separate operator governance decision
   recorded under the existing approval convention; no new approval system is created.
-- **AC-11** The assessment sections referenced by this PRD (§5.4 minimum staffing and
-  role separation; §5.8 run manifest) exist and define those minimums in the merged
-  assessment. The check records the assessment file's sha256; the PRD does not restate
-  them.
+- **AC-11 (documentation)** The assessment file path resolves under
+  `scripts/checks/check-doc-links.sh`, and the §5.4 and §5.8 section references are
+  reviewed when the protocol is frozen. This is a documentation check, not a capability
+  acceptance test, and no hash is recorded.
 
 ## 12. Evaluation reference and authorization boundary
 
