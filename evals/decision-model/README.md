@@ -181,3 +181,31 @@ case where the deterministic baseline proceeds automatically while the label wit
 AUTO_FIX — both proceed automatically). The reported `unsafe_missed_escalation` count of 1
 is therefore an exact-label mismatch with equivalent execution withholding, not an unsafe
 continuation. See [DECISION-MODEL-FINDINGS.md](../../docs/reference/DECISION-MODEL-FINDINGS.md) §3/§5.
+
+## Decision-model A/B — `disposition-ab-v1` (served-model comparison)
+
+A separate, independently labeled corpus for comparing two served models in SOP's
+structured-decision role. It does not replace or modify the frozen DME corpus
+above.
+
+- `disposition-ab-v1.json` — 48 failure scenarios: 12 smoke (2 per governed
+  action) and 36 held-out (6 per governed action), balanced across `AUTO_FIX`,
+  `CONTINUE`, `RETRY`, `REPLAN`, `NEEDS_HUMAN`, and `BLOCK`.
+- `DISPOSITION-AB.sha256` — the frozen sha256 of the corpus bytes.
+- `DISPOSITION-AB-PROMPT.sha256` — the frozen sha256 of the question kind,
+  criterion, and closed choice set.
+
+Tooling: `cmd/deceleval-ab` plus the A/B types in `internal/deceleval`. The
+benchmark calls the production clef provider's SystemOne transport once per case,
+with no retry and no fallback, and scores the first response. It runs one model at
+a time at each requested concurrency, with identical request text, output policy,
+timeout, and cache policy.
+
+The governed path can return all six actions (`dispositionForAction`), while the
+production SEAM-004 change-risk checkpoint is narrower (four risk choices, only
+`HUMAN` adds attention). The benchmark therefore evaluates the direct disposition
+contract and documents the difference. Labels are frozen before either model runs;
+the held-out split is never used for tuning.
+
+Live results and the model-availability finding:
+[DISPOSITION-AB-2026-11-21.md](../../docs/reports/decision-model/DISPOSITION-AB-2026-11-21.md).

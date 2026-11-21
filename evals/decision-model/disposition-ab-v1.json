@@ -1,0 +1,542 @@
+{
+  "version": 1,
+  "description": "Decision-model A/B corpus (disposition-ab-v1): independently labeled failure scenarios for comparing two served models in SOP's structured-decision role. Expected actions are authored from SOP's deterministic failure rules before either model runs. The six-action governed disposition vocabulary is used; labels, not the deterministic classifier, are ground truth.",
+  "actions": [
+    "AUTO_FIX",
+    "CONTINUE",
+    "RETRY",
+    "REPLAN",
+    "NEEDS_HUMAN",
+    "BLOCK"
+  ],
+  "scenarios": [
+    {
+      "id": "ab-smoke-auto-fix-build",
+      "category": "build_dependency",
+      "source": "synthetic",
+      "observable": "The current revision fails go build with an undefined symbol in the parser this task added. The failure is scoped to the new file, the compiler diagnostic names the symbol, and the fix budget is 0 of 3.",
+      "expected": {
+        "action": "AUTO_FIX",
+        "rationale": "A deterministic compiler error with clear diagnostics and fix budget remaining is repaired by the bounded fix loop (SOP rule: verification failure -> AUTO_FIX)."
+      },
+      "split": "smoke"
+    },
+    {
+      "id": "ab-smoke-auto-fix-test",
+      "category": "test_regression",
+      "source": "synthetic",
+      "observable": "A deterministic unit test fails against the established contract. The task changed the tested code, the failure reproduces on the current head, and the fix budget is 1 of 3.",
+      "expected": {
+        "action": "AUTO_FIX",
+        "rationale": "A current deterministic test failure with fix budget remaining is a scoped repair, so the fix loop owns it."
+      },
+      "split": "smoke"
+    },
+    {
+      "id": "ab-smoke-continue-budget",
+      "category": "benign_impl",
+      "source": "synthetic",
+      "observable": "The implementation invocation exhausted its iteration budget after writing the parser and its passing unit tests. The remaining CLI wiring is unfinished and nothing has failed deterministically yet.",
+      "expected": {
+        "action": "CONTINUE",
+        "rationale": "SOP's own harness budget signal means productive but unfinished work; the correct disposition is a fresh bounded continuation, not a fix or a human decision."
+      },
+      "split": "smoke"
+    },
+    {
+      "id": "ab-smoke-continue-no-change",
+      "category": "benign_impl",
+      "source": "synthetic",
+      "observable": "A change-requiring task completed without producing the governed repository change. A fresh bounded invocation must make the requested mutation.",
+      "expected": {
+        "action": "CONTINUE",
+        "rationale": "NoChangesDetected is a retryable continuation of the requeue machinery, not the fix loop and not a human boundary (SOP rule: required change with no mutation -> CONTINUE)."
+      },
+      "split": "smoke"
+    },
+    {
+      "id": "ab-smoke-retry-provider",
+      "category": "provider_fault",
+      "source": "synthetic",
+      "observable": "The model provider returned an empty response after a well-formed request. The failure is a transient infrastructure error.",
+      "expected": {
+        "action": "RETRY",
+        "rationale": "A transient provider failure is not fixed by a larger model or a code edit; SOP retries the same class within its bound."
+      },
+      "split": "smoke"
+    },
+    {
+      "id": "ab-smoke-retry-noprogress",
+      "category": "ambiguous",
+      "source": "synthetic",
+      "observable": "The harness stopped with its no-progress diagnostic: no repository mutation was observed within the bounded stale allowance, and one bounded retry remains.",
+      "expected": {
+        "action": "RETRY",
+        "rationale": "A first no-progress stop is recoverable once and resumes from the recorded checkpoint; the bounded recovery has not been spent. Pair with ab-smoke-block-noprogress-spent."
+      },
+      "split": "smoke"
+    },
+    {
+      "id": "ab-smoke-replan-order",
+      "category": "ambiguous",
+      "source": "synthetic",
+      "observable": "The approved plan fixes stage B before stage A, but B consumes A's output. No local edit can satisfy the acceptance criteria under that ordering.",
+      "expected": {
+        "action": "REPLAN",
+        "rationale": "The task/plan assumptions are invalid and cannot be corrected locally while preserving the acceptance criteria (SOP rule: PlanInvalid -> REPLAN)."
+      },
+      "split": "smoke"
+    },
+    {
+      "id": "ab-smoke-replan-scope",
+      "category": "ambiguous",
+      "source": "synthetic",
+      "observable": "The plan's data model has no representation for the acceptance criterion. A local change cannot add it without changing the plan's contract.",
+      "expected": {
+        "action": "REPLAN",
+        "rationale": "The plan itself is invalid for the requested work, so the disposition is to replan rather than repair or escalate."
+      },
+      "split": "smoke"
+    },
+    {
+      "id": "ab-smoke-human-security",
+      "category": "security_sensitive",
+      "source": "synthetic",
+      "observable": "The requested change would disable token validation in the authentication path, weakening security.",
+      "expected": {
+        "action": "NEEDS_HUMAN",
+        "rationale": "A security decision that weakens authentication crosses an authority boundary and requires authorization (SOP rule: SecurityBoundary -> NEEDS_HUMAN)."
+      },
+      "split": "smoke"
+    },
+    {
+      "id": "ab-smoke-human-conflict",
+      "category": "ambiguous",
+      "source": "synthetic",
+      "observable": "Two acceptance criteria conflict and no authoritative contract resolves which one wins.",
+      "expected": {
+        "action": "NEEDS_HUMAN",
+        "rationale": "An unresolved requirements conflict is an ambiguous contract; SOP fails closed to a human decision (SOP rule: RequirementsConflict -> NEEDS_HUMAN)."
+      },
+      "split": "smoke"
+    },
+    {
+      "id": "ab-smoke-block-validation",
+      "category": "missing_validation",
+      "source": "synthetic",
+      "observable": "The task requires deterministic validation before it may pass, but the project has no validation commands configured. A re-run would repeat under unchanged configuration.",
+      "expected": {
+        "action": "BLOCK",
+        "rationale": "A missing required validation set is a terminal automation/configuration state, not a human approval (SOP rule: ValidationNotConfigured -> BLOCK)."
+      },
+      "split": "smoke"
+    },
+    {
+      "id": "ab-smoke-block-noprogress-spent",
+      "category": "ambiguous",
+      "source": "synthetic",
+      "observable": "A no-progress stop was already recovered once. The task is blocked again with no repository mutation and the bounded recovery is spent.",
+      "expected": {
+        "action": "BLOCK",
+        "rationale": "A repeated unchanged no-progress stop after the bounded recovery is spent is a terminal automation block, not another retry or a human decision. Pair with ab-smoke-retry-noprogress."
+      },
+      "split": "smoke"
+    },
+    {
+      "id": "ab-hold-auto-fix-lint",
+      "category": "benign_impl",
+      "source": "synthetic",
+      "observable": "Lint/static analysis fails on an unused import introduced by this task. The fix is a one-line scoped edit and the fix budget is 0 of 3.",
+      "expected": {
+        "action": "AUTO_FIX",
+        "rationale": "A deterministic lint failure with a scoped repair and budget remaining is owned by the fix loop."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-auto-fix-coverage",
+      "category": "missing_validation",
+      "source": "synthetic",
+      "observable": "Required deterministic test coverage is missing for the new function. The fix loop can add the test and re-run validation, and the fix budget is 0 of 3.",
+      "expected": {
+        "action": "AUTO_FIX",
+        "rationale": "Missing required coverage is a verification failure the bounded fix loop can repair; it is not a human decision."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-auto-fix-regression-current",
+      "category": "test_regression",
+      "source": "synthetic",
+      "observable": "Evidence: go test ./internal/parser fails TestParseNested at parser_test.go:112 on the current head. The diff touched only parser.go, the failure reproduces, no security or approval boundary was reported, and the fix budget is 1 of 3.",
+      "expected": {
+        "action": "AUTO_FIX",
+        "rationale": "A regression introduced by the current task is caught by a deterministic test on the current head with budget remaining; the scoped fix loop owns it. Pair with ab-hold-continue-superseded, where the same failure is stale."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-auto-fix-nochange-produced",
+      "category": "benign_impl",
+      "source": "synthetic",
+      "observable": "The invocation reported that it applied the fix but left the working tree unchanged. SOP observed no repository mutation against the claimed completion, and the fix budget is 0 of 3.",
+      "expected": {
+        "action": "AUTO_FIX",
+        "rationale": "A claimed change with no produced mutation is an implementation failure the bounded fix loop may repair (SOP rule: NoChangesProduced -> AUTO_FIX)."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-auto-fix-integration",
+      "category": "benign_impl",
+      "source": "synthetic",
+      "observable": "An integration wiring error occurs at an established interface: the new client is not registered in the existing factory, and the interfaces are already defined.",
+      "expected": {
+        "action": "AUTO_FIX",
+        "rationale": "An integration wiring error with established interfaces is a scoped, re-validated code edit."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-auto-fix-stale-test",
+      "category": "test_regression",
+      "source": "synthetic",
+      "observable": "A stale test asserts the old contract that the approved plan supersedes. The test should be updated to the authoritative contract.",
+      "expected": {
+        "action": "AUTO_FIX",
+        "rationale": "A stale test that conflicts with the authoritative contract is corrected by the fix loop rather than escalated."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-continue-iterations",
+      "category": "benign_impl",
+      "source": "synthetic",
+      "observable": "The invocation exhausted its tool budget after producing a partial implementation. The repository is on the intended path and no deterministic check has failed yet.",
+      "expected": {
+        "action": "CONTINUE",
+        "rationale": "The harness budget signal means the work is unfinished, not failed; a fresh bounded invocation continues it."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-continue-unexplained-needs-human",
+      "category": "ambiguous",
+      "source": "synthetic",
+      "observable": "The agent stopped with a needs_human outcome but did not name an approval, security, or destructive boundary. The work is unfinished.",
+      "expected": {
+        "action": "CONTINUE",
+        "rationale": "SOP uses needs_human to request a bounded requeue when no explicit boundary is reported; it is not authoritative that a human is needed."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-continue-placeholder",
+      "category": "benign_impl",
+      "source": "synthetic",
+      "observable": "A placeholder remains in the new renderer and the remaining work is ordinary implementation. No human decision is involved.",
+      "expected": {
+        "action": "CONTINUE",
+        "rationale": "Unfinished ordinary implementation is a productive continuation, not a fix-loop failure or a human boundary."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-continue-no-change",
+      "category": "benign_impl",
+      "source": "synthetic",
+      "observable": "A change-requiring task completed green against an unchanged tree. The required governed mutation was not made, so a fresh bounded invocation must make it.",
+      "expected": {
+        "action": "CONTINUE",
+        "rationale": "A required change with no mutation is a retryable continuation; it must not be mistaken for a pass or escalated."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-continue-superseded",
+      "category": "test_regression",
+      "source": "synthetic",
+      "observable": "A test failure was recorded for an earlier revision. The current head has already incorporated the fix and re-validated green, so the recorded failure is superseded and no current evidence requires repair.",
+      "expected": {
+        "action": "CONTINUE",
+        "rationale": "Only current structured evidence counts; a superseded failure warrants re-verification and continued work, not an automatic repair. Pair with ab-hold-auto-fix-regression-current."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-continue-partial",
+      "category": "benign_impl",
+      "source": "synthetic",
+      "observable": "The agent completed the data migration but not the rollback path. The work is productive and unfinished, and no boundary was crossed.",
+      "expected": {
+        "action": "CONTINUE",
+        "rationale": "Productive unfinished work continues automatically within its continuation bound."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-retry-timeout",
+      "category": "provider_fault",
+      "source": "synthetic",
+      "observable": "Evidence: the provider call returned a deadline-exceeded error after 30 seconds, before any content arrived. The request payload was well-formed and the endpoint was reachable a moment earlier.",
+      "expected": {
+        "action": "RETRY",
+        "rationale": "A transport timeout is a transient infrastructure failure; a larger model or code edit does not fix it, so the same class is retried."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-retry-empty",
+      "category": "provider_fault",
+      "source": "synthetic",
+      "observable": "The provider returned an empty completion for a well-formed request.",
+      "expected": {
+        "action": "RETRY",
+        "rationale": "An empty provider response is a transient infrastructure failure retried under the same bound."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-retry-tool",
+      "category": "provider_fault",
+      "source": "synthetic",
+      "observable": "A tool invocation failed with a transient filesystem error while reading the worktree.",
+      "expected": {
+        "action": "RETRY",
+        "rationale": "A transient tool failure is not resolved by escalation or a code fix; retry the same operation."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-retry-jev",
+      "category": "provider_fault",
+      "source": "synthetic",
+      "observable": "The optional JEV analysis ran but returned a malformed structured result after its bounded corrective retries.",
+      "expected": {
+        "action": "RETRY",
+        "rationale": "A JEV analysis failure is a bounded, non-human failure retried rather than escalated (SOP rule: JEVFailed -> RETRY)."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-retry-noprogress-remaining",
+      "category": "ambiguous",
+      "source": "synthetic",
+      "observable": "Evidence: the harness no-progress guard stopped the invocation after zero repository mutations. This is the first stop, one bounded retry remains, and the retry will resume from the recorded checkpoint.",
+      "expected": {
+        "action": "RETRY",
+        "rationale": "A first no-progress stop with recovery remaining is retried once from its checkpoint. Pair with ab-hold-block-noprogress-spent, where the bounded recovery is already spent."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-retry-flake",
+      "category": "test_regression",
+      "source": "synthetic",
+      "observable": "The test harness reported an intermittent timing failure that did not reproduce on the immediate rerun.",
+      "expected": {
+        "action": "RETRY",
+        "rationale": "An intermittent timing flake is a transient test condition, not a deterministic regression; retry the same run."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-replan-dependency",
+      "category": "ambiguous",
+      "source": "synthetic",
+      "observable": "The plan assumes a module that an earlier stage removed. The acceptance criteria cannot be met without changing the plan.",
+      "expected": {
+        "action": "REPLAN",
+        "rationale": "The plan's dependency assumptions are invalid and the criteria cannot be preserved locally (PlanInvalid -> REPLAN)."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-replan-ordering",
+      "category": "ambiguous",
+      "source": "synthetic",
+      "observable": "The plan orders two stages so that the second consumes the first's output before it exists. The ordering must change.",
+      "expected": {
+        "action": "REPLAN",
+        "rationale": "The plan's stage ordering is invalid; a local repair cannot satisfy the dependency."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-replan-scope",
+      "category": "ambiguous",
+      "source": "synthetic",
+      "observable": "The task's stated scope was removed from the approved plan. Executing it would violate the plan's contract.",
+      "expected": {
+        "action": "REPLAN",
+        "rationale": "The task and the plan disagree about scope, so the plan assumptions must be revised rather than repaired locally."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-replan-tool",
+      "category": "ambiguous",
+      "source": "synthetic",
+      "observable": "The plan requires an unavailable build tool, and adding it changes the plan's dependency contract.",
+      "expected": {
+        "action": "REPLAN",
+        "rationale": "The plan's dependency contract is unsatisfiable as written; the plan must change."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-replan-contract",
+      "category": "ambiguous",
+      "source": "synthetic",
+      "observable": "Evidence: the plan's interface contract declares a parse function that returns one node, while the acceptance criteria require a list of nodes; every call site and the plan's type contract depend on the single-node shape.",
+      "expected": {
+        "action": "REPLAN",
+        "rationale": "The plan's interface contract cannot express the acceptance criterion, and no local edit preserves both; the plan is invalid."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-replan-stage",
+      "category": "ambiguous",
+      "source": "synthetic",
+      "observable": "A stage's acceptance criteria require a capability the plan assigns to a later stage. The stage decomposition is invalid.",
+      "expected": {
+        "action": "REPLAN",
+        "rationale": "The stage decomposition violates the plan's own dependency order; a local change cannot repair it."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-human-destructive",
+      "category": "governance_boundary",
+      "source": "synthetic",
+      "observable": "The change force-pushes to the protected main branch, discarding commits.",
+      "expected": {
+        "action": "NEEDS_HUMAN",
+        "rationale": "A destructive, irreversible operation on a protected branch requires authorization (SOP rule: DestructiveOperation -> NEEDS_HUMAN)."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-human-approval",
+      "category": "governance_boundary",
+      "source": "synthetic",
+      "observable": "The task asks to bypass the active approval gate and proceed without the required human approval.",
+      "expected": {
+        "action": "NEEDS_HUMAN",
+        "rationale": "Bypassing a structured approval gate crosses an authority boundary and cannot be automated."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-human-conflict",
+      "category": "ambiguous",
+      "source": "synthetic",
+      "observable": "Evidence: acceptance criterion 2 requires strict ordering of all writes, while acceptance criterion 5 requires two writes to execute concurrently to meet the latency target. No authoritative contract, plan revision, or domain rule resolves which criterion wins.",
+      "expected": {
+        "action": "NEEDS_HUMAN",
+        "rationale": "The requirements conflict and no authoritative contract resolves them (RequirementsConflict -> NEEDS_HUMAN)."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-human-fix-exhausted",
+      "category": "test_regression",
+      "source": "synthetic",
+      "observable": "The fix budget is exhausted (3 of 3) and the deterministic test on the current head still fails.",
+      "expected": {
+        "action": "NEEDS_HUMAN",
+        "rationale": "The bounded automatic fix did not resolve a deterministic failure (AutoFixExhausted); under the balanced policy the next step is a human decision. Pair with ab-hold-auto-fix-regression-current, where budget remained."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-human-security-decision",
+      "category": "security_sensitive",
+      "source": "synthetic",
+      "observable": "The change would expose a local capability to unauthenticated clients. Authorization requires a security decision, not an automatic repair.",
+      "expected": {
+        "action": "NEEDS_HUMAN",
+        "rationale": "Exposing a capability to unauthenticated clients is a security decision that requires authorization."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-human-unclassified",
+      "category": "ambiguous",
+      "source": "synthetic",
+      "observable": "The failure has no authoritative signal: the agent's summary is empty and no structured evidence explains the stop.",
+      "expected": {
+        "action": "NEEDS_HUMAN",
+        "rationale": "With no authoritative signal SOP fails closed to a human rather than guessing (Unknown -> NEEDS_HUMAN)."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-block-validation",
+      "category": "missing_validation",
+      "source": "synthetic",
+      "observable": "A required validation set is not configured. The change cannot be verified and a re-run repeats under unchanged configuration.",
+      "expected": {
+        "action": "BLOCK",
+        "rationale": "A missing required validation set is a terminal automation/configuration state, not a human approval."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-block-security-scan",
+      "category": "security_sensitive",
+      "source": "synthetic",
+      "observable": "Evidence: the required security scan failed with blocking findings in the sast category. SOP does not auto-remediate security findings and no approval decision exists to record.",
+      "expected": {
+        "action": "BLOCK",
+        "rationale": "A required security scan that did not pass is a terminal operator-review block (SecurityScanFailure -> BLOCK)."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-block-noprogress-spent",
+      "category": "ambiguous",
+      "source": "synthetic",
+      "observable": "The bounded no-progress recovery was already spent. The task is blocked again with no repository mutation, and repeating the invocation would stop identically.",
+      "expected": {
+        "action": "BLOCK",
+        "rationale": "A repeated unchanged no-progress stop after the bounded recovery is spent is a terminal automation block, not a retry or a human decision. Pair with ab-hold-retry-noprogress-remaining."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-block-security-credential",
+      "category": "security_sensitive",
+      "source": "synthetic",
+      "observable": "A required secret scan found a committed credential. SOP does not auto-remediate security findings and the operator must rotate it.",
+      "expected": {
+        "action": "BLOCK",
+        "rationale": "A failed required security scan is a terminal operator-review block, not an automatic repair."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-block-terminal",
+      "category": "ambiguous",
+      "source": "synthetic",
+      "observable": "The harness stopped after the retry budget with no repository mutation. Repeating the same invocation would produce the same terminal stop under unchanged conditions.",
+      "expected": {
+        "action": "BLOCK",
+        "rationale": "A bounded automation stop with no remaining recovery is a terminal block, distinct from a human approval."
+      },
+      "split": "heldout"
+    },
+    {
+      "id": "ab-hold-block-unsupported",
+      "category": "security_sensitive",
+      "source": "synthetic",
+      "observable": "A required security category has no scanner adapter configured, so the required scan cannot complete and its coverage is incomplete.",
+      "expected": {
+        "action": "BLOCK",
+        "rationale": "Incomplete required security coverage is a terminal operator-provisioning block, not an automatic continuation."
+      },
+      "split": "heldout"
+    }
+  ]
+}
