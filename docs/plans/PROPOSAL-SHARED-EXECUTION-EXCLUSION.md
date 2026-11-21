@@ -139,3 +139,47 @@ Deterministic, no model, no network:
 - No waiver of any lifecycle, approval, or verification gate.
 - No automatic approval, cancellation, or resubmission.
 - No change to global CLI execution semantics until this proposal is approved.
+
+## 9. Alternatives considered
+
+The requirement is that one execution per project holds across every interface,
+for the whole life of the execution, and survives a crash. Each option below fails
+at least one of those. The reasons come from a code reading (see the gap record's
+evidence list); none of the alternatives was prototyped.
+
+1. **Extend the start lock and started-work records to the CLI.** Make `sop run`
+   and `sop prompt` take `.agent-sdlc/runs/mcp-work/.start.lock` and consult the
+   started-work records. Rejected: the start lock serializes the decision to
+   launch and is released once the child is launched, so it does not cover the
+   execution's lifetime. `sop run` also executes in-process and has no job
+   record, so this needs a second record kind with its own liveness rules, which
+   is the lease under another name.
+2. **Hold the project metadata lock (`state.lock`) for the whole execution.**
+   Rejected: planflow and approval take it for short metadata writes. An
+   execution that needs an approval or a plan reconcile mid-run would contend
+   with itself unless the lock were re-entrant, and approvals or plan updates
+   from another terminal would block for the whole run. It also merges "may I
+   write metadata" and "is something running" into one lock, which §1 keeps
+   separate.
+3. **Detect a running execution from persisted task states (strengthen
+   `midRunTasks`).** Rejected: a fresh `sop run` persists `READY` at selection
+   and the terminal status at completion, and `sop prompt` writes no task rows,
+   so task state does not show most executions. Persisting intermediate states
+   only for exclusion couples the lifecycle state machine to locking, and a crash
+   leaves a "mid-run" row with no liveness signal.
+4. **A pid file or a supervisor process.** Rejected: a bare pid file has no owner
+   identity (job, task) to report, cannot tell a reused pid from the owner, and
+   has no heartbeat for the cross-host case. A supervisor adds a long-lived
+   process the CLI does not have today. The lease keeps the file-based model and
+   adds an owner record and a heartbeat.
+5. **The parent writes the lease for the child before launch.** Rejected in the
+   [design record](PLAN-ACP-EXECUTION-LEASE-WIRING-DESIGN-DECISIONS.md) (D1, an
+   unapproved recommendation): the record would name the parent's pid, so if the
+   parent exits while the child runs the lease reads as stale and `sop resume`
+   could release a live execution. This conflicts with the first bullet of §2,
+   which has the parent write the owner record; reconcile §2 when D1 is approved.
+6. **Do nothing, or advisory only.** Leaves the gap open. `advisory` is kept as a
+   rollout stage (§7), not as an end state.
+
+The lease is the option that covers every interface, holds for the execution's
+lifetime, and reports a stale owner instead of guessing.
