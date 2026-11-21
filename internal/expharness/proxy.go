@@ -47,9 +47,12 @@ type Proxy struct {
 }
 
 // NewProxy forwards to upstream (a base URL). Once maxCalls requests were forwarded,
-// or the reported tokens reach maxTokens, every further request is refused with 429
-// and not forwarded: those are the experiment's hard call and cost ceilings.
-// Non-positive ceilings refuse everything, so a ceiling must be set deliberately.
+// every further request is refused with 429 and not forwarded: a hard call ceiling.
+// maxTokens is a STOP THRESHOLD, not a hard cost bound: it is compared with usage of
+// responses already received, so one response (and each request already in flight) can
+// overshoot it; the worst case is maxTokens plus the output of the in-flight requests.
+// SOP exposes no generation limit to set per request. Non-positive ceilings refuse
+// everything, so a ceiling must be set deliberately.
 func NewProxy(upstream string, maxCalls int, maxTokens int64) *Proxy {
 	return &Proxy{upstream: strings.TrimRight(upstream, "/"), maxCalls: maxCalls, maxTokens: maxTokens,
 		client: &http.Client{Timeout: 10 * time.Minute}}

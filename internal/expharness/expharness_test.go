@@ -227,6 +227,19 @@ func TestScansFindLeakage(t *testing.T) {
 		t.Errorf("ScanTree = %v", hits)
 	}
 	_ = os.Symlink("/etc", filepath.Join(dir, "etc-link"))
+	_ = os.Symlink("docs/gap-report.md", filepath.Join(dir, "innocent.md"))
+	big := make([]byte, maxScanBytes)
+	_ = os.WriteFile(filepath.Join(dir, "big.bin"), big, 0o644)
+	h := ScanTree(dir, []string{"zzz"})
+	if len(h) != 3 || !strings.Contains(strings.Join(h, "|"), "big.bin: not scanned") ||
+		!strings.Contains(strings.Join(h, "|"), "etc-link: symlink not followed") {
+		t.Errorf("oversized file or symlink not reported as unscanned: %v", h)
+	}
+	if bad := CheckRefs(dir, []string{"innocent.md"}, []string{"docs"}); len(bad) != 1 || !strings.Contains(bad[0], "symlink target") {
+		t.Errorf("symlink into a denied path accepted: %v", bad)
+	}
+	_ = os.Remove(filepath.Join(dir, "big.bin"))
+	_ = os.Remove(filepath.Join(dir, "innocent.md"))
 	bad := CheckRefs(dir, []string{"docs/plan.md", "../x", "/etc/passwd", "etc-link/hosts", "docs/gap-report.md", "nope"}, []string{"docs/gap-report.md"})
 	if len(bad) < 5 {
 		t.Errorf("CheckRefs found %d problems: %v", len(bad), bad)

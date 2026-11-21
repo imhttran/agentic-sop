@@ -73,20 +73,27 @@ func CheckRefs(projectDir string, refs, denyPrefixes []string) []string {
 			bad = append(bad, ref+": not a project-relative path")
 			continue
 		}
-		for _, d := range denyPrefixes {
-			if clean == d || strings.HasPrefix(clean, strings.TrimSuffix(d, "/")+string(filepath.Separator)) {
-				bad = append(bad, ref+": under denied path "+d)
+		denied := func(p, what string) {
+			for _, d := range denyPrefixes {
+				if p == d || strings.HasPrefix(p, strings.TrimSuffix(d, "/")+string(filepath.Separator)) {
+					bad = append(bad, ref+": "+what+" under denied path "+d)
+				}
 			}
 		}
+		denied(clean, "path")
 		real, err := filepath.EvalSymlinks(filepath.Join(root, clean))
 		if err != nil {
 			bad = append(bad, ref+": does not exist")
 		} else if rel, err := filepath.Rel(root, real); err != nil || strings.HasPrefix(rel, "..") {
 			bad = append(bad, ref+": resolves outside the project")
+		} else {
+			denied(rel, "symlink target") // a link into a denied path is as bad as the path
 		}
 	}
 	return bad
 }
+
+const maxScanBytes = 1 << 20
 
 // ScanTree reports project files (outside .git) whose path or content mentions a
 // forbidden term. A repository-tool harness can read all of them, so each hit is a
@@ -108,12 +115,21 @@ func ScanTree(projectDir string, forbidden []string) []string {
 			hits = append(hits, rel+": path mentions "+h[0])
 			return nil
 		}
-		if info, err := d.Info(); err == nil && info.Size() < 1<<20 {
-			if b, err := os.ReadFile(p); err == nil {
-				if h := ScanRequest(string(b), forbidden); len(h) > 0 {
-					hits = append(hits, rel+": content mentions "+h[0])
-				}
-			}
+		if d.Type()&fs.ModeSymlink != 0 {
+			hits = append(hits, rel+": symlink not followed; remove it or verify its target separately")
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil || info.Size() >= maxScanBytes {
+			// The native harness reads a bounded prefix of large files, so an
+			// unscanned file is a leakage path, not a clean one.
+			hits = append(hits, rel+": not scanned (unreadable or at least 1 MiB); remove it or verify it separately")
+			return nil
+		}
+		if b, err := os.ReadFile(p); err != nil {
+			hits = append(hits, rel+": not scanned: "+err.Error())
+		} else if h := ScanRequest(string(b), forbidden); len(h) > 0 {
+			hits = append(hits, rel+": content mentions "+h[0])
 		}
 		return nil
 	})

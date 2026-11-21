@@ -72,11 +72,14 @@ No provider attestation is claimed anywhere: the record's `identity_basis` state
 name plus proxy-observed request; a server-returned model field is self-reported, not
 attestation; provider-side substitution is not detectable".
 
-**Ceilings.** The proxy enforces a hard call ceiling and a reported-token ceiling per run and
-answers `429` without forwarding beyond them (`TestProxyCeilingsRefuseWithoutForwarding`,
+**Ceilings.** The proxy enforces a **hard call ceiling** per run and a reported-token **stop
+threshold**, and answers `429` without forwarding beyond either. The token threshold is
+compared with responses already received, so it does not bound a single response or the
+requests in flight: worst-case spend is the threshold plus the output of the in-flight
+requests, and SOP has no per-request generation limit to cap it (`TestProxyCeilingsRefuseWithoutForwarding`,
 `TestFailureAndCeilingLeaveNoRunDirectory`). A native client may retry a `429`; refused
 requests are recorded and never reach the provider. Zero or negative ceilings refuse
-everything, so a ceiling has to be set deliberately. Cost is bounded in tokens, not money.
+everything, so a ceiling has to be set deliberately. The call ceiling is the hard cost bound; tokens are a stop threshold, not money.
 
 ## 3. Instruction and input boundaries
 
@@ -94,7 +97,7 @@ severities. Do not modify the repository.") / SOP's writing-rule block. Conseque
 **Deterministic request template.** `expharness.Render` produces, byte-stably, four sections
 in fixed order: review instructions; permitted repository references; the plan inside a
 fence whose token is derived from the plan's sha256 (and refused if the plan contains it);
-output requirements. `ScanRequest`, `ScanTree` and `CheckRefs` check a rendered request,
+output requirements. `ScanRequest`, `ScanTree` (files of 1 MiB or more are reported as unscanned, not as clean) and `CheckRefs` (the deny list applies to a symlink's resolved target too) check a rendered request,
 the project tree and the reference list for operator-supplied forbidden terms (answer-key and
 later-defect vocabulary), denied paths, absolute or escaping paths and symlinks leaving the
 project.
@@ -153,8 +156,9 @@ ceiling:**
    `resp_sha256`.
 4. `expcheck attribute` per run; the batch is valid only if all three have no problems and
    three distinct absolute run directories.
-5. Ceiling: `N` and `T` set per proxy (suggest `N = 2`, `T` the operator's token cost
-   bound). Total ceiling is `3 × N` calls and `3 × T` tokens.
+5. Ceiling: `N` and `T` set per proxy (suggest `N = 2`; `T` the operator's token stop
+   threshold). Hard bound: `3 × N` calls. Tokens: about `3 × T` plus any overshoot by
+   in-flight responses; keep requests short so one response cannot be large.
 6. Interpret: wall time near one call's duration means parallel; near the sum means
    serialized. Record it; do not compare with a pilot.
 
