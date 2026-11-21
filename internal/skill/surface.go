@@ -70,6 +70,12 @@ var Commands = []Command{
 	// publishes or merges. Its shell examples are repository helpers, GitHub CLI
 	// calls, Git, and local checks, not SOP CLI calls.
 	{Name: "codex-review-triage", Capability: "", Delegation: "sop status", UsesRepositoryScripts: true},
+	// A read-only served-model benchmark: it discovers the endpoint's model ids,
+	// runs the frozen six-action decision corpus one model at a time through the
+	// production provider, and reports quality and latency. It fixes no capability,
+	// changes no model default, and never substitutes a model. Its shell examples
+	// are this repository's benchmark command, so the SOP-only invariant is waived.
+	{Name: "decision-ab", Capability: "", Delegation: "sop status", UsesRepositoryScripts: true},
 
 	// RAG engineering aliases: domain skills that add a pgvector/RAG checklist to an
 	// existing read-only capability. They fix a read-only capability only, so they can

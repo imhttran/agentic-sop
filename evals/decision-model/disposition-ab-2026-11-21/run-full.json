@@ -1,0 +1,135 @@
+{
+  "mode": "full",
+  "split": "heldout",
+  "endpoint": {
+    "endpoint": "http://127.0.0.1:8000",
+    "server": "uvicorn",
+    "models": [
+      {
+        "id": "Inkling-2-Mini-4bit",
+        "owned_by": "omlx",
+        "model_type": "vlm",
+        "max_model_len": 1048576,
+        "created": 1795290601
+      },
+      {
+        "id": "Qwen3-4B-4bit",
+        "owned_by": "omlx",
+        "model_type": "llm",
+        "max_model_len": 32768,
+        "created": 1795290601
+      },
+      {
+        "id": "clef-4bit",
+        "owned_by": "omlx",
+        "model_type": "decision",
+        "max_model_len": 262144,
+        "created": 1795290601
+      }
+    ],
+    "health": {
+      "status": "healthy",
+      "default_model": "Qwen3-4B-4bit",
+      "engine_pool": {
+        "model_count": 3,
+        "loaded_count": 2,
+        "final_ceiling": 61623516528,
+        "current_model_memory": 19502373346
+      },
+      "mcp": null
+    }
+  },
+  "corpus_sha256": "0296db27e415de9b7eb19d2df3508a43665969164b0cba8eb7fef1f85c99dcfa",
+  "prompt_sha256": "a128f3d4d2600ef5b09623648e3e1cb590759a7a978b592adb2be7c9f680173b",
+  "prompt": {
+    "kind": "failure-disposition",
+    "criteria": "Classify the failure into exactly one governed SOP recovery action: safe deterministic repair (AUTO_FIX), continued automated work (CONTINUE), a transient retry (RETRY), invalid plan assumptions (REPLAN), a genuine human decision (NEEDS_HUMAN), or a terminal automation stop (BLOCK).",
+    "choices": [
+      "AUTO_FIX",
+      "CONTINUE",
+      "RETRY",
+      "REPLAN",
+      "NEEDS_HUMAN",
+      "BLOCK"
+    ]
+  },
+  "models_requested": [
+    "Qwen3-4B-4bit",
+    "Inkling-2-Mini-4bit"
+  ],
+  "model_status": [
+    {
+      "id": "Qwen3-4B-4bit",
+      "available": true,
+      "cold_load_ms": 185,
+      "warmup_ms": 186
+    },
+    {
+      "id": "Inkling-2-Mini-4bit",
+      "available": false,
+      "error": "warm-up failed: HTTP 409: {\"error\":{\"message\":\"Model 'Inkling-2-Mini-4bit' is unavailable after a previous load failure: VLM load failed: Received 1556 parameters not in model: \\nmodel.language_model.embed_norm.weight,\\nmodel.language_model.embed_tokens.biases,\\nmodel.language_model.embed_tokens.scales,\\nmodel.language_model.embed_tokens.weight,\\nmodel.language_model.final_input.query,\\nmodel.language_model.layers.0.input_layernorm.weight,\\nmodel.language_model.layers.0.mlp.experts.down_proj.global_scale,\\nmodel.language_model.layers.0.mlp.experts.down_proj.scales,\\nmodel.language_model.layers.0.mlp.experts.down_proj.weight,\\nmodel.language_model.layers.0.mlp.experts.gate_up_proj.global_scale,\\nmodel.language_model.layers.0.mlp.experts.gate_up_proj.scales,\\nmodel.language_model.layers.0.mlp.experts.gate_up_proj.weight,\\nmodel.language_model.layers.0.mlp.gate.e_score_correction_bias,\\nmodel.language_model.layers.0.mlp.gate.weight,\\nmodel.language_model.layers.0.mlp_input.query,\\nmodel.language_model.layers.0.post_attention_convolution.conv1d.weight,\\nmodel.language_model.layers.0.post_attention_layernorm.weight,\\nmodel.language_model.layers.0.post_mlp_convolution.conv1d.weight,\\nmodel.language_model.layers.0.self_attn.gate_proj.biases,\\nmodel.language_model.layers.0.self_attn.gate_proj.scales,\\nmodel.language_model.layers.0.self_attn.gate_proj.weight,\\nmodel.language_model.layers.0.self_attn.k_proj.biases,\\nmodel.language_model.layers.0.self_attn.k_proj.scales,\\nmodel.language_model.layers.0.self_attn.k_proj.weight,\\nmodel.language_model.layers.0.self_attn.k_sconv.conv1d.weight,\\nmodel.language_model.layers.0.self_attn.o_proj.biases,\\nmodel.language_model.layers.0.self_attn.o_proj.scales,\\nmodel.language_model.layers.0.self_attn.o_proj.weight,\\nmodel.language_model.layers.0.self_attn.q_l2_clip.scale,\\nmodel.language_model.layers.0.self_attn.q_proj.biases,\\nmodel.language_model.layers.0.self_attn.q_proj.scales,\\nmodel.language_model.layers.0.self_attn.q_proj.weight,\\nmodel.language_model.layers.0.self_attn.r_proj.biases,\\nmodel.language_model.layers.0.self_attn.r_proj.scales,\\nmodel.language_model.layers.0.self_attn.r_proj.weight,\\nmodel.language_model.layers.0.self_attn.rel_l2_clip.scale,\\nmodel.language_model.layers.0.self_attn.rel_logits_proj.proj,\\nmodel.language_model.layers.0.self_attn.sink_proj.biases,\\nmodel.language_model.layers.0.self_attn.sink_proj.scales,\\nmodel.language_model.layers.0.self_attn.sink_proj.weight,\\nmodel.language_model.layers.0.self_attn.v_proj.biases,\\nmodel.language_model.layers.0.self_attn.v_proj.scales,\\nmodel.language_model.layers.0.self_attn.v_proj.weight,\\nmodel.language_model.layers.0.self_attn.v_sconv.conv1d.weight,\\nmodel.language_model.layers.1.attention_input.query,\\nmodel.language_model.layers.1.input_layernorm.weight,\\nmodel.language_model.layers.1.mlp.experts.down_proj.global_scale,\\nmodel.language_model.layers.1.mlp.experts.down_proj.scales,\\nmodel.language_model.layers.1.mlp.experts.down_proj.weight,\\nmodel.language_model.layers.1.mlp.experts.gate_up_proj.global_scale,\\nmodel.language_model.layers.1.mlp.experts.gate_up_proj.scales,\\nmodel.language_model.layers.1.mlp.experts.gate_up_proj.weight,\\nmodel.language_model.layers.1.mlp.gate.e_score_correction_bias,\\nmodel.language_model.layers.1.mlp.gate.weight,\\nmodel.language_model.layers.1.mlp_input.query,\\nmodel.language_model.layers.1.post_attention_convolution.conv1d.weight,\\nmodel.language_model.layers.1.post_attention_layernorm.weight,\\nmodel.language_model.layers.1.post_mlp_convolution.conv1d.weight,\\nmodel.language_model.layers.1.self_attn.gate_proj.biases,\\nmodel.language_model.layers.1.self_attn.gate_proj.scales,\\nmodel.language_model.layers.1.self_attn.gate_proj.weight,\\nmodel.language_model.layers.1.self_attn.k_proj.biases,\\nmodel.language_model.layers.1.self_attn.k_proj.scales,\\nmodel.language_model.layers.1.self_attn.k_proj.weight,\\nmodel.language_model.layers.1.self_attn.k_sconv.conv1d.weight,\\nmodel.language_model.layers.1.self_attn.o_proj.biases,\\nmodel.language_model.layers.1.self_attn.o_proj.scales,\\nmodel.language_model.layers.1.self_attn.",
+      "cold_load_ms": null,
+      "warmup_ms": null
+    }
+  ],
+  "concurrency": [
+    1,
+    4
+  ],
+  "timeout_ms": 60000,
+  "max_tokens": null,
+  "case_order": [
+    "ab-hold-auto-fix-lint",
+    "ab-hold-auto-fix-coverage",
+    "ab-hold-auto-fix-regression-current",
+    "ab-hold-auto-fix-nochange-produced",
+    "ab-hold-auto-fix-integration",
+    "ab-hold-auto-fix-stale-test",
+    "ab-hold-continue-iterations",
+    "ab-hold-continue-unexplained-needs-human",
+    "ab-hold-continue-placeholder",
+    "ab-hold-continue-no-change",
+    "ab-hold-continue-superseded",
+    "ab-hold-continue-partial",
+    "ab-hold-retry-timeout",
+    "ab-hold-retry-empty",
+    "ab-hold-retry-tool",
+    "ab-hold-retry-jev",
+    "ab-hold-retry-noprogress-remaining",
+    "ab-hold-retry-flake",
+    "ab-hold-replan-dependency",
+    "ab-hold-replan-ordering",
+    "ab-hold-replan-scope",
+    "ab-hold-replan-tool",
+    "ab-hold-replan-contract",
+    "ab-hold-replan-stage",
+    "ab-hold-human-destructive",
+    "ab-hold-human-approval",
+    "ab-hold-human-conflict",
+    "ab-hold-human-fix-exhausted",
+    "ab-hold-human-security-decision",
+    "ab-hold-human-unclassified",
+    "ab-hold-block-validation",
+    "ab-hold-block-security-scan",
+    "ab-hold-block-noprogress-spent",
+    "ab-hold-block-security-credential",
+    "ab-hold-block-terminal",
+    "ab-hold-block-unsupported"
+  ],
+  "started_at": "2026-11-21T19:50:06Z",
+  "finished_at": "2026-11-21T19:50:20Z",
+  "omlx_version": null,
+  "model_revisions": {
+    "Inkling-2-Mini-4bit": null,
+    "Qwen3-4B-4bit": null
+  },
+  "reasoning_setting": "the production SystemOne transport exposes no reasoning/thinking parameter; the endpoint's decision engine applies its own setting",
+  "sampling_setting": "the production SystemOne transport exposes no sampling parameters; the endpoint's decision engine applies its own settings",
+  "cache_policy": "no cache directive is sent; the endpoint default applies",
+  "notes": [
+    "One attempt per case; no retry and no fallback. The production clef provider is called directly, so the adapter CLI's fallback chain cannot mask a first-pass failure.",
+    "Models are run one at a time; every model uses the same case order, request text, output cap, timeout, and cache policy.",
+    "oMLX exposes no version or model revision through /v1/models or /health; those fields are null. The SystemOne response reports input/output tokens only, so TTFT, decode speed, and model-load duration are null.",
+    "This corpus exercises the six-action governed disposition contract. The production SEAM-004 change-risk checkpoint offers only LOW/MEDIUM/HIGH/HUMAN and can only add NEEDS_HUMAN."
+  ]
+}

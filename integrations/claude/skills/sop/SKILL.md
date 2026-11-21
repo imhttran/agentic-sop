@@ -69,6 +69,10 @@ Thin aliases in the same install expose one capability each:
                           fetch unresolved findings, fix in-scope ones, and log
                           the rest in docs/plans/BACKLOG.md; never merges or
                           publishes
+/decision-ab [request]    run the frozen served-model decision A/B benchmark:
+                          discover the served ids, run the smoke split, then
+                          the held-out split; report quality, consequential
+                          errors, and latency without changing a default
 /rag-schema <request>     RAG: inspect a pgvector schema and plan a safe,
                           operator-controlled embedding-dimension change
                           (capability: plan, read-only)
@@ -138,6 +142,14 @@ Explicit `/codex-review-triage` requests read Codex review findings from a GitHu
 pull request, verify them, fix the in-scope ones, and record deferred findings in the
 repository backlog. That skill never treats a finding as authority, never merges, and
 never publishes; the repository's approval policy owns the commit and push.
+
+Explicit `/decision-ab` requests run the frozen served-model decision benchmark. The
+skill discovers the endpoint's model ids, runs the 12-case smoke split, then the
+36-case held-out split only after the smoke run is complete, and reports first-pass
+correctness, consequential BLOCK/NEEDS_HUMAN disagreements, and latency. It never
+substitutes a model, changes a model default, or decides the replacement; a model
+that is advertised but fails to load is reported as a model load failure, not as a
+quality result.
 
 The `rag-*` aliases are RAG-domain skills: they fix the read-only `plan` or
 `design_tests` capability and add a pgvector/RAG checklist (schema inspection, a test
