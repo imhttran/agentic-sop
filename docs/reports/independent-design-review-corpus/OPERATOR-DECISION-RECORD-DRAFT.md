@@ -2,13 +2,14 @@
 
 **Type:** Decision-record draft (non-normative). It prepared record entries for the first six
 decisions of the [OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md). Decisions 1–3
-were approved and Decision 4 was rejected on 2026-11-21 in
+were approved, Decision 4 was rejected, and Decision 5 was approved on 2026-11-21 in
 [DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md),
 [DECISION-RECORD-002](DECISION-RECORD-002-HISTORICAL-DISPOSITIONS.md),
-[DECISION-RECORD-003](DECISION-RECORD-003-ELIGIBILITY.md), and
-[DECISION-RECORD-004](DECISION-RECORD-004-PROTOCOL-AMENDMENT.md); Decisions 5–6 remain
-unrecorded drafts.
-**Status:** **PARTIALLY RECORDED — Decisions 1–3 approved and Decision 4 rejected 2026-11-21; Decisions 5–6 remain draft.**
+[DECISION-RECORD-003](DECISION-RECORD-003-ELIGIBILITY.md),
+[DECISION-RECORD-004](DECISION-RECORD-004-PROTOCOL-AMENDMENT.md), and
+[DECISION-RECORD-005](DECISION-RECORD-005-SEEDER.md); Decision 6 remains an unrecorded
+draft.
+**Status:** **PARTIALLY RECORDED — Decisions 1–3 approved, Decision 4 rejected, and Decision 5 approved 2026-11-21; Decision 6 remains draft.**
 **Baseline:** `origin/main` @ `5a94dfe1`.
 **Protocol:** [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](../EGM-GOLDFISH-REVIEW-ASSESSMENT.md).
 **Decision package:** [OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md).
@@ -37,7 +38,7 @@ the operator records it. Decision 1 names Tom Tran; the remaining drafts use `<o
 | 2 | Historical inclusion and exclusion | **Recorded 2026-11-21** — see DECISION-RECORD-002 | Confirm the exclusions and holds; classify the extracted leads explicitly; keep unverified entries out of every floor | 1 | **Yes** — DECISION-RECORD-002 |
 | 3 | Strict versus partial eligibility| **Recorded 2026-11-21** — conservative; seeded set additional| Keep the conservative reading until the corpus can meet both floors without relaxing the recall denominator| 2, 4       | **Yes** — DECISION-RECORD-003|
 | 4 | Proposed protocol amendment| **REJECTED (unnecessary) 2026-11-21**| Rejected as unnecessary under Decision 3| 1, 3       | **Rejected** — DECISION-RECORD-004|
-| 5 | Independent seeder | Not designated; 0 of about 8 and 0 of about 6 cases | One named human who is not an adjudicator; record the sealed-manifest location and access list | — | **No** |
+| 5 | Independent seeder| **Recorded 2026-11-21** — seeder Tom Tran (also corpus owner); construction not authorized| Designate a human independent of the adjudicators| None; needed by 6, 8| **Yes** — DECISION-RECORD-005|
 | 6 | Two independent human adjudicators | None identified; operator treated as an author | Two external humans who did not author or directly edit any corpus case; record the authorship checks | 5, 1 | **No** |
 
 ## 2. Decision 1 — Corpus owner
@@ -185,15 +186,18 @@ and no numeric threshold changes.
 
 ## 6. Decision 5 — Independent seeder
 
-**Verified current state.** No seeder is designated. No case is constructed: 0 of about 8
-seeded and 0 of about 6 no-known-defect. No sealed manifest and no answer key exist. The
-construction method is in
+**Status: APPROVED 2026-11-21.** Recorded in
+[DECISION-RECORD-005](DECISION-RECORD-005-SEEDER.md); the preparation analysis below is
+preserved.
+
+**Verified current state (at preparation).** No seeder was designated. No case was
+constructed: 0 of about 8 seeded and 0 of about 6 no-known-defect. No sealed manifest and no
+answer key existed. The construction method is in
 [CASE-CONSTRUCTION-SPECIFICATION.md](CASE-CONSTRUCTION-SPECIFICATION.md); it constructs
 nothing.
 
-**Recommended option.** Designate one human seeder who is independent of both adjudicators
-and, preferably, of the corpus owner. Record the independence statement, the sealed-manifest
-location outside the reviewer project directory, and the access list.
+**Recorded option.** Tom Tran was designated as seeder (also corpus owner). The independent
+case checker, the sealed-manifest location, and construction authorization remain open.
 
 **Dependencies.** None to designate. Decision 6 depends on the seeder being distinct from
 both adjudicators; decision 8 needs the sealed manifest and the access list.
@@ -201,24 +205,19 @@ both adjudicators; decision 8 needs the sealed manifest and the access list.
 **Independence constraint.** The seeder may overlap with the corpus owner, analyst, and
 operator, but may not be an adjudicator, and may not adjudicate a case they wrote.
 
-**Exact text to record:**
+**Recorded text.** The seeder, the overlap limitation, the independence restrictions, and
+`case_construction_authorized: false` are in
+[DECISION-RECORD-005](DECISION-RECORD-005-SEEDER.md) §1–§5.
 
-> Independent seeder: `<operator-supplied name>`. Independence: not an adjudicator of any
-> corpus case; `<independence statement>`. Sealed manifest location:
-> `<absolute path outside every reviewer project>`. Access list: `<roles or names>`.
-> Case construction is authorized: `<yes / no>`.
->
-> Approval block
-> `approved: false`
-> `identity: null`
-> `date: null`
+**Effect of the recorded decision.** The seeder is designated. Seeded and control construction
+may **not** begin: the case checker, the sealed manifest, and the explicit construction
+authorization remain open.
 
-**Effect if recorded.** Seeded and control construction may begin under the specification.
-It does not by itself create a case or an answer key.
+**Consequence of deferral (no longer applicable).** The experiment would remain unpowered for
+false positives.
 
-**Consequence of deferral.** The experiment remains unpowered for false positives.
-
-**Explicitly not approved.** No seeder is nominated and no case construction is authorized.
+**Recorded elsewhere.** The seeder is designated in DECISION-RECORD-005; construction is **not**
+authorized.
 
 ## 7. Decision 6 — Two independent human adjudicators
 

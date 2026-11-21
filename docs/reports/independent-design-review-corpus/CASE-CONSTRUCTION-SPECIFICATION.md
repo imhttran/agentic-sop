@@ -267,6 +267,7 @@ A case may enter the freeze record only when every gate is recorded:
 - It does not decide whether seeded cases count toward the 15-defect floor.
 - It does not freeze the corpus or authorize a run.
 
-Construction may begin only after decision 5 (independent seeder) is recorded and the
-operator authorizes case construction. Until then the counts stay **0 of about 8** and
-**0 of about 6**.
+Decision 5 is recorded (seeder designated: Tom Tran), but `case_construction_authorized` is
+**false**: the independent case checker and the sealed-manifest location are not selected.
+Construction remains blocked until those are recorded and the operator authorizes it. Until
+then the counts stay **0 of about 8** and **0 of about 6**.

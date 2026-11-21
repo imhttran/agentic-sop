@@ -209,7 +209,7 @@ The full options, trade-offs, validity effects, and deferral consequences are in
 | 2   | Historical inclusion and exclusion | **Recorded 2026-11-21** — see DECISION-RECORD-002 for the full disposition set                   | Recorded; no candidate promoted or adjudicated                               |
 | 3   | Strict versus partial eligibility  | **Recorded 2026-11-21** — conservative; seeded set additional                                    | Recorded in DECISION-RECORD-003; the amendment remains pending               |
 | 4   | Proposed protocol amendment        | **REJECTED (unnecessary) 2026-11-21**                                                            | Recorded in DECISION-RECORD-004; protocol unchanged                          |
-| 5   | Independent seeder                 | Not designated                                                                                   | No seeder, no sealed manifest, no seeded or no-known-defect cases            |
+| 5   | Independent seeder                 | **Recorded 2026-11-21** — seeder Tom Tran (also corpus owner); construction not authorized       | Recorded in DECISION-RECORD-005; checker, manifest, and construction open    |
 | 6   | Two independent human adjudicators | None identified; operator treated as an author                                                   | No two independent humans; PASS is unreachable                               |
 | 7   | Thresholds and cost limits         | Pre-registered, unapproved                                                                       | No approved threshold or hard cost ceiling; no post-first-run change rule    |
 | 8   | Corpus and instruction freeze      | **NOT FROZEN**; procedure prepared, not executed                                                 | Decisions 1–7 not recorded; corpus incomplete; instructions draft            |
@@ -673,3 +673,19 @@ plans / 11 defects; the adjudicated count is 0 and no candidate is promoted. The
 remains **NOT FROZEN**, the experiment **NOT YET READY**, and H1/H2 **NOT ESTABLISHED**.
 Decision 3 remains in force; Decisions 5–9 remain open. Freeze preconditions 1–4 are met and
 5–7 remain open.
+
+## 16. Decision 5 recorded (current)
+
+**Decision 5 — Independent seeder: APPROVED 2026-11-21.** Tom Tran is designated as seeder,
+and the same person is corpus owner. Protocol §5.4 permits that overlap; it is recorded as a
+limitation, not as independence. The record is
+[DECISION-RECORD-005-SEEDER.md](DECISION-RECORD-005-SEEDER.md).
+
+**Seeder designated, but case construction is not ready.** No independent case checker is
+designated, no sealed-manifest location is selected, no answer key exists, and
+`case_construction_authorized` is **false**. Seeded and control counts remain 0 / 8 and 0 / 6.
+The proposed strict corpus remains 3 plans / 4 defects and the proposed partial corpus 11
+plans / 11 defects; no candidate is promoted and the adjudicated count is 0. The corpus
+remains **NOT FROZEN**, the experiment **NOT YET READY**, and H1/H2 **NOT ESTABLISHED**.
+Decisions 6–9 remain open. Freeze preconditions 1–4 are met; precondition 5 is partially met;
+preconditions 6–7 remain open.
