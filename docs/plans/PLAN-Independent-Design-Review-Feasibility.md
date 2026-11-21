@@ -101,9 +101,10 @@ as a human adjudicator.
 - The operator is not assumed to be an adjudicator.
 - No approval or adjudication record is invented.
 
-**State:** Blocked. Repository history shows only the operator as a human author; the
-operator authored or edited the candidate plans, so the operator cannot adjudicate them.
-No second independent human adjudicator is identified.
+**State:** Blocked. Repository history shows only the operator as a human git identity;
+as a conservative proxy for authorship (a git identity does not show who wrote or
+directly edited the text; see report §3.2) the operator is treated as unable to
+adjudicate the candidate plans. No second independent human adjudicator is identified.
 
 ### FEAS-A5 — Cost, risk, and pilot prerequisites
 
