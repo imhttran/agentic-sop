@@ -25,7 +25,8 @@ is the construction method only. It is not evidence that any case has been built
 A case counts only when it is constructed, independently checked, and recorded in the
 freeze record (preparation plan §3, §4, §7). A draft, a template, or an unsealed file counts
 as **0**. The seeded and no-known-defect strata are reported **separately** from the
-historical stratum; they are not a way to reach a historical floor.
+historical stratum; whether a seeded case may count toward any floor is the unresolved
+question below.
 
 Whether a seeded defect may count toward the protocol's 15-determinable-defect floor is
 **not settled by the protocol text**. §5.3 says the historical set is the recall corpus and
@@ -40,7 +41,7 @@ any floor.
 | Role                         | Duty                                                                                                     | May not be                                                                  |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | Corpus owner                 | Selects and freezes the corpus; records determinability; records the case manifest in the freeze record  | An adjudicator                                                              |
-| Independent seeder           | Writes the seeded and control artifacts; plant the seeded defects; hold the sealed answer key            | An adjudicator of any case they wrote; the author of a case they adjudicate |
+| Independent seeder           | Writes the seeded and control artifacts; plants the seeded defects; holds the sealed answer key          | An adjudicator of any case they wrote                                       |
 | Independent case checker     | Re-reads each sealed case against its answer key and confirms determinability and the absence of leakage | The seeder of that case; an adjudicator of that case                        |
 | Analyst                      | Holds the unblinding key; applies the within-run deduplication                                           | An adjudicator                                                              |
 | First and second adjudicator | Label findings; re-adjudicate the sample                                                                 | The seeder, the corpus owner, or the author of a case they adjudicate       |
@@ -52,6 +53,11 @@ Independence constraints carried from protocol §5.4:
 - None of them may be an adjudicator.
 - The seeder of a defect may not adjudicate that defect.
 - A second adjudicator must be independent of the first adjudicator and of the seeder.
+
+The independent case checker is a **proposed control**, not one of the protocol's named
+roles; the protocol names the corpus owner, seeder, analyst, and adjudicators. The checker
+exists so that a case's determinability and no-leak result are confirmed by someone other
+than its author.
 
 The repository currently shows only the operator as a human Git identity, and the operator
 is treated conservatively as an author or direct editor of the candidate plans. A case
