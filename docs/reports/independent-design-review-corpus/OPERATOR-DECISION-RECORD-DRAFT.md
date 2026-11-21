@@ -1,9 +1,11 @@
 # Operator Decision Record — Draft Entries for Decisions 1–6
 
-**Type:** Decision-record draft (non-normative). It prepares a record entry for the first
-six decisions of the [OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md). It
-records **no decision**, approves nothing, and nominates nobody.
-**Status:** **DRAFT — NOT RECORDED.**
+**Type:** Decision-record draft (non-normative). It prepared record entries for the first six
+decisions of the [OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md). Decision 1
+was recorded by the operator on 2026-11-21 in
+[DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md); Decisions 2–6 remain unrecorded
+drafts.
+**Status:** **PARTIALLY RECORDED — Decision 1 approved 2026-11-21; Decisions 2–6 remain draft.**
 **Baseline:** `origin/main` @ `5a94dfe1`.
 **Protocol:** [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](../EGM-GOLDFISH-REVIEW-ASSESSMENT.md).
 **Decision package:** [OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md).
@@ -22,13 +24,13 @@ Nothing here is an approval. A merged pull request is not an approval of any ite
 
 This draft follows the repository's decision-record convention: the status line, the
 exact scope, and the effect are recorded up front, and an approval date appears only when
-the operator records it. No name is supplied; every name is `<operator-supplied>`.
+the operator records it. Decision 1 names Tom Tran; the remaining drafts use `<operator-supplied>`.
 
 ## 1. Summary
 
 | # | Decision | Current state | Recommended option | Depends on | Approval recorded |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Corpus owner | Not designated | One named human who is not an adjudicator; the operator may serve | — | **No** |
+| 1 | Corpus owner | **Designated: Tom Tran (2026-11-21)** | One named human who is not an adjudicator; the operator may serve | — | **Yes** — DECISION-RECORD-001 |
 | 2 | Historical inclusion and exclusion | 0 strict, 10 partial, 2 verified-defect holds, 3 unverified holds, 8 excluded; eight leads now extracted (3 proposed strict, 1 proposed partial, 1 evidence-blocked, 1 implementation-only, 2 no artifact) | Confirm the exclusions and holds; classify the extracted leads explicitly; keep unverified entries out of every floor | 1 | **No** |
 | 3 | Strict versus partial eligibility | Conservative reading applied; no rule recorded | Keep the conservative reading until the corpus can meet both floors without relaxing the recall denominator | 2, 4 | **No** |
 | 4 | Proposed protocol amendment | PROPOSED, not applied | Defer until the corpus owner records independent support for each partial, then decide with the actual counts | 1, 3 | **No** |
@@ -37,13 +39,17 @@ the operator records it. No name is supplied; every name is `<operator-supplied>
 
 ## 2. Decision 1 — Corpus owner
 
-**Verified current state.** No corpus owner is designated. The protocol assigns the owner
-the selection, determinability, and freeze record. No file in the repository names an owner
-and the freeze record has no `corpus_owner` value.
+**Status: APPROVED 2026-11-21.** Recorded in
+[DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md); the preparation analysis below is
+preserved.
 
-**Recommended option.** Designate one named human as corpus owner with a recorded statement
-that the person is not an adjudicator of any corpus case. The operator may serve, because
-the protocol permits the operator to be the corpus owner but not an adjudicator.
+**Verified current state (at preparation).** No corpus owner was designated. The protocol
+assigns the owner the selection, determinability, and freeze record. **Recorded:** Tom Tran,
+2026-11-21.
+
+**Recorded option.** Tom Tran was designated with the recorded statement that he is not an
+adjudicator of any corpus case. The protocol permits the operator to be the corpus owner but
+not an adjudicator.
 
 **Dependencies.** None. Decisions 2 and 8 need a named owner to record the list and the
 freeze.
@@ -51,23 +57,17 @@ freeze.
 **Independence constraint.** The owner may overlap with the seeder, analyst, and operator.
 The owner may not be an adjudicator.
 
-**Exact text to record (verbatim or equivalent):**
+**Recorded text.** The recorded decision, operator identity, date, and independence statement
+are in [DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md) §1.
 
-> Corpus owner: `<operator-supplied name>`. Role: selects and freezes the corpus, records
-> each determinability judgment, and records the freeze. Independence: this person is not an
-> adjudicator of any corpus case and is not a model. Recorded on `<date>`.
->
-> Approval block
-> `approved: false`
-> `identity: null`
-> `date: null`
+**Effect of the recorded decision.** The freeze record gains an owner, so the corpus can be
+treated as a pre-registered artifact. Nothing is promoted.
 
-**Effect if recorded.** The freeze record gains an owner, so the corpus can be treated as a
-pre-registered artifact. Nothing is promoted.
+**Consequence of deferral (no longer applicable).** Workstream A would have stayed at
+`NOT READY FOR CORPUS-OWNER FREEZE`.
 
-**Consequence of deferral.** Workstream A stays at `NOT READY FOR CORPUS-OWNER FREEZE`.
-
-**Explicitly not approved.** No name is proposed by this draft.
+**Recorded elsewhere.** The designation comes from the operator's decision in
+DECISION-RECORD-001; this draft proposes no other name.
 
 ## 3. Decision 2 — Historical inclusion and exclusion
 
