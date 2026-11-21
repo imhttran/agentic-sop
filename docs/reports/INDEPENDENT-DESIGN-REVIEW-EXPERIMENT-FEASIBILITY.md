@@ -31,9 +31,8 @@ inference was executed.
   It is unapproved and does not authorize implementation.
 - The experiment has **not** run. No threshold was changed. No inference call was made
   for the experiment or pilot.
-- The §1.2/§5.1 corrections under review in PR #567 are incorporated here. If PR #567 is
-  not merged before this report, the merged assessment remains authoritative and this
-  report's requested-model wording is ahead of it.
+- The §1.2/§5.1 corrections from PR #567 are merged into the assessment, and this
+  report's requested-model wording matches it.
 - The feasibility verdict below is **not** the experiment's PASS/FAIL/INCONCLUSIVE
   outcome.
 
@@ -55,8 +54,9 @@ A remediation plan is not used as the corpus document when its own text states t
 That would leak the answer. Such plans are recorded as **evidence pointers** until the
 pre-fix parent document and revision are extracted.
 
-All candidate documents were last modified by Tom Tran. The operator therefore cannot be
-an adjudicator for them; see §3.
+All candidate documents were last modified under the git identity Tom Tran. This report
+uses the git identity as a conservative proxy for authorship, so the operator is treated
+as unable to adjudicate them; see §3.2 for the limits of that proxy.
 
 ### 2.2 Evidence-verified candidates
 
@@ -108,7 +108,7 @@ partially determinable or self-referential candidates count toward neither.
 
 | Measure                                                    | Count        |
 | ---------------------------------------------------------- | ------------ |
-| Candidate documents reviewed                               | 22           |
+| Candidate documents reviewed (8 + 12 + 3, §2.2–§2.4)      | 23           |
 | Evidence-verified defect-bearing or gap-bearing candidates | 8            |
 | Proposed determinable with independent evidence (strict)   | 1            |
 | Proposed partially determinable or self-referential        | 7            |
@@ -124,8 +124,11 @@ partially determinable or self-referential candidates count toward neither.
 The repository has enough **evidence of defects** to support corpus assembly, but the
 corpus itself is not assembled. The dominant missing work is extracting the pre-fix
 parent document and parent revision for the evidence-only plans in §2.3, then having a
-corpus owner freeze the determinability judgments. Partially determinable candidates do
-not count toward either floor.
+corpus owner freeze the determinability judgments. This report counts partially
+determinable candidates toward neither floor as the conservative reading. The
+assessment's wording ("plans with known defects" and "determinable known defects") does
+not settle which floor such a plan counts toward, so the freeze rule must decide it
+(§8, item 2).
 
 ## 3. Human adjudication feasibility
 
@@ -146,8 +149,13 @@ approving a plan does not make someone its author.
 
 - `git shortlog -sne --all` shows Tom Tran as the only human author. The other commit
   identities are `Claude`, `Zed`, and `Eval`; none is a human adjudicator.
-- Every candidate document in §2.2 was last modified by Tom Tran. The operator is
-  therefore an author or direct editor of the candidates and cannot adjudicate them.
+- Every candidate document in §2.2 was last modified under the git identity Tom Tran.
+  The protocol defines an author as a human who wrote or directly edited the plan text,
+  and a git identity does not show that: commits made by an agent under the operator's
+  identity would be counted as the operator's under this proxy, and co-author trailers
+  were not examined. The report therefore takes the conservative reading, that the
+  operator cannot adjudicate the candidates. That reading is a proposal until the
+  commits are checked or the corpus owner rules otherwise.
 - No approval record for the experiment exists. The primary checkout's
   `sop approvals --json` returned an empty approval list; the worktree has no SOP state
   database.
@@ -173,6 +181,13 @@ is not authorship.
 and `/Users/imhttran/Downloads` for report-like files, and listed open pull requests;
 no Linux report file, branch, or PR was found. Workstream B remains pending. No provider,
 routing, token, latency, or pilot-readiness claim is made from Linux evidence.
+
+Static code-path readings of the §4.3 items (request composition, provider and model
+resolution, the requested-model key, token reporting, concurrent runs and isolation) are
+recorded in a
+[comment on PR #565](https://github.com/imhttran/agentic-sop/pull/565#issuecomment-7065856929)
+and in PR #567. They are not the independent Workstream B report, they are static
+reading and not measured behavior, and the runtime items they list remain open.
 
 ### 4.2 Baseline verification (assessment, not Linux confirmation)
 
@@ -222,7 +237,9 @@ The assessment's §7 budget is the authority:
   Arm D (default 7-call design: 550–613; disjoint 8-call design: 628–700) and 862–1,309
   calls with Arm D.
 - Minimum corpus: 15 plans. At that floor, the base experiment is 319–364 calls without
-  Arm D and 499–724 calls with Arm D.
+  Arm D and 499–679 calls with Arm D (the assessment's §7 table: 499 for the default
+  7-call design plus Arm D with B and C, up to 679 for the disjoint 8-call design plus
+  the largest Arm D).
 - The assessment's 319–700 (without Arm D) and 499–1,309 (with Arm D) ranges span both the
   15-plan floor and the 26–29-plan target.
 - Pilot: 4 calls, excluded from the dataset.
@@ -261,8 +278,9 @@ does not authorize the conditional PRD.
 ### 7.1 Prerequisites
 
 - Frozen pilot plans and request files with a fixed instruction/data delimiter.
-- A throwaway clone or worktree at the recorded revision with a fixed
-  `.agent-sdlc/config.yaml` overlay (sha256 recorded) and no `.env`.
+- One throwaway clone or worktree per run (four for the pilot), each at the recorded
+  revision with a fixed `.agent-sdlc/config.yaml` overlay (sha256 recorded), no `.env`,
+  and only that run's request file.
 - A cleared environment (`env -i` plus a recorded allowlist), or at minimum unset
   `SOP_AGENT_MODEL`, the provider-specific model override, `SOP_AGENT_PROVIDER`,
   `SOP_AGENT_HARNESS`, and the `SOP_MODEL_*` variables.
@@ -275,13 +293,17 @@ does not authorize the conditional PRD.
 ### 7.2 Prepared shape (not run)
 
 ```text
-# in the throwaway clone, with override variables unset
-sop prompt --capability review --model-class <class> --file pilot/A/request.md
-sop prompt --capability review --model-class <class> --file pilot/B/request.md
+# one throwaway clone per (arm, plan) run, override variables unset,
+# each containing only its own request file
+cd <clone-plan1-A> && sop prompt --capability review --model-class <class> --file request.md
+cd <clone-plan1-B> && sop prompt --capability review --model-class <class> --file request.md
+# repeat for plan 2 in <clone-plan2-A> and <clone-plan2-B>
 ```
 
-The pilot is arms A and B once on two plans. Run each command once on each of the two
-pilot plans: two arms × two plans = four calls. Record `metadata.json` routing and tokens,
+The pilot is arms A and B once on two plans: two arms × two plans = four clones and four
+calls. A shared clone would let a repository-tool reviewer read the other arm's request
+file, so the per-run isolation rule of the assessment's §5.1 applies to the pilot as
+well. Record `metadata.json` routing and tokens,
 the requested-model key against `routing.model`, provider-side model identity where
 available, request/plan sha256, and wall-clock duration. A mismatch, missing token data,
 `unreported_calls` greater than zero, a duplicate run directory, or invalid timing makes
@@ -301,8 +323,9 @@ Arm D.
 
 1. **Corpus:** approve the target size, designate the corpus owner, and authorize
    extraction of the pre-fix parent documents for the §2.3 evidence-only plans.
-2. **Determinability:** approve the freeze rule and the proposed classifications; do not
-   treat them as verified until frozen.
+2. **Determinability:** approve the freeze rule, including which floor a partially
+   determinable plan counts toward, and the proposed classifications; do not treat them
+   as verified until frozen.
 3. **Adjudication:** designate a seeder and two independent human adjudicators who did not
    author or directly edit the corpus plans. The operator may be corpus owner, seeder, or
    analyst, but not an adjudicator.
