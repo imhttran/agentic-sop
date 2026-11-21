@@ -25,10 +25,16 @@ question from general knowledge, and do not substitute another model.
 ## PREFLIGHT
 
 ```bash
+# Run from the SOP checkout (the directory containing cmd/deceleval-ab).
 sop status
 go run ./cmd/deceleval-ab -discover -endpoint <endpoint>
 ```
 
+- Run from the SOP checkout: the directory that contains `cmd/deceleval-ab` and
+  `evals/decision-model/`. A global or project-scope install does not change the
+  working directory, so resolve the checkout first and run the commands there; the
+  relative command and frozen corpus paths resolve from that checkout, not from the
+  caller's project.
 - `sop status` proves the SOP CLI is available. If it fails, stop.
 - `-discover` lists the served model ids and endpoint metadata without an
   inference request. Record the exact ids the operator named; do not guess an id.
@@ -43,13 +49,13 @@ Run one model at a time, with the same case order, timeout, and cache policy.
 
 ```bash
 # 12 smoke cases, two per governed action
-go run ./cmd/deceleval-ab -mode quick -out <artifact-dir> -models <baseline-id>,<candidate-id> -concurrency 1,4 -timeout 60s
+go run ./cmd/deceleval-ab -mode quick -out <artifact-dir> -endpoint <endpoint> -models <baseline-id>,<candidate-id> -concurrency 1,4 -timeout 60s
 
 # 36 held-out cases; refused until a completed quick run exists in <artifact-dir>
-go run ./cmd/deceleval-ab -mode full -out <artifact-dir> -models <baseline-id>,<candidate-id> -concurrency 1,4 -timeout 60s
+go run ./cmd/deceleval-ab -mode full -out <artifact-dir> -endpoint <endpoint> -models <baseline-id>,<candidate-id> -concurrency 1,4 -timeout 60s
 
 # Both in order
-go run ./cmd/deceleval-ab -mode all -out <artifact-dir> -models <baseline-id>,<candidate-id> -concurrency 1,4 -timeout 60s
+go run ./cmd/deceleval-ab -mode all -out <artifact-dir> -endpoint <endpoint> -models <baseline-id>,<candidate-id> -concurrency 1,4 -timeout 60s
 ```
 
 - Quick mode is the smoke check. Do not run the held-out split until the quick run
