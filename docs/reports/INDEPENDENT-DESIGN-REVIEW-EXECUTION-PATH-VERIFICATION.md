@@ -91,7 +91,12 @@ Reproduce: `go test ./internal/cli -run 'TestVerify|TestPromptRunID|TestConcurre
 class's provider and model (`source: manual_override`). SYNTHETIC RUNTIME:
 `TestVerifyMLXPromptIdentityAndUsage` and the native tests route to the configured model.
 PILOT: both pilots routed as intended. Residual: EP-13. Remediation: every experiment project
-defines `models.small|medium|large`.
+defines `models.small|medium|large`. Two further CODE-only readings (not exercised at
+runtime): the `small` class is local-first and `applyLocalFallback` can swap it to its cloud
+fallback when the local runtime cannot serve it, so the overlay should use `medium` or `large`
+or define no fallback; and `renderPrompt` (`internal/agent/provider.go`) places the request
+file verbatim under `Task:` with no fence, so any instruction/data delimiter must be inside
+`request.md`.
 
 **EP-02 Requested versus provider-attested identity.** Code: the `tokens` key is the model
 name the client sent (`chatRequest.Model`, `perf.AddUsageWithReport`); no client records a
@@ -103,7 +108,12 @@ protocol's requested-model check **does detect** an override. It is **not** evid
 model the server executed. Result PARTIAL (requested name VERIFIED; attested identity not
 available). Residual: server-side substitution or aliasing is invisible. Remediation: record
 a provider-side identity out of band (Ollama digest; oMLX model id only), as the protocol
-already says; a production change to record the response `model` field is optional.
+already says; a production change to record the response `model` field is optional. The same
+gap applies to provider and harness (CODE only, not exercised): the agent factory in
+`cli.go` re-resolves them through `EffectiveProvider`/`EffectiveHarness`, where
+`SOP_AGENT_PROVIDER` and `SOP_AGENT_HARNESS` win, while `routing.provider` records the
+routed selection. The cleared-environment rule must therefore cover these variables, and the
+harness should check that none is set; `routing.provider` alone does not prove the backend.
 
 **EP-03 Token reporting.** Code: `internal/perf/usage.go`. SYNTHETIC RUNTIME:
 `TestVerifyMLXPromptIdentityAndUsage` (usage recorded: calls 1, input 120, output 30);
@@ -205,7 +215,10 @@ project that names a class without defining `models.<class>` can send content of
 Remediation (done): the assessment's §5.1 now requires the overlay to define every class.
 
 **EP-14 Cache and JEV defaults.** EXISTING TEST: `TestPromptWithoutCacheAlwaysCallsAgent`;
-code: `--cache` is opt-in, JEV triage is a no-op unless enabled. Result VERIFIED.
+code: `--cache` is opt-in, JEV triage is a no-op unless enabled. Result VERIFIED. Limit:
+this covers SOP's own prompt-result cache only. SOP sends no `keep_alive` or cache controls,
+so provider-side prefix or KV caching is outside its control and "caching disabled" must not
+be claimed for the provider.
 
 **EP-15 Provider-side concurrency and parallel-batch latency.** Not testable without real
 inference. UNVERIFIED. Minimum authorization: three concurrent real requests to the chosen
