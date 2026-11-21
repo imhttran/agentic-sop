@@ -182,25 +182,27 @@ against `main`. Do not merge.
 - The applicable SOP validation and review gates are recorded.
 - One PR is open; no merge is performed.
 
-**State:** In progress. The readiness package merged as PR #572 and the Workstream B
-verification as PR #574. The post-Workstream B reconciliation PR is the current deliverable;
-no merge is authorized by this record.
+**State:** Complete. The readiness package merged as PR #572, the Workstream B verification
+as PR #574, and the post-Workstream B reconciliation as PR #577 (merge `e8b753e4`). That merge
+did not authorize the experiment, freeze the corpus, or approve any governance decision. The
+recorded verdicts are unchanged: corpus `NOT FROZEN`, freeze `NOT READY`, experiment `NOT YET
+READY`, and H1/H2 `NOT ESTABLISHED`.
 
 ## Dependencies and status
 
 These are coordination statuses in this record, not SOP lifecycle transitions; no plan
 was activated.
 
-| Task    | Owner       | State                             | Evidence                          |
-| ------- | ----------- | --------------------------------- | --------------------------------- |
-| FEAS-A1 | SOP         | Reviewed                          | `candidates.json`; report §2      |
-| FEAS-A2 | SOP         | Reviewed with limitations         | `candidates.json`; report §2      |
-| FEAS-A3 | SOP         | Not met                           | `READINESS.md` §4                 |
-| FEAS-A4 | SOP         | Blocked                           | Report §3                         |
-| FEAS-A5 | SOP         | Reviewed                          | Report §§5–7                      |
-| FEAS-B1 | Claude Code | Complete with open runtime items  | Report §4; reconciliation            |
-| FEAS-C1 | SOP         | Complete with unverified sections | Readiness package; report; amendment |
-| FEAS-C2 | SOP         | In progress                       | Reconciliation PR pending            |
+| Task    | Owner       | State                             | Evidence                                |
+| ------- | ----------- | --------------------------------- | --------------------------------------- |
+| FEAS-A1 | SOP         | Reviewed                          | `candidates.json`; report §2            |
+| FEAS-A2 | SOP         | Reviewed with limitations         | `candidates.json`; report §2            |
+| FEAS-A3 | SOP         | Not met                           | `READINESS.md` §4                       |
+| FEAS-A4 | SOP         | Blocked                           | Report §3                               |
+| FEAS-A5 | SOP         | Reviewed                          | Report §§5–7                            |
+| FEAS-B1 | Claude Code | Complete with open runtime items  | Report §4; reconciliation               |
+| FEAS-C1 | SOP         | Complete with unverified sections | Readiness package; report; amendment    |
+| FEAS-C2 | SOP         | Complete                          | PRs #572, #574, #577 (merge `e8b753e4`) |
 
 ## Read-only guarantee
 
