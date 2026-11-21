@@ -2,7 +2,9 @@
 
 **Status:** DRAFT — coordination record. Workstream A reviewed; Workstream B pending;
 not activated; no experiment or pilot inference authorized.
-**Baseline:** `origin/main` @ `64101f9e`.
+**Baseline:** `origin/main` @ `1b61db64`.
+**Baseline note:** advances from `64101f9e` to `1b61db64` to include PRs #567 and #568;
+the plan content is otherwise unchanged.
 **Authoritative protocol:**
 [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](../reports/EGM-GOLDFISH-REVIEW-ASSESSMENT.md).
 **Conditional contract:**
@@ -49,14 +51,14 @@ adjudication conflict.
 
 **Acceptance criteria**
 
-- The baseline is `64101f9e`, and the assessment and PRD are linked.
+- The baseline is `1b61db64`, and the assessment and PRD are linked.
 - Candidate paths and last-modified revisions are recorded.
 - No later evidence is treated as available to the original reviewer.
 - No inference is executed.
 
-**State:** Reviewed. The inventory is in
-[the feasibility report](../reports/INDEPENDENT-DESIGN-REVIEW-EXPERIMENT-FEASIBILITY.md)
-§2.
+**State:** Reviewed. The candidate manifest is
+[`docs/reports/independent-design-review-corpus/candidates.json`](../reports/independent-design-review-corpus/candidates.json)
+with 23 entries: 5 `VERIFIED`, 7 `PROPOSED`, 3 `UNVERIFIED`, and 8 `EXCLUDED`.
 
 ### FEAS-A2 — Determinability evidence
 
@@ -70,9 +72,15 @@ determinability judgment. Do not count an independent adjudication that has not 
 - Evidence pointers resolve to a path, commit, PR, or report.
 - A remediation plan is not used as the corpus document when it would leak the answer.
 
-**State:** Reviewed. One candidate document has independent later evidence and a proposed
-determinable classification; seven are partially determinable or self-referential. No
-independent adjudicator has confirmed any classification.
+**State:** Reviewed. Nine pre-fix artifact references were recorded (`E-001`–`E-005`,
+`E-007`–`E-010`); `E-005` is excluded because the pre-fix spec already contained the
+correct behavior, leaving seven proposed E partials; with the three verified H partials
+the manifest records ten partial candidates. `E-006`, `E-011`, and `E-012` lack a single
+pre-fix artifact. The manifest proposes 0 strict determinable defects, 10
+partially determinable defects, 2 candidates held pending corpus-owner review, 3
+unverified entries, and 8 exclusions. Co-author
+trailers were examined: Tom Tran and several Claude identities, with no other human
+co-author. No independent adjudicator has confirmed any classification.
 
 ### FEAS-A3 — Corpus sizing and seeded/no-known-defect plan
 
@@ -86,8 +94,10 @@ no-known-defect construction requirements without creating fabricated results.
 - Seeded defects have an independent seeder and a sealed manifest requirement.
 - No seeded defect or result is invented.
 
-**State:** Not met. The seeded and no-known-defect corpus is not constructed, and the
-verified historical corpus is below the assessment floor.
+**State:** Not met. Ten plans are proposed eligible (0 strict and 10 partial). The strict
+reading is 0 plans and 0 determinable defects against both 15-item floors; the
+partial-inclusive reading is 10 and 10. The seeded and no-known-defect corpus is not
+constructed. The proposed classification amendment is not approved.
 
 ### FEAS-A4 — Adjudication feasibility
 
@@ -145,8 +155,11 @@ required sections and a verdict of READY, NOT YET READY, or BLOCKED.
 - The feasibility verdict is not presented as the experiment outcome.
 - The report links the assessment and PRD.
 
-**State:** Complete with unverified sections. The report records Workstream B as pending
-and §§4, 7 and 8 as unverified or awaiting operator decisions.
+**State:** Complete with unverified sections. The report records Workstream B as pending,
+§§4, 7 and 8 as unverified or awaiting operator decisions, and links the candidate
+manifest,
+[readiness summary](../reports/independent-design-review-corpus/READINESS.md), and
+[proposed classification amendment](../reports/independent-design-review-corpus/PROPOSED-PROTOCOL-AMENDMENT.md).
 
 ### FEAS-C2 — Validation and pull request
 
@@ -166,16 +179,16 @@ against `main`. Do not merge.
 These are coordination statuses in this record, not SOP lifecycle transitions; no plan
 was activated.
 
-| Task    | Owner       | State                             | Evidence                 |
-| ------- | ----------- | --------------------------------- | ------------------------ |
-| FEAS-A1 | SOP         | Reviewed                          | Report §2                |
-| FEAS-A2 | SOP         | Reviewed with limitations         | Report §2                |
-| FEAS-A3 | SOP         | Not met                           | Report §2                |
-| FEAS-A4 | SOP         | Blocked                           | Report §3                |
-| FEAS-A5 | SOP         | Reviewed                          | Report §§5–7             |
-| FEAS-B1 | Claude Code | Pending                           | Report §4                |
-| FEAS-C1 | SOP         | Complete with unverified sections | Report; §4/§7/§8 pending |
-| FEAS-C2 | SOP         | In progress                       | PR pending               |
+| Task    | Owner       | State                             | Evidence                          |
+| ------- | ----------- | --------------------------------- | --------------------------------- |
+| FEAS-A1 | SOP         | Reviewed                          | `candidates.json`; report §2      |
+| FEAS-A2 | SOP         | Reviewed with limitations         | `candidates.json`; report §2      |
+| FEAS-A3 | SOP         | Not met                           | `READINESS.md` §4                 |
+| FEAS-A4 | SOP         | Blocked                           | Report §3                         |
+| FEAS-A5 | SOP         | Reviewed                          | Report §§5–7                      |
+| FEAS-B1 | Claude Code | Pending                           | Report §4                         |
+| FEAS-C1 | SOP         | Complete with unverified sections | Report; `READINESS.md`; amendment |
+| FEAS-C2 | SOP         | In progress                       | PR pending                        |
 
 ## Read-only guarantee
 

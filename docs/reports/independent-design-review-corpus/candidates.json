@@ -1,0 +1,484 @@
+{
+  "version": 1,
+  "description": "Candidate historical design corpus for the independent design-review experiment. Non-normative, not frozen, and not an experiment result. A candidate is a document that existed before the defect was recorded; remediation plans are evidence pointers, not corpus inputs.",
+  "baseline": "1b61db6427e73ab18cab532834504359ea41de04",
+  "protocol": "docs/reports/EGM-GOLDFISH-REVIEW-ASSESSMENT.md",
+  "feasibility_report": "docs/reports/INDEPENDENT-DESIGN-REVIEW-EXPERIMENT-FEASIBILITY.md",
+  "freeze_status": "NOT_FROZEN",
+  "evidence_states": ["VERIFIED", "PROPOSED", "UNVERIFIED", "EXCLUDED"],
+  "author_evidence": {
+    "repository_human_identities": [
+      "Tom Tran <trantom512@gmail.com>",
+      "Tom Tran <imhttran@gmail.com>"
+    ],
+    "agent_coauthor_trailers": [
+      "Claude <noreply@anthropic.com>",
+      "Claude Fable 5.2 <noreply@anthropic.com>",
+      "Claude Haiku 5.5 <noreply@anthropic.com>",
+      "Claude Opus 5 <noreply@anthropic.com>",
+      "Claude Opus 5.5 <noreply@anthropic.com>",
+      "Claude Sonnet 5.5 <noreply@anthropic.com>"
+    ],
+    "uncertainty": "A Git identity does not prove who wrote or directly edited a document. The repository history shows only the operator as a human identity; AI co-author trailers are not human adjudicators. The operator is treated as an author or direct editor for adjudication purposes."
+  },
+  "candidates": [
+    {
+      "id": "IDR-H-001",
+      "inventory_source": "feasibility §2.2",
+      "original_artifact": "docs/plans/PLAN-SOP-ACP-ZED.md",
+      "pre_fix_commit": "e462deed",
+      "pre_fix_note": "The plan first appears in 79acbfc1, the same commit that adds ACP-EXECUTION-EXCLUSION-GAP.md. No earlier plan revision exists in git; e462deed only updates the status line. No uncontaminated pre-defect artifact is available, so the candidate is pending corpus-owner review.",
+      "artifact_sha256": "d9d5539c79ac919368e834368605fcae54f943a755a7f271a4ce0f12bd7abf0d",
+      "permitted_references": [
+        "internal/projectlock/lock.go",
+        "internal/cli/mcp_start_work.go",
+        "internal/cli/acp.go"
+      ],
+      "later_evidence": ["docs/plans/ACP-EXECUTION-EXCLUSION-GAP.md"],
+      "defect_classification": "execution-exclusion",
+      "defect_summary": "The acceptance matrix claims the project lock protects CLI, MCP, and ACP equally. The gap report shows the lock is metadata-only and is not held for execution, so CLI-first and ACP-first exclusion is unresolved.",
+      "proposed_determinability": "pending-corpus-owner-review",
+      "proposed_inclusion": "hold",
+      "last_commit_identity": "Tom Tran <imhttran@gmail.com>",
+      "outstanding_decision": "Corpus owner must decide whether ACP-ZED can enter the corpus at all, given that the plan and the gap report entered git in the same commit. The verified defect evidence is preserved; only determinability is pending.",
+      "evidence_state": "VERIFIED"
+    },
+    {
+      "id": "IDR-H-002",
+      "inventory_source": "feasibility §2.2",
+      "original_artifact": "docs/plans/PLAN-Code-Retrieval-Context-Seam.md",
+      "pre_fix_commit": "03a7d7d9",
+      "artifact_sha256": "0667e5fd328bccb8a15a16837f79a6b0591cf72b513d49b4c234eec12eae0942",
+      "permitted_references": [
+        "internal/verifcache/verifcache.go",
+        "internal/cli/validate.go"
+      ],
+      "later_evidence": [
+        "The plan's own post-merge status line; no independent later report was found."
+      ],
+      "defect_classification": "scope-mismatch",
+      "defect_summary": "Retrieval was wired to IMPLEMENT but not FIX despite the original implement/fix scope. The evidence is part of the document, so it is self-referential.",
+      "proposed_determinability": "not-determinable-from-this-artifact",
+      "proposed_inclusion": "exclude",
+      "last_commit_identity": "Tom Tran <imhttran@gmail.com>",
+      "outstanding_decision": "Corpus owner must either locate an independent later pointer or keep this plan excluded.",
+      "evidence_state": "EXCLUDED",
+      "exclusion_reason": "The only later-evidence pointer is the plan's own post-merge status line; a reviewer at the pre-fix revision would not see it."
+    },
+    {
+      "id": "IDR-H-003",
+      "inventory_source": "feasibility §2.2",
+      "original_artifact": "docs/plans/PLAN-SOP-RUN-ACCEPT-001.md",
+      "pre_fix_commit": "56ff82ac",
+      "artifact_sha256": "a43ebdffe4ff74e9d577ca14fd967a3d6c7e7ad503508589c88a0d9f777280f3",
+      "permitted_references": [
+        "internal/cli/acceptance_gotest.go",
+        "internal/planner/markdown.go",
+        "internal/planflow/acceptance_checks_reconcile_test.go"
+      ],
+      "later_evidence": ["docs/reports/PLAN-STATUS-AUDIT-2026-11-04.md"],
+      "defect_classification": "acceptance-mapping",
+      "defect_summary": "Six operator acceptance checks fail after a later `### Acceptance Mapping` contract; the plan remains ACTIVE.",
+      "proposed_determinability": "partially-determinable",
+      "proposed_inclusion": "include-with-review",
+      "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "Corpus owner must decide whether a defect created by a later contract is admissible and fix the pre-fix revision.",
+      "evidence_state": "VERIFIED"
+    },
+    {
+      "id": "IDR-H-004",
+      "inventory_source": "feasibility §2.2",
+      "original_artifact": "docs/plans/PLAN-04-SOP-LLM04-Supply-Chain.md",
+      "pre_fix_commit": "e55527f4",
+      "artifact_sha256": "028e1377e7c86f60f74c9ca1c912ffe7e9ab2be9ee2975c552cab52889e0070a",
+      "permitted_references": ["docs/reports/owasp-llm/llm04-supply-chain.md"],
+      "later_evidence": ["The plan's status and the LLM04 evidence report."],
+      "defect_classification": "acceptance-mapping",
+      "defect_summary": "Historical outcomes remain PARTIAL until re-execution under the newly recorded acceptance mapping.",
+      "proposed_determinability": "partially-determinable",
+      "proposed_inclusion": "include-with-review",
+      "last_commit_identity": "Tom Tran <imhttran@gmail.com>",
+      "outstanding_decision": "Corpus owner must confirm whether this is a design defect or a later acceptance-contract change.",
+      "evidence_state": "VERIFIED"
+    },
+    {
+      "id": "IDR-H-005",
+      "inventory_source": "feasibility §2.2",
+      "original_artifact": "docs/plans/PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.md",
+      "pre_fix_commit": "e5d45fc1",
+      "pre_fix_note": "e5d45fc1 is the LLM02 remediation commit: it adds this plan, the llm02-disclosure report, and the GAP-01/GAP-02 fixes. It is an ancestor of the fix merge aa23217 but it does not predate discovery, and no earlier plan revision exists in git. The later disclosure report is not part of the reviewer input.",
+      "artifact_sha256": "92058d6dd8f78825a4318ed3fd417666897d0b6763b8cc8dc9406cfc80ed13ff",
+      "permitted_references": [
+        "internal/cli/redaction.go",
+        "internal/redact",
+        "docs/specs/SECURITY.md"
+      ],
+      "later_evidence": [
+        "docs/reports/owasp-llm/llm02-disclosure.md GAP-01, GAP-02, GAP-03."
+      ],
+      "defect_classification": "secret-exposure",
+      "defect_summary": "Acceptance-check logs, model-visible validation failures, and JSON-escaped Go test output exposed credential-shaped text; all three were fixed later. The plan, the disclosure report, and the GAP-01/GAP-02 fixes all enter in e5d45fc1, so the artifact is a remediation commit rather than a pre-defect one.",
+      "proposed_determinability": "pending-corpus-owner-review",
+      "proposed_inclusion": "hold",
+      "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "Corpus owner must decide whether LLM02 can enter the corpus. No pre-discovery artifact exists; the candidate is held and the verified defect evidence is preserved. Keep the disclosure report out of the reviewer input.",
+      "evidence_state": "VERIFIED"
+    },
+    {
+      "id": "IDR-H-006",
+      "inventory_source": "feasibility §2.2",
+      "original_artifact": "docs/plans/PLAN-Security-Scanner-Addon.md",
+      "pre_fix_commit": "1b611711",
+      "artifact_sha256": "2cd3a2e753b020ea224cc0e97b83ccc0651ae7309226129a1282c1705f37774d",
+      "permitted_references": [
+        "docs/reports/SECURITY-SCANNER-RESIDUAL-FINDINGS.md",
+        "docs/reports/SECURITY-DEPENDENCY-COVERAGE.md"
+      ],
+      "later_evidence": [
+        "docs/reports/SECURITY-SCANNER-RESIDUAL-FINDINGS.md",
+        "docs/reports/SECURITY-DEPENDENCY-COVERAGE.md"
+      ],
+      "defect_classification": "scanner-coverage",
+      "defect_summary": "Residual scanner findings and dependency-coverage gaps remain after the add-on's first acceptance.",
+      "proposed_determinability": "partially-determinable",
+      "proposed_inclusion": "include-with-review",
+      "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "Corpus owner must confirm which residual findings were knowable at the pre-fix plan revision.",
+      "evidence_state": "VERIFIED"
+    },
+    {
+      "id": "IDR-H-007",
+      "inventory_source": "feasibility §2.2",
+      "original_artifact": "docs/plans/PLAN-08B-SOP-LLM08-Hidden-Context-Closure.md",
+      "pre_fix_commit": "aa3e1d36",
+      "artifact_sha256": "40d7bc46e64c0235501338bb299adea1b665b6b34c03f5d96df3f13c8916e488",
+      "permitted_references": [
+        "docs/reports/owasp-llm/llm08-hidden-context.md"
+      ],
+      "later_evidence": ["docs/reports/owasp-llm/llm08-hidden-context.md"],
+      "defect_classification": "hidden-context",
+      "defect_summary": "This is a follow-up to the historicalized Plan 08 and records confirmed hidden-context defects. Using it as the corpus document would leak the answer.",
+      "proposed_determinability": "not-determinable-from-this-artifact",
+      "proposed_inclusion": "exclude",
+      "last_commit_identity": "Tom Tran <imhttran@gmail.com>",
+      "outstanding_decision": "Corpus owner must locate the pre-fix Plan 08 artifact and revision.",
+      "evidence_state": "EXCLUDED",
+      "exclusion_reason": "Remediation/follow-up plan contains the answer; parent Plan 08 artifact is required."
+    },
+    {
+      "id": "IDR-H-008",
+      "inventory_source": "feasibility §2.2",
+      "original_artifact": "docs/plans/PLAN-09-SOP-LLM09-Vector-and-Embedding-Weaknesses.md",
+      "pre_fix_commit": "05685308",
+      "artifact_sha256": "e3c4b2018a610ad6b9ea5ef2855fec46d6766bb702c2f551d5492599c96af2e4",
+      "permitted_references": ["docs/reports/owasp-llm/llm09-retrieval.md"],
+      "later_evidence": [
+        "docs/reports/owasp-llm/llm09-retrieval.md",
+        "docs/history/plans/PLAN-09B-SOP-LLM09-Retrieval-Followup.md"
+      ],
+      "defect_classification": "retrieval-boundary",
+      "defect_summary": "The plan required follow-up evidence for retrieval cancellation, deadlines, and rebuild/invalidation. The follow-up plan records the gap.",
+      "proposed_determinability": "not-determinable-from-this-artifact",
+      "proposed_inclusion": "exclude",
+      "last_commit_identity": "Tom Tran <imhttran@gmail.com>",
+      "outstanding_decision": "Corpus owner must locate the pre-fix Plan 09 artifact and revision.",
+      "evidence_state": "EXCLUDED",
+      "exclusion_reason": "Remediation/follow-up plan contains the answer; parent Plan 09 artifact is required."
+    },
+    {
+      "id": "IDR-E-001",
+      "inventory_source": "feasibility §2.3",
+      "original_artifact": "docs/specs/EXECUTION.md",
+      "pre_fix_commit": "3be4a90",
+      "artifact_sha256": "266bf9846ff54987988cb6f6b26103b086ddb57a28487d383ab5b487b594f06f",
+      "permitted_references": [
+        "docs/specs/QUALITY.md",
+        "docs/PRD.md",
+        "internal/outcome/outcome.go",
+        "internal/cli/run.go"
+      ],
+      "later_evidence": [
+        "docs/plans/PLAN-SOP-Acceptance-Verification-Hardening.md",
+        "commit 9604bec (SOP-HARD integration)"
+      ],
+      "defect_classification": "lifecycle-acceptance",
+      "defect_summary": "The spec states that the outcome verdict is diagnostic and never read back to drive a decision. PARTIAL could therefore reach LOCAL_DONE; the hardening plan makes required criteria gate the lifecycle.",
+      "proposed_determinability": "partially-determinable",
+      "proposed_inclusion": "include-with-review",
+      "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "Corpus owner must decide whether a deliberate non-gating design is a design defect or a later policy change.",
+      "evidence_state": "PROPOSED"
+    },
+    {
+      "id": "IDR-E-002",
+      "inventory_source": "feasibility §2.3",
+      "original_artifact": "docs/specs/HUMAN-APPROVAL.md",
+      "pre_fix_commit": "94cace0c5b1d640ad0a7f9b03eac34adbf0555d7",
+      "artifact_sha256": "6dfd44443d9a6a6a62b88df8a202f75df4969c6dc692ab41b15ecc8f4443ee97",
+      "permitted_references": [
+        "docs/specs/WORKFLOW.md",
+        "internal/approval/approval.go",
+        "internal/cli/approval.go"
+      ],
+      "later_evidence": [
+        "docs/plans/PLAN-Stale-Approval-Invalidation.md",
+        "PR #141 (bf2a562a)"
+      ],
+      "defect_classification": "approval-deadlock",
+      "defect_summary": "The spec leaves a PENDING approval in place after an accepted plan reconciliation; if its evidence is obsolete, the task is deadlocked. The invalidation repair is later.",
+      "proposed_determinability": "partially-determinable",
+      "proposed_inclusion": "include-with-review",
+      "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "Corpus owner must confirm the parent revision and whether the reconcile/approval interaction was in scope.",
+      "evidence_state": "PROPOSED"
+    },
+    {
+      "id": "IDR-E-003",
+      "inventory_source": "feasibility §2.3",
+      "original_artifact": "docs/specs/VALIDATION.md",
+      "pre_fix_commit": "8980826",
+      "artifact_sha256": "72b239ac6b1e639ffb0044ba4650b0bad60ba8a85e029ee70ab68d0054fd1d6d",
+      "permitted_references": [
+        "docs/specs/EXECUTION.md",
+        "internal/verifcache/verifcache.go",
+        "internal/cli/validate.go"
+      ],
+      "later_evidence": ["docs/plans/PLAN-SOP-Validation-Evidence-Reuse.md"],
+      "defect_classification": "validation-reuse",
+      "defect_summary": "The reuse cache identity lacked an effective content digest, a validation scope, and toolchain/command-policy inputs; the store was per-project and reuse was an opaque blob. The plan records these as verified gaps.",
+      "proposed_determinability": "partially-determinable",
+      "proposed_inclusion": "include-with-review",
+      "last_commit_identity": "Tom Tran <imhttran@gmail.com>",
+      "outstanding_decision": "Corpus owner must confirm whether the spec or the implementation owned the cache identity gaps.",
+      "evidence_state": "PROPOSED"
+    },
+    {
+      "id": "IDR-E-004",
+      "inventory_source": "feasibility §2.3",
+      "original_artifact": "docs/specs/RECOVERY.md",
+      "pre_fix_commit": "a64e06cd",
+      "artifact_sha256": "edd014dd3540a0c0364fcd0b73e7d711e2c9c50307d25da028a5505086206155",
+      "permitted_references": [
+        "docs/specs/MODEL-ROUTING.md",
+        "docs/reference/CONFIGURATION.md"
+      ],
+      "later_evidence": ["docs/plans/PLAN-Phase-5-Execution-Recovery.md"],
+      "defect_classification": "recovery",
+      "defect_summary": "The pre-fix recovery contract did not cover the limitation the Phase 5 plan later resolved; the plan records the prior limitation and the bounded recovery design.",
+      "proposed_determinability": "partially-determinable",
+      "proposed_inclusion": "include-with-review",
+      "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "Corpus owner must confirm the exact pre-fix limitation and whether it was design-level.",
+      "evidence_state": "PROPOSED"
+    },
+    {
+      "id": "IDR-E-005",
+      "inventory_source": "feasibility §2.3",
+      "original_artifact": "docs/specs/REVIEW.md",
+      "pre_fix_commit": "ba7736d4",
+      "artifact_sha256": "8daf152e29981c493fd1cf2dba8cae7228c4674e7202f7d6a62f0242dd3dff43",
+      "permitted_references": [
+        "docs/specs/QUALITY.md",
+        "internal/review/provider.go",
+        "internal/cli/run.go"
+      ],
+      "later_evidence": [
+        "docs/reports/review-hardening/RSH-001-review-seam-baseline.md",
+        "docs/history/plans/PLAN-Review-Scope-And-Output-Hardening.md"
+      ],
+      "defect_classification": "review-scope",
+      "defect_summary": "The pre-fix REVIEW spec already requires invocation-scoped input and a deterministic malformed-output boundary. The recorded defects were implementation defects, not design-document defects.",
+      "proposed_determinability": "not-determinable-as-design-defect",
+      "proposed_inclusion": "exclude",
+      "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "Corpus owner must keep this plan excluded or provide a different pre-fix design artifact.",
+      "evidence_state": "EXCLUDED",
+      "exclusion_reason": "The design spec already specified the correct behavior; the defect was in code."
+    },
+    {
+      "id": "IDR-E-006",
+      "inventory_source": "feasibility §2.3",
+      "original_artifact": null,
+      "pre_fix_commit": null,
+      "artifact_sha256": null,
+      "permitted_references": [],
+      "later_evidence": ["docs/history/plans/PLAN-RSH-Follow-Up-Hardening.md"],
+      "defect_classification": "review-governance",
+      "defect_summary": "Three residual review-governance findings recorded at the Review-Governance-Hardening closure. The parent design artifact has not been identified.",
+      "proposed_determinability": "unverified",
+      "proposed_inclusion": "hold",
+      "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "Corpus owner must identify the pre-fix artifact and revision.",
+      "evidence_state": "UNVERIFIED"
+    },
+    {
+      "id": "IDR-E-007",
+      "inventory_source": "feasibility §2.3",
+      "original_artifact": "docs/specs/WORKFLOW.md",
+      "pre_fix_commit": "d0d89d03",
+      "artifact_sha256": "1860237940930f362b18dfb04d1411e1f156c846a02927d5d00df40018562c97",
+      "permitted_references": [
+        "docs/specs/TASK-LIFECYCLE.md",
+        "docs/specs/HUMAN-APPROVAL.md"
+      ],
+      "later_evidence": [
+        "docs/history/plans/PLAN-SOP-Lifecycle-Consistency-Hardening.md"
+      ],
+      "defect_classification": "lifecycle-consistency",
+      "defect_summary": "The lifecycle-consistency audit recorded gaps in transition legality, state ownership, and concurrency; the remediation plan records them but was not implemented.",
+      "proposed_determinability": "partially-determinable",
+      "proposed_inclusion": "include-with-review",
+      "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "Corpus owner must confirm the pre-fix revision and whether the audit findings are design-level.",
+      "evidence_state": "PROPOSED"
+    },
+    {
+      "id": "IDR-E-008",
+      "inventory_source": "feasibility §2.3",
+      "original_artifact": "docs/specs/AGENT-PROVIDER.md",
+      "pre_fix_commit": "6c839f2e",
+      "artifact_sha256": "1295e1831d1eccb5cd6b31a042343bdc49fa2f2922abcc31fba47c5306dd0b7a",
+      "permitted_references": [
+        "docs/specs/MODEL-ROUTING.md",
+        "internal/ollamaagent/orchestrate.go"
+      ],
+      "later_evidence": [
+        "docs/history/plans/PLAN-Implementation-Convergence.md"
+      ],
+      "defect_classification": "implementation-convergence",
+      "defect_summary": "The convergence investigation recorded failure signatures and termination arithmetic that the pre-fix agent-boundary spec did not fully constrain.",
+      "proposed_determinability": "partially-determinable",
+      "proposed_inclusion": "include-with-review",
+      "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "Corpus owner must confirm whether the spec omission is determinable from the pre-fix artifact.",
+      "evidence_state": "PROPOSED"
+    },
+    {
+      "id": "IDR-E-009",
+      "inventory_source": "feasibility §2.3",
+      "original_artifact": "docs/architecture/COMPONENTS.md",
+      "pre_fix_commit": "6c839f2e",
+      "artifact_sha256": "2c138d97d5f3a62e72492c848421a42dce3eb878ebba9b0b4dd394e337fa5700",
+      "permitted_references": [
+        "docs/specs/EXECUTION.md",
+        "internal/run/run.go"
+      ],
+      "later_evidence": [
+        "docs/history/plans/PLAN-Run-Metrics-And-Observability.md"
+      ],
+      "defect_classification": "run-metrics",
+      "defect_summary": "The pre-fix artifact contract did not provide a reliable provider-independent token count or the observability the run-metrics plan later required.",
+      "proposed_determinability": "partially-determinable",
+      "proposed_inclusion": "include-with-review",
+      "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "Corpus owner must confirm the pre-fix revision and whether the metrics gap was design-level.",
+      "evidence_state": "PROPOSED"
+    },
+    {
+      "id": "IDR-E-010",
+      "inventory_source": "feasibility §2.3",
+      "original_artifact": "docs/architecture/OVERVIEW.md",
+      "pre_fix_commit": "7de7c68a",
+      "artifact_sha256": "15642e49dca3689dc341404e2a7bc5a35ad5272748b9fd1219cac35ab294e1fe",
+      "permitted_references": ["docs/specs/AGENT-PROVIDER.md"],
+      "later_evidence": [
+        "docs/history/plans/PLAN-EV-Context-Run-Evaluation.md"
+      ],
+      "defect_classification": "context-evaluation",
+      "defect_summary": "The context-engine live-path evaluation recorded gaps in the pre-fix architecture; the evaluation plan is the later evidence.",
+      "proposed_determinability": "unverified",
+      "proposed_inclusion": "hold",
+      "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "Corpus owner must identify a narrower pre-fix artifact and revision.",
+      "evidence_state": "UNVERIFIED"
+    },
+    {
+      "id": "IDR-E-011",
+      "inventory_source": "feasibility §2.3",
+      "original_artifact": null,
+      "pre_fix_commit": null,
+      "artifact_sha256": null,
+      "permitted_references": [],
+      "later_evidence": [
+        "docs/history/plans/PLAN-Post-Wave3-Production-Readiness.md"
+      ],
+      "defect_classification": "readiness",
+      "defect_summary": "Cross-cutting readiness gaps across adapters, Windows, Julia, rollback and observability; no single pre-fix design artifact contains the defect.",
+      "proposed_determinability": "not-determinable-as-single-artifact",
+      "proposed_inclusion": "exclude",
+      "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "Corpus owner must keep this plan excluded or define a composite artifact.",
+      "evidence_state": "EXCLUDED",
+      "exclusion_reason": "No single pre-fix design artifact; the defects are cross-cutting readiness gaps."
+    },
+    {
+      "id": "IDR-E-012",
+      "inventory_source": "feasibility §2.3",
+      "original_artifact": null,
+      "pre_fix_commit": null,
+      "artifact_sha256": null,
+      "permitted_references": [],
+      "later_evidence": [
+        "docs/history/plans/PLAN-SOP-End-to-End-Reliability.md"
+      ],
+      "defect_classification": "end-to-end-reliability",
+      "defect_summary": "Cross-cutting end-to-end reliability gaps; the parent design artifact and pre-fix revision have not been identified.",
+      "proposed_determinability": "unverified",
+      "proposed_inclusion": "hold",
+      "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "Corpus owner must identify the pre-fix artifact and revision.",
+      "evidence_state": "UNVERIFIED"
+    },
+    {
+      "id": "IDR-X-001",
+      "inventory_source": "feasibility §2.4",
+      "original_artifact": null,
+      "pre_fix_commit": null,
+      "artifact_sha256": null,
+      "permitted_references": [],
+      "later_evidence": ["docs/specs/RAG-SOP-004-DECISION.md"],
+      "defect_classification": "negative-result",
+      "defect_summary": "The RAG evaluation produced a NO-GO. A negative result is not a demonstrated design defect in the plan.",
+      "proposed_determinability": "not-a-defect",
+      "proposed_inclusion": "exclude",
+      "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "Corpus owner must keep this excluded unless a specific plan defect is identified.",
+      "evidence_state": "EXCLUDED",
+      "exclusion_reason": "Evaluation negative result, not a defect in the plan."
+    },
+    {
+      "id": "IDR-X-002",
+      "inventory_source": "feasibility §2.4",
+      "original_artifact": null,
+      "pre_fix_commit": null,
+      "artifact_sha256": null,
+      "permitted_references": [],
+      "later_evidence": ["docs/plans/PLAN-07-SOP-LLM07-Misinformation.md"],
+      "defect_classification": "evidence-gap",
+      "defect_summary": "The plan records live-model and Linux verification as NOT_RUN. That is an evidence gap, not a demonstrated design defect.",
+      "proposed_determinability": "not-a-defect",
+      "proposed_inclusion": "exclude",
+      "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "Corpus owner must keep this excluded or supply a demonstrated defect.",
+      "evidence_state": "EXCLUDED",
+      "exclusion_reason": "Evidence gap, not a demonstrated design defect."
+    },
+    {
+      "id": "IDR-X-003",
+      "inventory_source": "feasibility §2.4",
+      "original_artifact": null,
+      "pre_fix_commit": null,
+      "artifact_sha256": null,
+      "permitted_references": [],
+      "later_evidence": ["docs/plans/PLAN-SOP-E2E-Reliability-Hardening.md"],
+      "defect_classification": "proposed-plan",
+      "defect_summary": "The plan is PROPOSED and not implemented; no later evidence pointer records a defect.",
+      "proposed_determinability": "not-a-defect",
+      "proposed_inclusion": "exclude",
+      "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "Corpus owner must keep this excluded unless a design defect is identified independently.",
+      "evidence_state": "EXCLUDED",
+      "exclusion_reason": "Proposed plan with no later defect evidence."
+    }
+  ]
+}
