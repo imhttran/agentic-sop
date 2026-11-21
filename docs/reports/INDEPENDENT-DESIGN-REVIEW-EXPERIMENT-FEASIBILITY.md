@@ -31,6 +31,9 @@ inference was executed.
   It is unapproved and does not authorize implementation.
 - The experiment has **not** run. No threshold was changed. No inference call was made
   for the experiment or pilot.
+- The §1.2/§5.1 corrections under review in PR #567 are incorporated here. If PR #567 is
+  not merged before this report, the merged assessment remains authoritative and this
+  report's requested-model wording is ahead of it.
 - The feasibility verdict below is **not** the experiment's PASS/FAIL/INCONCLUSIVE
   outcome.
 
@@ -177,14 +180,22 @@ The assessment's code-path claims were re-checked at `64101f9e` and remain the b
 for what the Linux report must confirm:
 
 - `sop prompt` builds its agent with the selected model, while `FromConfig` resolves
-  `SOP_AGENT_MODEL` > provider-specific environment > configured model.
-- The `modelEnvOverride` guard in `applyStageModels` checks pinned stages and the
-  sensitive model, not the prompt's routed selection. `routing.model` can therefore name
-  one model while another is served.
-- Prompt `metadata.json` exposes routing and token usage by model, but no duration or
-  sampling-parameter field; latency must be timed outside SOP.
-- Under the Ollama REVIEW harness, the reviewer performs a bounded read-only repository
-  inspection; a text-only provider has no repository access.
+  `SOP_AGENT_MODEL` > provider-specific environment > configured model;
+  `EffectiveProvider` and `EffectiveHarness` read their variables first. A project
+  `.env` is applied at startup for every command unless the variable is already exported
+  (`loadDotEnv`), so it can inject an override.
+- `models.stages.review` pins the review stage of `sop review` and `sop run`
+  (`reviewProvider` calls `stageAgent`), and the plan stage of `sop run`; `sop prompt`
+  never calls `stageAgent`, so the pin does not apply to it. The `modelEnvOverride`
+  guard does not check the prompt's routed selection.
+- Prompt `metadata.json` exposes routing and token usage by model. The `tokens` key is
+  the model name SOP sent, not a server-returned identity; it detects a SOP-side
+  override, not the model the server executed. No duration or sampling field exists;
+  latency must be timed outside SOP.
+- The project config is tracked in `.agent-sdlc/config.yaml`, so a scratch clone inherits
+  the historical config; a fixed overlay and its sha256 are required. Under the Ollama
+  REVIEW harness, the reviewer performs a bounded read-only repository inspection; a
+  text-only provider has no repository access.
 
 These are code-path readings at `64101f9e`, not measured provider behavior. Workstream B
 must confirm them; they are not a substitute for the Linux agent's independent
@@ -193,10 +204,12 @@ investigation.
 ### 4.3 Required Workstream B evidence
 
 - Exact prompt composition and the instruction/data delimiter.
-- Provider and model resolution, including environment precedence.
-- Served-model verification against the token-usage key.
-- Token-reporting behavior for the chosen provider.
-- Parallel execution and wall-clock latency measurement, including serialization.
+- Provider and model resolution, including `.env`, environment precedence, and the
+  stage-pin scope.
+- Requested-model verification against the token key; provider-side model identity where
+  available.
+- Token-reporting behavior, including unreported-call counts.
+- Parallel execution, per-call project isolation, and wall-clock latency measurement.
 - Four-call pilot readiness and the exact commands/artifacts.
 
 ## 5. Estimated inference and human-review cost
@@ -233,8 +246,8 @@ currently identified.
 | Adjudicator availability             | Only the operator is a human author; no second human identified                               | No PASS; at best INCONCLUSIVE.                             |
 | Reproducibility floor                | 15 contributing plans per arm; at the 15-plan floor one empty plan makes the arm INCONCLUSIVE | Small corpora are likely to fail the gate.                 |
 | Kappa floor                          | Fewer than 20 double-adjudicated findings cannot PASS                                         | Low finding volume makes the result INCONCLUSIVE.          |
-| Token reporting                      | No-usage provider cannot pass the served-model check                                          | Cost and model-attribution criteria are INCONCLUSIVE.      |
-| Model mismatch                       | Prompt path can serve an environment-overridden model                                         | A single un-replaced mismatch invalidates the comparison.  |
+| Token reporting                      | No-usage provider cannot pass the requested-model check                                       | Cost and model-attribution criteria are INCONCLUSIVE.      |
+| Model mismatch                       | Prompt path can serve an environment- or `.env`-overridden model                              | A single un-replaced mismatch invalidates the comparison.  |
 | Linux evidence pending               | No provider/execution report available                                                        | Pilot readiness is unconfirmed.                            |
 | Small sample                         | About 15 defects gives wide intervals                                                         | Only large effects are detectable.                         |
 
@@ -248,12 +261,16 @@ does not authorize the conditional PRD.
 ### 7.1 Prerequisites
 
 - Frozen pilot plans and request files with a fixed instruction/data delimiter.
-- A throwaway clone or worktree at the recorded revision; no primary-checkout artifacts.
-- `SOP_AGENT_MODEL` and the provider-specific model variable unset.
+- A throwaway clone or worktree at the recorded revision with a fixed
+  `.agent-sdlc/config.yaml` overlay (sha256 recorded) and no `.env`.
+- A cleared environment (`env -i` plus a recorded allowlist), or at minimum unset
+  `SOP_AGENT_MODEL`, the provider-specific model override, `SOP_AGENT_PROVIDER`,
+  `SOP_AGENT_HARNESS`, and the `SOP_MODEL_*` variables.
 - An explicit `--model-class` for every call.
 - No `--cache`; JEV triage disabled.
 - Operator authorization for four review calls.
-- Linux confirmation of routing, served-model, token, and timing behavior.
+- Linux confirmation of routing, requested-model versus provider identity, token,
+  timing, and per-call isolation behavior.
 
 ### 7.2 Prepared shape (not run)
 
@@ -265,16 +282,17 @@ sop prompt --capability review --model-class <class> --file pilot/B/request.md
 
 The pilot is arms A and B once on two plans. Run each command once on each of the two
 pilot plans: two arms × two plans = four calls. Record `metadata.json` routing and tokens,
-the served-model key, request/plan sha256, and wall-clock duration. A missing or mismatched
-served-model key, missing token data, or invalid timing makes the affected pilot check
-fail; it is not a review finding.
+the requested-model key against `routing.model`, provider-side model identity where
+available, request/plan sha256, and wall-clock duration. A mismatch, missing token data,
+`unreported_calls` greater than zero, a duplicate run directory, or invalid timing makes
+the affected pilot check fail; it is not a review finding.
 
 ### 7.3 Blockers
 
 - No operator authorization for the pilot.
 - No Linux provider/execution report.
 - Pilot plans are not frozen.
-- No served-model or token-reporting evidence for the chosen provider.
+- No requested-model or provider-side identity evidence for the chosen provider.
 
 Do not execute the pilot until these are resolved. Do not execute the full experiment or
 Arm D.

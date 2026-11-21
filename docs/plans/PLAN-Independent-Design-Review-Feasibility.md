@@ -21,8 +21,9 @@ investigation. This plan does not execute the experiment.
   original revisions and evidence, determinability, seeded and no-known-defect
   candidates, adjudication feasibility, and statistical prerequisites.
 - **Workstream B — provider and execution (Claude Code-owned).** Review prompt
-  composition, routing and environment precedence, served-model verification, token
-  accounting, parallel execution and latency, and four-call pilot readiness.
+  composition, routing and environment precedence (including `.env`), requested-model
+  verification and provider-side identity where available, token accounting, parallel
+  execution and latency, and four-call pilot readiness.
 - **Workstream C — integration (SOP-owned).** The feasibility report, validation, and PR.
 
 Claude Code owns the technical investigation, not SOP lifecycle transitions. Workstream
