@@ -125,8 +125,8 @@ func findingsForCategory(findings []Finding, c Category) []Finding {
 
 func TestRepoBaselineApprovedGroups(t *testing.T) {
 	b := loadRepoBaseline(t)
-	if len(b.Entries) != 82 {
-		t.Fatalf("baseline entries = %d, want 82 (41 retained + 41 approved)", len(b.Entries))
+	if len(b.Entries) != 83 {
+		t.Fatalf("baseline entries = %d, want 83 (42 retained + 41 approved)", len(b.Entries))
 	}
 
 	approved := approvedEntries(b)
@@ -277,7 +277,7 @@ func TestRepoBaselineCoversOnlyTheGuardedExecSink(t *testing.T) {
 	// Group E is omitted. Any approved MEDIUM finding would change this census,
 	// and the Group-E-only rules must not appear at all.
 	want := map[string]int{
-		"dangerous-exec-command":            41, // 26 pre-existing + 2 B + 12 C + 1 W8
+		"dangerous-exec-command":            42, // 26 pre-existing + 2 B + 12 C + 1 W8 + 1 expharness test
 		"no-direct-write-to-responsewriter": 3,  // pre-existing only
 		"cookie-missing-secure":             3,  // pre-existing only
 		"open-redirect":                     3,

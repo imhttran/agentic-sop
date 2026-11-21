@@ -656,6 +656,14 @@
       "reason": "Structurally controlled by mandatory isolation (M1+G3+G4, verified on macOS and Linux). Every model-reachable execution reaches this call only through execIsolated, which builds the OS sandbox and refuses when no backend can be built. The internal/archtest guard TestModelReachableExecIsIsolated fails if a bypass is introduced; re-review at expiry or if that guard changes.",
       "owner": "imhttran",
       "expires_at": "2027-03-31T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:635e90d8aa65e5af893501fd91bac2bf03fa45f8086ee6ee24e220d8fa90dd17",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/expharness/integration_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a freshly built test binary (`go build ./cmd/sop` into a temp dir by sop(t)) with fixed literal arguments (`prompt --capability review --model-class medium --file request.md --json`); the environment is PATH plus temp directories and local test-server URLs; there is no shell interpolation of external input and no production path. Triaged 2026-11-21.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
     }
   ]
 }
