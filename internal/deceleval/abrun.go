@@ -338,6 +338,7 @@ func RenderABReport(s ABRunSummary) string {
 	b.WriteString("## Measurement notes\n\n")
 	b.WriteString("- One attempt per case. The decider calls the production clef provider directly and never retries or falls back; `fallbacks` is always 0.\n")
 	b.WriteString("- `elapsed_ms` is end-to-end around the attempt. `wall_ms` is the batch wall time used for correct/min.\n")
+	b.WriteString("- `attempts-*.jsonl` records each attempt as it completes; `summary-*.json` aggregates the corpus case order.\n")
 	b.WriteString("- Cold-load and warm-up requests are measured outside the timed batches (see `run-*.json`).\n")
 	b.WriteString("- The production SystemOne response reports input/output tokens only; time-to-first-answer-content, decode speed, and model-load duration are null.\n")
 	b.WriteString("- A field the endpoint does not report is null, never a measured zero.\n")

@@ -135,6 +135,9 @@ func main() {
 		if err := runMode(ctx, m.mode, m.split, dir, corpus, corpusSHA, info, requested, missing, concurrency, *timeout, !*noWarmup); err != nil {
 			fail(err)
 		}
+		if ctx.Err() != nil {
+			fail(ctx.Err())
+		}
 	}
 
 	fmt.Printf("\nartifacts: %s\n", dir)

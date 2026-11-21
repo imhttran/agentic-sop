@@ -115,7 +115,7 @@ go run ./cmd/deceleval-ab -mode all \
   -concurrency 1,4 -timeout 60s
 ```
 
-Warm-up (outside the timed batches): cold load 185 ms, second warm-up 186 ms.
+Held-out run warm-up (outside the timed batches): cold load 185 ms, second warm-up 186 ms.
 No fallback was used in any batch.
 
 ### 5.1 Smoke (12 cases)
