@@ -12,19 +12,28 @@ an experiment result and does not authorize the conditional PRD.
 
 ## 1. Verified historical defect chains
 
-Five candidates have a verified later defect or gap. One is a strict proposed
-determinable design defect; four are verified gaps whose determinability is partial.
+Five candidates have a verified later defect or gap. None is a valid strict determinable
+corpus input after reconciliation: two are held pending corpus-owner review because no
+uncontaminated pre-defect artifact exists, and three are verified gaps whose
+determinability is partial.
 
-| ID          | Original artifact                                                               | Later evidence                                                              | Defect or gap                                                                                                                               | Proposed determinability               |
-| ----------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| `IDR-H-001` | `docs/plans/PLAN-SOP-ACP-ZED.md` @ `e462deed`                                   | `docs/plans/ACP-EXECUTION-EXCLUSION-GAP.md`                                 | The ACP acceptance matrix claims the project lock protects CLI, MCP, and ACP equally; the lock is metadata-only and not held for execution. | **Determinable with referenced code.** |
-| `IDR-H-003` | `docs/plans/PLAN-SOP-RUN-ACCEPT-001.md` @ `56ff82ac`                            | `docs/reports/PLAN-STATUS-AUDIT-2026-11-04.md`                              | Six acceptance checks fail after the later acceptance-mapping contract.                                                                     | Partially determinable.                |
-| `IDR-H-004` | `docs/plans/PLAN-04-SOP-LLM04-Supply-Chain.md` @ `e55527f4`                     | The plan status and `llm04-supply-chain.md`.                                | Historical outcomes remain PARTIAL until re-execution under the new acceptance mapping.                                                     | Partially determinable.                |
-| `IDR-H-005` | `docs/plans/PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.md` @ `e5d45fc1` | `docs/reports/owasp-llm/llm02-disclosure.md` GAP-01/02/03.                  | Credential-shaped text in acceptance logs, validation failures, and JSON-escaped test output.                                               | Partially determinable.                |
-| `IDR-H-006` | `docs/plans/PLAN-Security-Scanner-Addon.md` @ `1b611711`                        | `SECURITY-SCANNER-RESIDUAL-FINDINGS.md`, `SECURITY-DEPENDENCY-COVERAGE.md`. | Residual scanner findings and coverage gaps.                                                                                                | Partially determinable.                |
+| ID          | Original artifact                                                               | Later evidence                                                              | Defect or gap                                                                                                                               | Proposed determinability                              |
+| ----------- | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `IDR-H-001` | `docs/plans/PLAN-SOP-ACP-ZED.md` @ `e462deed`                                   | `docs/plans/ACP-EXECUTION-EXCLUSION-GAP.md`                                 | The ACP acceptance matrix claims the project lock protects CLI, MCP, and ACP equally; the lock is metadata-only and not held for execution. | Pending corpus-owner review (no pre-defect artifact). |
+| `IDR-H-003` | `docs/plans/PLAN-SOP-RUN-ACCEPT-001.md` @ `56ff82ac`                            | `docs/reports/PLAN-STATUS-AUDIT-2026-11-04.md`                              | Six acceptance checks fail after the later acceptance-mapping contract.                                                                     | Partially determinable.                               |
+| `IDR-H-004` | `docs/plans/PLAN-04-SOP-LLM04-Supply-Chain.md` @ `e55527f4`                     | The plan status and `llm04-supply-chain.md`.                                | Historical outcomes remain PARTIAL until re-execution under the new acceptance mapping.                                                     | Partially determinable.                               |
+| `IDR-H-005` | `docs/plans/PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.md` @ `e5d45fc1` | `docs/reports/owasp-llm/llm02-disclosure.md` GAP-01/02/03.                  | Credential-shaped text in acceptance logs, validation failures, and JSON-escaped test output.                                               | Pending corpus-owner review (remediation commit).     |
+| `IDR-H-006` | `docs/plans/PLAN-Security-Scanner-Addon.md` @ `1b611711`                        | `SECURITY-SCANNER-RESIDUAL-FINDINGS.md`, `SECURITY-DEPENDENCY-COVERAGE.md`. | Residual scanner findings and coverage gaps.                                                                                                | Partially determinable.                               |
 
-The LLM02 candidate uses the pre-fix plan revision `e5d45fc1`, which precedes the fix
-merge `aa23217`; the later disclosure report is excluded from the reviewer input.
+The LLM02 candidate is held. `e5d45fc1` is the remediation commit: it adds the plan, the
+disclosure report, and the GAP-01/GAP-02 fixes. It is an ancestor of the fix merge
+`aa23217`, but it does not predate discovery, and no earlier plan revision exists in git.
+The later disclosure report is excluded from the reviewer input.
+
+The ACP-ZED candidate is held for the same structural reason: the plan and
+`ACP-EXECUTION-EXCLUSION-GAP.md` entered git together in `79acbfc1`, so no earlier plan
+revision exists. The verified defect evidence is preserved; only determinability is
+pending.
 
 The remaining three evidence-verified candidates in the feasibility report are not
 corpus inputs:
@@ -35,10 +44,12 @@ corpus inputs:
 
 ## 2. Proposed determinable defects
 
-- **Strict proposed determinable:** 1 (`IDR-H-001`, ACP acceptance claim).
-- **Proposed partially determinable:** 11. These are the four verified partial candidates
-  (`IDR-H-003`–`IDR-H-006`) and seven proposed partial candidates (`IDR-E-001`–`IDR-E-004`,
-  `IDR-E-007`–`IDR-E-009`).
+- **Strict proposed determinable:** 0. `IDR-H-001` is held pending corpus-owner review.
+- **Proposed partially determinable:** 10. These are the three verified partial candidates
+  (`IDR-H-003`, `IDR-H-004`, `IDR-H-006`) and seven proposed partial candidates
+  (`IDR-E-001`–`IDR-E-004`, `IDR-E-007`–`IDR-E-009`).
+- **Pending corpus-owner review:** 2 (`IDR-H-001`, `IDR-H-005`). Both have verified defect
+  evidence, but no uncontaminated pre-defect artifact, so neither counts toward a floor.
 - **Unverified:** 3.
 - **Not determinable or not a defect:** 8.
 
@@ -49,9 +60,10 @@ No independent adjudicator has confirmed any classification.
 
 ## 3. Proposed eligible plans
 
-Twelve candidate plans have a proposed eligible defect: the strict `IDR-H-001` plus the
-eleven partially determinable candidates `IDR-H-003`–`IDR-H-006` and `IDR-E-001`–
-`IDR-E-004`, `IDR-E-007`–`IDR-E-009`. This count is **proposed**, not frozen.
+Ten candidate plans have a proposed eligible defect: the ten partially determinable
+candidates `IDR-H-003`, `IDR-H-004`, `IDR-H-006`, `IDR-E-001`–`IDR-E-004`,
+`IDR-E-007`–`IDR-E-009`. `IDR-H-001` and `IDR-H-005` are held pending review and do not
+count. This count is **proposed**, not frozen.
 
 | Measure                                  | Count |
 | ---------------------------------------- | ----- |
@@ -60,23 +72,24 @@ eleven partially determinable candidates `IDR-H-003`–`IDR-H-006` and `IDR-E-00
 | Evidence state `PROPOSED`                | 7     |
 | Evidence state `UNVERIFIED`              | 3     |
 | Evidence state `EXCLUDED`                | 8     |
-| Proposed inclusion `include`             | 1     |
-| Proposed inclusion `include-with-review` | 11    |
-| Proposed inclusion `hold`                | 3     |
+| Proposed inclusion `include`             | 0     |
+| Proposed inclusion `include-with-review` | 10    |
+| Proposed inclusion `hold`                | 5     |
 | Proposed inclusion `exclude`             | 8     |
-| Strict determinable defects              | 1     |
-| Partially determinable defects           | 11    |
+| Strict determinable defects              | 0     |
+| Partially determinable defects           | 10    |
+| Pending corpus-owner review              | 2     |
 
 ## 4. Evidence gaps and shortfall
 
 | Floor                                                                            | Available | Shortfall |
 | -------------------------------------------------------------------------------- | --------- | --------- |
-| 15 plans with known defects, strict determinable only                            | 1         | 14        |
-| 15 plans with known defects, if all 11 partial plans are frozen determinable     | 12        | 3         |
-| 15 determinable known defects, strict only                                       | 1         | 14        |
-| 15 determinable known defects, if all 11 partial defects are frozen determinable | 12        | 3         |
-| 15 contributing plans per arm, strict only                                       | 1         | 14        |
-| 15 contributing plans per arm, if all 11 partial plans are frozen                | 12        | 3         |
+| 15 plans with known defects, strict determinable only                            | 0         | 15        |
+| 15 plans with known defects, if all 10 partial plans are frozen determinable     | 10        | 5         |
+| 15 determinable known defects, strict only                                       | 0         | 15        |
+| 15 determinable known defects, if all 10 partial defects are frozen determinable | 10        | 5         |
+| 15 contributing plans per arm, strict only                                       | 0         | 15        |
+| 15 contributing plans per arm, if all 10 partial plans are frozen                | 10        | 5         |
 | About 8 seeded-defect cases                                                      | 0         | 8         |
 | About 6 no-known-defect cases                                                    | 0         | 6         |
 
@@ -152,9 +165,12 @@ adjudicator.
    the sealed manifest and the about-eight/about-six cases.
 6. **Adjudicators:** identify two independent human adjudicators and record the authorship
    evidence for each.
-7. **Target size:** decide whether to proceed with the 12 proposed eligible plans or
-   expand the historical corpus before freeze. The strict shortfall is 14 plans and 14
-   determinable defects; the partial-inclusive shortfall is 3 and 3.
+7. **Target size:** decide whether to proceed with the 10 proposed eligible plans or
+   expand the historical corpus before freeze. The strict shortfall is 15 plans and 15
+   determinable defects; the partial-inclusive shortfall is 5 and 5.
+8. **Held candidates:** decide whether `IDR-H-001` (ACP-ZED) and `IDR-H-005` (LLM02) can
+   enter the corpus at all. Both have verified defect evidence but no uncontaminated
+   pre-defect artifact in git, so they are held pending corpus-owner review.
 
 ## 8. Workstream A freeze readiness
 
@@ -162,11 +178,13 @@ adjudicator.
 
 The manifest is complete enough to review, and nine pre-fix artifact references have been
 extracted (`IDR-E-001`–`IDR-E-005`, `IDR-E-007`–`IDR-E-010`; `IDR-E-005` is excluded,
-leaving eight proposed partial candidates). It is not ready to freeze because:
+leaving seven proposed E partials plus the three verified H partials, for ten). It is not
+ready to freeze because:
 
-- Only one defect is strictly proposed determinable; the other eleven are partial.
+- No defect is strictly proposed determinable; ten are partial and two are held pending
+  corpus-owner review.
 - The plan and defect floors are not met under either the strict or the partial-inclusive
-  reading: 1/15 strict, 12/15 partial-inclusive.
+  reading: 0/15 strict, 10/15 partial-inclusive.
 - The seeded and no-known-defect cases do not exist.
 - No two independent human adjudicators are identified.
 - The classification amendment is not approved.

@@ -61,11 +61,11 @@ unchanged. No threshold value is changed.
 
 ## 5. Impact on the current evidence
 
-| Reading                                                                                                         | Plans | Determinable defects | Shortfall            |
-| --------------------------------------------------------------------------------------------------------------- | ----- | -------------------- | -------------------- |
-| Current conservative reading (partial counts toward neither floor)                                              | 1     | 1                    | 14 plans, 14 defects |
-| Proposed rule, if the corpus owner independently supports and freezes all 11 partial candidates as determinable | 12    | 12                   | 3 plans, 3 defects   |
-| Proposed rule, with only the strict candidate frozen                                                            | 1     | 1                    | 14 plans, 14 defects |
+| Reading                                                                                                                   | Plans | Determinable defects | Shortfall            |
+| ------------------------------------------------------------------------------------------------------------------------- | ----- | -------------------- | -------------------- |
+| Current conservative reading (partial counts toward neither floor)                                                        | 0     | 0                    | 15 plans, 15 defects |
+| Proposed rule, if the corpus owner independently supports and freezes all 10 eligible partial candidates as determinable   | 10    | 10                   | 5 plans, 5 defects   |
+| Proposed rule, with no partial candidate frozen                                                                            | 0     | 0                    | 15 plans, 15 defects |
 
 The proposed rule does not by itself make the corpus sufficient, and it does not by itself
 make a partial candidate determinable. The corpus owner must record the independent
@@ -90,5 +90,5 @@ If approved, the implementation is documentation-only:
 - Change the manifest's proposed inclusion fields only after the corpus owner's freeze.
 - Keep the recall denominator as the frozen determinable set.
 
-If rejected, the strict reading stands: one plan and one determinable defect, with a
-shortfall of fourteen against both floors.
+If rejected, the strict reading stands: zero plans and zero determinable defects, with a
+shortfall of fifteen against both floors.

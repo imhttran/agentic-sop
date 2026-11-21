@@ -27,6 +27,7 @@
       "inventory_source": "feasibility §2.2",
       "original_artifact": "docs/plans/PLAN-SOP-ACP-ZED.md",
       "pre_fix_commit": "e462deed",
+      "pre_fix_note": "The plan first appears in 79acbfc1, the same commit that adds ACP-EXECUTION-EXCLUSION-GAP.md. No earlier plan revision exists in git; e462deed only updates the status line. No uncontaminated pre-defect artifact is available, so the candidate is pending corpus-owner review.",
       "artifact_sha256": "d9d5539c79ac919368e834368605fcae54f943a755a7f271a4ce0f12bd7abf0d",
       "permitted_references": [
         "internal/projectlock/lock.go",
@@ -36,10 +37,10 @@
       "later_evidence": ["docs/plans/ACP-EXECUTION-EXCLUSION-GAP.md"],
       "defect_classification": "execution-exclusion",
       "defect_summary": "The acceptance matrix claims the project lock protects CLI, MCP, and ACP equally. The gap report shows the lock is metadata-only and is not held for execution, so CLI-first and ACP-first exclusion is unresolved.",
-      "proposed_determinability": "determinable",
-      "proposed_inclusion": "include",
+      "proposed_determinability": "pending-corpus-owner-review",
+      "proposed_inclusion": "hold",
       "last_commit_identity": "Tom Tran <imhttran@gmail.com>",
-      "outstanding_decision": "Corpus owner must confirm the plan revision, permitted code references, and determinability before freeze.",
+      "outstanding_decision": "Corpus owner must decide whether ACP-ZED can enter the corpus at all, given that the plan and the gap report entered git in the same commit. The verified defect evidence is preserved; only determinability is pending.",
       "evidence_state": "VERIFIED"
     },
     {
@@ -105,7 +106,7 @@
       "inventory_source": "feasibility §2.2",
       "original_artifact": "docs/plans/PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.md",
       "pre_fix_commit": "e5d45fc1",
-      "pre_fix_note": "e5d45fc1 is the plan revision before the LLM02 fix merge aa23217; the later disclosure report is not part of the reviewer input.",
+      "pre_fix_note": "e5d45fc1 is the LLM02 remediation commit: it adds this plan, the llm02-disclosure report, and the GAP-01/GAP-02 fixes. It is an ancestor of the fix merge aa23217 but it does not predate discovery, and no earlier plan revision exists in git. The later disclosure report is not part of the reviewer input.",
       "artifact_sha256": "92058d6dd8f78825a4318ed3fd417666897d0b6763b8cc8dc9406cfc80ed13ff",
       "permitted_references": [
         "internal/cli/redaction.go",
@@ -116,11 +117,11 @@
         "docs/reports/owasp-llm/llm02-disclosure.md GAP-01, GAP-02, GAP-03."
       ],
       "defect_classification": "secret-exposure",
-      "defect_summary": "Acceptance-check logs, model-visible validation failures, and JSON-escaped Go test output exposed credential-shaped text; all three were fixed later. The pre-fix plan at e5d45fc1 precedes the fix merge aa23217.",
-      "proposed_determinability": "partially-determinable",
-      "proposed_inclusion": "include-with-review",
+      "defect_summary": "Acceptance-check logs, model-visible validation failures, and JSON-escaped Go test output exposed credential-shaped text; all three were fixed later. The plan, the disclosure report, and the GAP-01/GAP-02 fixes all enter in e5d45fc1, so the artifact is a remediation commit rather than a pre-defect one.",
+      "proposed_determinability": "pending-corpus-owner-review",
+      "proposed_inclusion": "hold",
       "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
-      "outstanding_decision": "Corpus owner must confirm e5d45fc1 as the pre-fix revision and keep the disclosure report out of the reviewer input.",
+      "outstanding_decision": "Corpus owner must decide whether LLM02 can enter the corpus. No pre-discovery artifact exists; the candidate is held and the verified defect evidence is preserved. Keep the disclosure report out of the reviewer input.",
       "evidence_state": "VERIFIED"
     },
     {

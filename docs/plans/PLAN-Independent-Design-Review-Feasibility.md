@@ -74,9 +74,11 @@ determinability judgment. Do not count an independent adjudication that has not 
 
 **State:** Reviewed. Nine pre-fix artifact references were recorded (`E-001`–`E-005`,
 `E-007`–`E-010`); `E-005` is excluded because the pre-fix spec already contained the
-correct behavior, leaving eight proposed partial. `E-006`, `E-011`, and `E-012` lack a
-single pre-fix artifact. The manifest proposes 1 strict determinable defect, 11
-partially determinable defects, 3 unverified entries, and 8 exclusions. Co-author
+correct behavior, leaving seven proposed E partials; with the three verified H partials
+the manifest records ten partial candidates. `E-006`, `E-011`, and `E-012` lack a single
+pre-fix artifact. The manifest proposes 0 strict determinable defects, 10
+partially determinable defects, 2 candidates held pending corpus-owner review, 3
+unverified entries, and 8 exclusions. Co-author
 trailers were examined: Tom Tran and several Claude identities, with no other human
 co-author. No independent adjudicator has confirmed any classification.
 
@@ -92,9 +94,9 @@ no-known-defect construction requirements without creating fabricated results.
 - Seeded defects have an independent seeder and a sealed manifest requirement.
 - No seeded defect or result is invented.
 
-**State:** Not met. Twelve plans are proposed eligible (1 strict and 11 partial). The
-strict reading is 1 plan and 1 determinable defect against both 15-item floors; the
-partial-inclusive reading is 12 and 12. The seeded and no-known-defect corpus is not
+**State:** Not met. Ten plans are proposed eligible (0 strict and 10 partial). The strict
+reading is 0 plans and 0 determinable defects against both 15-item floors; the
+partial-inclusive reading is 10 and 10. The seeded and no-known-defect corpus is not
 constructed. The proposed classification amendment is not approved.
 
 ### FEAS-A4 — Adjudication feasibility
