@@ -1,11 +1,19 @@
 # Acceptance Mapping — `PLAN-ACP-EXECUTION-LEASE-WIRING.md`
 
-Status: **prepared, not yet part of the plan.** This file records the acceptance
-mapping for the plan's 16 stages so it can be folded into the plan at the next
-authorized plan revision. It is deliberately separate: the plan's digest is
-recorded in `.agent-sdlc/plan.meta.json` (`source_sha256`), so editing the plan
-file now would make the active plan look changed and stop the next `sop run` at a
-reconciliation gate.
+Status: **prepared and verified against the compiled plan; not approved and not part
+of the plan.** Verified 2026-11-21 against `main` = `c673d442`: the 16 stage IDs
+match `plan.json` and `sop status` one-for-one. The section titles below are the
+**compiled task titles** shown by `sop status`; the source plan numbers the same
+stages with different `### N.` headings, so the IDs are authoritative.
+
+It is deliberately separate from the plan. The plan is not in the deterministic
+rendered shape, so any plan edit forces a model-based recompile
+(`internal/planner/markdown.go:351-391`), and the plan's digest is recorded in
+`.agent-sdlc/plan.meta.json` (`source_sha256`). See the operator approval packet,
+Decision 3, for the three integration options.
+
+Approval status: **pending operator decision**
+(`PLAN-ACP-EXECUTION-LEASE-WIRING-OPERATOR-APPROVAL-PACKET.md`).
 
 Rules used here:
 
@@ -17,18 +25,18 @@ Rules used here:
 
 ## Coverage matrix
 
-| Dimension | Stage(s) | Evidence today |
-| --- | --- | --- |
-| Unit-level lease correctness | 1, 12, 14 | exists: `internal/executionlease/lease_test.go` (Acquire, heartbeat, staleness, `ReleaseStale`, recovery claim), `internal/cli/execution_lease_test.go` (off, required, advisory, unknown mode); `internal/executionlease/inherit_test.go` and `internal/cli/execution_lease_inherit_test.go` are uncommitted stage-1 work |
-| ACP-vs-ACP start exclusion | 8 (base) | exists: `TestACPPromptConcurrentStartsCreateOneWorkItem` (`internal/cli/acp_test.go`) |
-| CLI-vs-ACP execution exclusion | 6 | missing |
-| MCP-vs-ACP start exclusion | 8 | exists at the start-lock layer: `internal/cli/start_exclusion_test.go` (three tests); lease layer missing |
-| `sop prompt` execution exclusion | 2, 7, 14 | missing |
-| Concurrent state updates | 6, 7, 13 | missing (no test asserts `state.db` is unchanged) |
-| Run artifact preservation | 6, 7, 9 | missing (no test asserts `runs/<task-id>/` is untouched) |
-| Task graph integrity | 6, 7, 13 | missing |
-| Lease release and recovery | 9, 10, 11 | partial: `TestRunReleasesTheLeaseOnExit`, `TestRunResumeReleasesStaleExecutionLease`, `TestRunResumeLeavesLiveExecutionLease`; no cancel/completion race, no parent-death test |
-| Error handling and regression | 3, 5, 14 | partial: `TestExecutionLeaseRejectsAnUnknownMode`, `TestExecutionLeaseContention`, `TestStartWorkRefusesWhileATaskIsMidRun`, `TestExecutionLeaseOffByDefault`; no cross-interface off table |
+| Dimension                        | Stage(s)  | Evidence today                                                                                                                                                                                                                                                                                                             |
+| -------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit-level lease correctness     | 1, 12, 14 | exists: `internal/executionlease/lease_test.go` (Acquire, heartbeat, staleness, `ReleaseStale`, recovery claim), `internal/cli/execution_lease_test.go` (off, required, advisory, unknown mode); `internal/executionlease/inherit_test.go` and `internal/cli/execution_lease_inherit_test.go` are uncommitted stage-1 work |
+| ACP-vs-ACP start exclusion       | 8 (base)  | exists: `TestACPPromptConcurrentStartsCreateOneWorkItem` (`internal/cli/acp_test.go`)                                                                                                                                                                                                                                      |
+| CLI-vs-ACP execution exclusion   | 6         | missing                                                                                                                                                                                                                                                                                                                    |
+| MCP-vs-ACP start exclusion       | 8         | exists at the start-lock layer: `internal/cli/start_exclusion_test.go` (three tests); lease layer missing                                                                                                                                                                                                                  |
+| `sop prompt` execution exclusion | 2, 7, 14  | missing                                                                                                                                                                                                                                                                                                                    |
+| Concurrent state updates         | 6, 7, 13  | missing (no test asserts `state.db` is unchanged)                                                                                                                                                                                                                                                                          |
+| Run artifact preservation        | 6, 7, 9   | missing (no test asserts `runs/<task-id>/` is untouched)                                                                                                                                                                                                                                                                   |
+| Task graph integrity             | 6, 7, 13  | missing                                                                                                                                                                                                                                                                                                                    |
+| Lease release and recovery       | 9, 10, 11 | partial: `TestRunReleasesTheLeaseOnExit`, `TestRunResumeReleasesStaleExecutionLease`, `TestRunResumeLeavesLiveExecutionLease`; no cancel/completion race, no parent-death test                                                                                                                                             |
+| Error handling and regression    | 3, 5, 14  | partial: `TestExecutionLeaseRejectsAnUnknownMode`, `TestExecutionLeaseContention`, `TestStartWorkRefusesWhileATaskIsMidRun`, `TestExecutionLeaseOffByDefault`; no cross-interface off table                                                                                                                                |
 
 ---
 
