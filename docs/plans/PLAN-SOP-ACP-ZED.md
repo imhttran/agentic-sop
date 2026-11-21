@@ -1,7 +1,7 @@
 # Plan: SOP ACP integration for Zed
 
 Date: 2026-11-01
-Status: Implemented and merged in PR #197; ACP-007 macOS Zed acceptance recorded, Linux acceptance not executed
+Status: Implemented and merged in PR #197; ACP-007 macOS Zed acceptance recorded, Linux acceptance not executed. Known gap: cross-interface execution exclusion is not met (see [ACP-EXECUTION-EXCLUSION-GAP.md](ACP-EXECUTION-EXCLUSION-GAP.md))
 Repository: https://github.com/imhttran/agentic-sop
 Suggested repository path: docs/plans/PLAN-SOP-ACP-ZED.md
 
@@ -103,7 +103,7 @@ ACP-002
 
 - One accepted submission creates one work item.
 - Cross-project sessions stay isolated.
-- Competing CLI/MCP/ACP starts obey the same lock.
+- Competing CLI/MCP/ACP starts obey the same lock. (Known gap: met for ACP and MCP starts only; see [ACP-EXECUTION-EXCLUSION-GAP.md](ACP-EXECUTION-EXCLUSION-GAP.md).)
 - Unsupported content cannot start partial work.
 - A failed or ambiguous start is reconciled against persisted state before any new submission.
 
@@ -288,7 +288,7 @@ Required invariants:
 | Explicit cancellation | Owned work stops within the documented bound; partial evidence retained |
 | Client disconnect | Documented stop policy enforced; no orphan execution or automatic restart |
 | Adapter restart | Existing job is discoverable; no duplicate submission |
-| Concurrent starts | Existing project lock protects CLI, MCP, and ACP equally |
+| Concurrent starts | **Known gap, not met.** Required: existing project lock protects CLI, MCP, and ACP equally. ACP and MCP starts share one start lock. CLI `sop run` is excluded only behind `execution.lease` (default off), and ACP and MCP starts and `sop prompt` do not check it. See [ACP-EXECUTION-EXCLUSION-GAP.md](ACP-EXECUTION-EXCLUSION-GAP.md) |
 | Multiple projects | No shared cwd, task, event, or evidence leakage |
 | Malformed or oversized input | Bounded error handling; protocol remains usable or exits cleanly |
 | Slow client | Memory stays bounded and final outcome remains recoverable |
