@@ -25,16 +25,15 @@ is the construction method only. It is not evidence that any case has been built
 A case counts only when it is constructed, independently checked, and recorded in the
 freeze record (preparation plan §3, §4, §7). A draft, a template, or an unsealed file counts
 as **0**. The seeded and no-known-defect strata are reported **separately** from the
-historical stratum; whether a seeded case may count toward any floor is the unresolved
-question below.
+historical stratum; the seeded set does not count toward either historical minimum, as
+Decision 3 records below.
 
-Whether a seeded defect may count toward the protocol's 15-determinable-defect floor is
-**not settled by the protocol text**. §5.3 says the historical set is the recall corpus and
-that the no-known-defect set is additional, but it does not say whether the seeded set is
-part of the recall denominator. This specification does not resolve the question; it is
-recorded as an operator question in
-[READINESS.md](READINESS.md) §10.3. Until it is resolved, no seeded case is counted toward
-any floor.
+**Resolved by Decision 3 (2026-11-21).** The protocol names only the no-known-defect set as
+additional and does not settle the seeded set. Decision 3 records the conservative reading:
+the seeded set is additional to the historical corpus and does not count toward either
+historical minimum (15 plans, 15 determinable defects). See
+[DECISION-RECORD-003](DECISION-RECORD-003-ELIGIBILITY.md). No seeded case is counted toward
+any historical minimum.
 
 ## 2. Roles and independence
 

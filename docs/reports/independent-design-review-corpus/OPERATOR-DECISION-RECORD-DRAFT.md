@@ -1,12 +1,13 @@
 # Operator Decision Record — Draft Entries for Decisions 1–6
 
 **Type:** Decision-record draft (non-normative). It prepared record entries for the first six
-decisions of the [OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md). Decisions 1
-and 2 were recorded by the operator on 2026-11-21 in
-[DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md) and
-[DECISION-RECORD-002](DECISION-RECORD-002-HISTORICAL-DISPOSITIONS.md); Decisions 3–6 remain
-unrecorded drafts.
-**Status:** **PARTIALLY RECORDED — Decisions 1–2 approved 2026-11-21; Decisions 3–6 remain draft.**
+decisions of the [OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md). Decisions 1–3
+were recorded by the operator on 2026-11-21 in
+[DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md),
+[DECISION-RECORD-002](DECISION-RECORD-002-HISTORICAL-DISPOSITIONS.md), and
+[DECISION-RECORD-003](DECISION-RECORD-003-ELIGIBILITY.md); Decisions 4–6 remain unrecorded
+drafts.
+**Status:** **PARTIALLY RECORDED — Decisions 1–3 approved 2026-11-21; Decisions 4–6 remain draft.**
 **Baseline:** `origin/main` @ `5a94dfe1`.
 **Protocol:** [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](../EGM-GOLDFISH-REVIEW-ASSESSMENT.md).
 **Decision package:** [OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md).
@@ -33,7 +34,7 @@ the operator records it. Decision 1 names Tom Tran; the remaining drafts use `<o
 | --- | --- | --- | --- | --- | --- |
 | 1 | Corpus owner | **Designated: Tom Tran (2026-11-21)** | One named human who is not an adjudicator; the operator may serve | — | **Yes** — DECISION-RECORD-001 |
 | 2 | Historical inclusion and exclusion | **Recorded 2026-11-21** — see DECISION-RECORD-002 | Confirm the exclusions and holds; classify the extracted leads explicitly; keep unverified entries out of every floor | 1 | **Yes** — DECISION-RECORD-002 |
-| 3 | Strict versus partial eligibility | Conservative reading applied; no rule recorded | Keep the conservative reading until the corpus can meet both floors without relaxing the recall denominator | 2, 4 | **No** |
+| 3 | Strict versus partial eligibility| **Recorded 2026-11-21** — conservative; seeded set additional| Keep the conservative reading until the corpus can meet both floors without relaxing the recall denominator| 2, 4       | **Yes** — DECISION-RECORD-003|
 | 4 | Proposed protocol amendment | PROPOSED, not applied | Defer until the corpus owner records independent support for each partial, then decide with the actual counts | 1, 3 | **No** |
 | 5 | Independent seeder | Not designated; 0 of about 8 and 0 of about 6 cases | One named human who is not an adjudicator; record the sealed-manifest location and access list | — | **No** |
 | 6 | Two independent human adjudicators | None identified; operator treated as an author | Two external humans who did not author or directly edit any corpus case; record the authorship checks | 5, 1 | **No** |
@@ -127,36 +128,30 @@ to final eligibility by this draft.
 
 ## 4. Decision 3 — Strict versus partial eligibility
 
-**Verified current state.** The conservative reading counts a partially determinable defect
-toward neither floor. Under it the corpus is 0/15 strict and 10/15 partial-inclusive. No
-eligibility rule is recorded. The two newly extracted proposals are strict by proposal only;
-the owner has not recorded them.
+**Status: APPROVED 2026-11-21.** Recorded in
+[DECISION-RECORD-003](DECISION-RECORD-003-ELIGIBILITY.md); the preparation analysis below is
+preserved.
 
-**Recommended option.** Keep the conservative reading until the corpus can meet both floors
-without relaxing the recall denominator. Do not let a partial defect enter the recall
-denominator.
+**Verified current state (at preparation).** The conservative reading counts a partially
+determinable defect toward neither floor. Under it the corpus was 0/15 strict and 10/15
+partial-inclusive. No eligibility rule was recorded. The newly extracted proposals were
+strict by proposal only.
+
+**Recorded option.** The conservative rule was recorded, with the seeded set additional.
 
 **Dependencies.** Decisions 2 and 4.
 
 **Independence constraint.** The eligibility rule is applied by the corpus owner, who is not
 an adjudicator.
 
-**Exact text to record:**
+**Recorded text.** The rule and the seeded-case interpretation are in
+[DECISION-RECORD-003](DECISION-RECORD-003-ELIGIBILITY.md) §1.
 
-> Eligibility rule in force: `conservative` — a partially determinable or hindsight-only
-> defect counts toward neither the 15-plan floor nor the 15-determinable-defect floor; the
-> recall denominator is the frozen determinable set.
->
-> Approval block
-> `approved: false`
-> `identity: null`
-> `date: null`
+**Effect of the recorded decision.** The freeze rule is defined, so the freeze decision is
+explicit rather than implicit.
 
-**Effect if recorded.** The freeze rule is defined, so the freeze decision is explicit
-rather than implicit.
-
-**Consequence of deferral.** The strict reading stands provisionally and the shortfall
-remains 15/15.
+**Consequence of deferral (no longer applicable).** The strict reading would have stood
+provisionally and the strict shortfall would have remained 12 plans / 11 defects.
 
 ## 5. Decision 4 — Proposed protocol amendment
 

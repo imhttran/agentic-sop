@@ -207,7 +207,7 @@ The full options, trade-offs, validity effects, and deferral consequences are in
 | --- | ---------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
 | 1   | Corpus owner                       | **Designated: Tom Tran (2026-11-21)**                                                            | Recorded in DECISION-RECORD-001; not an adjudicator                          |
 | 2   | Historical inclusion and exclusion | **Recorded 2026-11-21** — see DECISION-RECORD-002 for the full disposition set                   | Recorded; no candidate promoted or adjudicated                               |
-| 3   | Strict versus partial eligibility  | Conservative reading applied                                                                     | No recorded eligibility rule; the amendment is not approved                  |
+| 3   | Strict versus partial eligibility  | **Recorded 2026-11-21** — conservative; seeded set additional                                    | Recorded in DECISION-RECORD-003; the amendment remains pending               |
 | 4   | Proposed protocol amendment        | Proposed, not applied                                                                            | No operator approve, reject, or revise decision                              |
 | 5   | Independent seeder                 | Not designated                                                                                   | No seeder, no sealed manifest, no seeded or no-known-defect cases            |
 | 6   | Two independent human adjudicators | None identified; operator treated as an author                                                   | No two independent humans; PASS is unreachable                               |
@@ -380,8 +380,10 @@ The protocol text does not settle this, and this section does **not** resolve it
   applied.
 
 Both arithmetics are reported below. Neither is used to declare the corpus ready, and no
-threshold is changed. Which reading is in force is a decision for the corpus owner and
-operator (decisions 2 and 3), recorded verbatim.
+threshold is changed. Which reading is in force was a decision for the corpus owner and
+operator (decisions 2 and 3). **Resolved by Decision 3 (2026-11-21):** the conservative
+reading is in force — the seeded set is additional and does not count toward either
+historical minimum.
 
 ### 10.4 Scenario A — strict protocol
 
@@ -569,8 +571,9 @@ amendment, a corpus-owner determination for each of 11 partials, eight construct
 cases, six controls, two independent adjudicators, an approved threshold and budget, a
 freeze, and an EP-15 disposition. None of those exists.
 
-The question of whether the seeded set counts toward the floor (§10.3) remains unresolved;
-both readings are shown. No threshold is changed.
+The question of whether the seeded set counts toward the floor (§10.3) was unresolved when
+this section was written; both readings are shown. **Decision 3 (2026-11-21) records the
+conservative reading: the seeded set is additional.** No threshold is changed.
 
 ### 11.5 Workstream B dependencies on the freeze
 
@@ -642,3 +645,17 @@ proposed determinability, final eligibility, and independent adjudication remain
 no candidate is promoted, and the adjudicated count is **0**. The corpus remains **NOT
 FROZEN**, the experiment **NOT YET READY**, and H1/H2 **NOT ESTABLISHED**. Decisions 3–9
 remain open; the freeze preconditions that needed an owner and an inclusion list are now met.
+
+## 14. Decision 3 recorded (current)
+
+**Decision 3 — Eligibility rule: APPROVED 2026-11-21.** The rule is `conservative`: partial
+and hindsight-only defects count toward neither historical minimum, the recall denominator is
+the frozen determinable defect set, and the seeded set is additional. The record is
+[DECISION-RECORD-003-ELIGIBILITY.md](DECISION-RECORD-003-ELIGIBILITY.md).
+
+The numeric minimums, arms, thresholds, and cost ceilings are unchanged, and the protocol
+text is not amended. The proposed strict corpus remains 3 plans / 4 defects, short by 12
+plans and 11 defects; the 11 partials remain outside the denominator; the adjudicated count
+is 0 and no candidate is promoted. The corpus remains **NOT FROZEN**, the experiment **NOT YET
+READY**, and H1/H2 **NOT ESTABLISHED**. Decision 4 remains open; freeze preconditions 1–3 are
+met and 4–7 remain open.
