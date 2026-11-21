@@ -1,9 +1,11 @@
 # Historical Lead Investigation — Independent Design Review Corpus
 
 **Type:** Extraction record (non-normative). It resolves the six leads listed in
-[CORPUS-PREPARATION-PLAN.md](CORPUS-PREPARATION-PLAN.md) §2.2 against git history. It
-promotes no candidate, freezes nothing, and records no adjudication.
-**Baseline:** `origin/main` @ `5a94dfe1` (merge of PR #585).
+[CORPUS-PREPARATION-PLAN.md](CORPUS-PREPARATION-PLAN.md) §2.2 against git history, and §8
+records two additional leads investigated after PR #587. It promotes no candidate, freezes
+nothing, and records no adjudication.
+**Baseline:** `origin/main` @ `5a94dfe1` (merge of PR #585) for §1–§7; `origin/main` @
+`ebe26a11` (merge of PR #587) for §8.
 **Protocol:** [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](../EGM-GOLDFISH-REVIEW-ASSESSMENT.md).
 **Manifest:** [candidates.json](candidates.json) — unchanged by this record; still 23 entries.
 **Machine-readable extraction:** [lead-extraction.json](lead-extraction.json).
@@ -53,6 +55,9 @@ were extracted; two plans carry three proposed-strict design defects; one lead i
 evidence-blocked; one is implementation-only; two have no single artifact. The manifest is
 unchanged at 23 entries, 0 strict, 10 partial, 2 verified-defect holds, 3 unverified holds,
 and 8 excluded. Independently adjudicated determinability remains **0**.
+
+§8 records two further leads found after PR #587: one proposed-strict design defect and one
+proposed-partial design limitation. Its counts are separate from the six-lead figures above.
 
 ## 3. Per-lead records
 
@@ -342,3 +347,116 @@ count".
 - No permitted reference is also listed as later evidence, and no later fix commit is a
   permitted reference.
 - The manifest remains valid JSON with 23 entries and the same state and inclusion counts.
+
+## 8. Additional leads investigated after PR #587
+
+PR #587 resolved the six original leads. This section records two additional leads found by
+tracing commits that corrected a **normative specification**. Both are extracted here;
+neither is eligible, counted, or adjudicated, and the manifest is still 23 entries.
+
+### 8.1 `IDR-L-007` — plan archive slot keyed by a non-unique plan id
+
+- **Artifact:** `docs/specs/PLAN-HISTORICALIZATION.md`
+- **Revision:** `fcf53888109500b4a12f330b88f1e19ffcad3c3b` (2026-10-06), the commit that adds
+  the spec. SHA-256 `a9d5f644487db1b3be45c531231ce1b6b7174647639471ef9c4b14f7e4a2458b`.
+  The content is byte-identical at `f2cdffb0d013a4382b71f0c830bfe48fbd7a2210`, the parent of
+  the fix, so the pin is unambiguous.
+- **Why this revision:** the spec has two revisions. The second, `b14fcabe` (2026-11-09),
+  is the fix and rewrites the slot layout, so it is not a pre-defect artifact.
+- **Later evidence:** `b14fcabeccfbd0634989cbbfef8e650d40815854`, merged as PR #322
+  (merge `49a8f589`), together with that fix's updates to `docs/specs/RECOVERY.md`, the CLI
+  reference, and the two historicalization skills.
+- **Permitted references (exist at the pin):** `internal/planflow/planflow.go`
+  (`ae690f2e…`), `internal/planflow/historicalize.go` (`a5faf3d7…`),
+  `docs/specs/EXECUTION.md` (`2d3f0517…`), `docs/specs/RECOVERY.md` (`4e6d6dde…`).
+- **What the artifact says:** §1 "reuses the same archive storage
+  (`.agent-sdlc/archive/<plan-id>/`)"; §5 step 5 writes the record under that path; §6 makes a
+  re-run against a historicalized plan a deterministic no-op that MUST NOT duplicate
+  history. `RECOVERY.md` §7 repeats the same `archive/<plan-id>/` path for handoff and
+  supersession.
+- **What the permitted paths show at the pin:** `planID(rel)` is a slug of the file
+  **basename** (`internal/planflow/planflow.go:1484` at the pin), and `archiveID(id)` returns
+  that id unchanged (`internal/planflow/historicalize.go:571` at the pin). Two plans whose basenames agree —
+  for example `docs/plans/PLAN-X.md` and `docs/history/plans/PLAN-X.md` — and any
+  re-activation of a plan therefore share one archive directory.
+- **Defect:** one archive slot is keyed to a plan id that is not unique across activations
+  or source directories. A later activation at the same id overwrites the earlier
+  activation's lifecycle, task snapshot, and disposition; a staged-release check that reads
+  "active + archived" can also skip archiving and clear the new activation's tasks. The fix
+  gives the first activation `archive/<id>/` and each later one `archive/<id>.<n>/`.
+- **Ancestry:** `fcf53888` is an ancestor of `b14fcabe`, which is an ancestor of `main`.
+- **Leakage:** the pinned artifact contains no "slot", "collision", "re-activation", or
+  `<id>.<n>` language.
+- **Design vs implementation:** **design**. The specification defines the archive identity
+  and the idempotency rule; the code implements them as written. The missing dimension is
+  the activation identity.
+- **Determinability:** a reviewer can derive the collision from the archive path, the plan-id
+  derivation, and the idempotency rule without the fix. **Proposed strict.** Class:
+  **missing identity dimension** (an idempotency rule that is unverifiable under
+  re-activation).
+- **Authorship / contamination:** Tom Tran `<trantom512@gmail.com>`, 2026-10-06. The spec
+  predates the fix by about a month.
+- **Disposition:** **Extracted.** Proposed strict; not eligible and not counted until the
+  corpus owner records it (decisions 2 and 3).
+
+### 8.2 `IDR-L-008` — RAG evidence hash covers the document, not the returned chunk
+
+- **Artifact:** `docs/specs/RAG-RETRIEVAL-CONTRACT.md`
+- **Revision:** `c6ef5f5651cb822d501cf8b095c9f6dd54f1755a` (2026-11-09), the parent of the
+  fix. SHA-256 `20ab7c62867de9868b0b40bda056882b48c885b811cfc2b9e07f7455fcb05080`.
+- **Why this revision:** the contract has two revisions; `e15b8b09` is the fix and adds the
+  field and error code, so its parent is the last pre-defect revision.
+- **Later evidence:** `e15b8b0942e20bd89e12a052fe1bf21932182dc0`, merged as PR #330
+  (merge `97d08c1a`), with the LLM05 gap register and the two proposals it implements.
+- **Permitted references (exist at the pin):** `internal/ragclient/ragclient.go`
+  (`0c60c98c…`), `docs/specs/RAG-SECURITY-THREAT-MODEL.md` (`fdf3b7b9…`). The
+  `migrations/002_ingestion_metadata.sql` path named by the contract does not exist at the
+  pin and is **not** a permitted reference.
+- **What the artifact says:** the response field `document_hash` is the **projected
+  ingestion fingerprint** of the whole source document; §5 says "No new hash is invented";
+  a NULL fingerprint is carried as `""` and the item is treated as lower-confidence.
+- **What the permitted paths show at the pin:** the returned item carries `text` (a chunk),
+  but the only hash is over the whole document, and `ragclient.go` does not recompute any
+  hash over the returned text. SOP therefore cannot verify that the chunk it received is
+  the chunk that was ingested.
+- **Defect:** the evidence-integrity field is document-scoped while the evidence unit is a
+  chunk, so the returned evidence is not checkable. The fix adds an optional `chunk_hash`
+  over the exact `text` bytes, recomputes it, rejects a mismatch, and states that
+  `document_hash` is never reported as verified.
+- **Ancestry:** `c6ef5f56` is an ancestor of `e15b8b09`, which is an ancestor of `main`.
+- **Leakage:** the pinned artifact contains no `chunk_hash`, `EVIDENCE_HASH`, or per-row
+  digest language.
+- **Design vs implementation:** **design**, but the artifact explicitly chose
+  whole-document projection and a lower-confidence treatment, so whether the gap is a defect
+  or a documented limitation is a judgment. Class: **missing integrity control**.
+- **Determinability:** a reviewer can see that a whole-document hash cannot verify a chunk.
+  Whether that is a defect depends on the evidence-integrity goal. **Proposed partial**, not
+  strict.
+- **Authorship / contamination:** Tom Tran `<trantom512@gmail.com>`, 2026-11-09.
+- **Disposition:** **Extracted.** Proposed partial; not eligible and not counted.
+
+### 8.3 Counts after the additional leads
+
+| Measure | Manifest recorded | PR #587 proposals | This section | Combined, uncounted |
+| --- | --- | --- | --- | --- |
+| Strict proposed plans | 0 | 2 | 1 | 3 |
+| Strict proposed defects | 0 | 3 | 1 | 4 |
+| Partial proposed plans | 10 | 0 | 1 | 11 |
+| Partial proposed defects | 10 | 0 | 1 | 11 |
+| Independently adjudicated | 0 | 0 | 0 | **0** |
+
+The three proposed-strict plans are `IDR-L-003` (1 defect), `IDR-L-004` (2 defects), and
+`IDR-L-007` (1 defect). The eleven proposed-partial plans are the ten manifest partials plus
+`IDR-L-008`. Nothing in this table is a corpus-owner determination, and no lead is counted
+toward a floor.
+
+### 8.4 Validation performed for this section
+
+- `fcf53888`, `c6ef5f56`, `b14fcabe`, and `e15b8b09` all resolve on `main`; ancestry was
+  checked with `git merge-base --is-ancestor`.
+- Every artifact and permitted-reference SHA-256 was recomputed from the pinned blob and
+  matches [lead-extraction.json](lead-extraction.json).
+- The `migrations/002_ingestion_metadata.sql` path named by the RAG retrieval contract was checked and
+  rejected because it does not exist at the pin.
+- No permitted reference is later evidence, and the pinned artifacts contain none of the
+  fix vocabulary.

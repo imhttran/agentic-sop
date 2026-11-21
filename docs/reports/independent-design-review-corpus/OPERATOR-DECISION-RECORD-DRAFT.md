@@ -29,7 +29,7 @@ the operator records it. No name is supplied; every name is `<operator-supplied>
 | # | Decision | Current state | Recommended option | Depends on | Approval recorded |
 | --- | --- | --- | --- | --- | --- |
 | 1 | Corpus owner | Not designated | One named human who is not an adjudicator; the operator may serve | — | **No** |
-| 2 | Historical inclusion and exclusion | 0 strict, 10 partial, 2 verified-defect holds, 3 unverified holds, 8 excluded; six leads now extracted (2 proposed strict, 1 evidence-blocked, 1 implementation-only, 2 no artifact) | Confirm the exclusions and holds; classify the extracted leads explicitly; keep unverified entries out of every floor | 1 | **No** |
+| 2 | Historical inclusion and exclusion | 0 strict, 10 partial, 2 verified-defect holds, 3 unverified holds, 8 excluded; eight leads now extracted (3 proposed strict, 1 proposed partial, 1 evidence-blocked, 1 implementation-only, 2 no artifact) | Confirm the exclusions and holds; classify the extracted leads explicitly; keep unverified entries out of every floor | 1 | **No** |
 | 3 | Strict versus partial eligibility | Conservative reading applied; no rule recorded | Keep the conservative reading until the corpus can meet both floors without relaxing the recall denominator | 2, 4 | **No** |
 | 4 | Proposed protocol amendment | PROPOSED, not applied | Defer until the corpus owner records independent support for each partial, then decide with the actual counts | 1, 3 | **No** |
 | 5 | Independent seeder | Not designated; 0 of about 8 and 0 of about 6 cases | One named human who is not an adjudicator; record the sealed-manifest location and access list | — | **No** |
@@ -76,12 +76,18 @@ pre-registered artifact. Nothing is promoted.
 verified-defect holds (`IDR-H-001`, `IDR-H-005`), 3 unverified holds (`IDR-E-006`,
 `IDR-E-010`, `IDR-E-012`), and 8 excluded. The manifest's `hold` inclusion value is 5.
 
-The six leads in the preparation plan are now extracted in
-[HISTORICAL-LEAD-INVESTIGATION.md](HISTORICAL-LEAD-INVESTIGATION.md):
+The six leads in the preparation plan, plus two additional leads found after PR #587, are
+now extracted in [HISTORICAL-LEAD-INVESTIGATION.md](HISTORICAL-LEAD-INVESTIGATION.md):
 
 - `IDR-L-003` (`PLAN-09…` @ `4fb3b8a3`) and `IDR-L-004` (`docs/specs/REVIEW.md` @
   `5fce2b6a`) are **proposed strict** design defects — two plans, three defects. They are
   unadjudicated and not counted.
+- `IDR-L-007` (`docs/specs/PLAN-HISTORICALIZATION.md` @ `fcf53888`) is a **proposed
+  strict** design defect: one archive slot is keyed to a plan id that is not unique across
+  activations or source directories, so same-named or re-activated plans collide.
+- `IDR-L-008` (`docs/specs/RAG-RETRIEVAL-CONTRACT.md` @ `c6ef5f56`) is a **proposed partial**
+  design limitation: the evidence hash covers the whole document, not the returned chunk,
+  so the returned evidence is not checkable.
 - `IDR-L-001` is extracted but its only later evidence is the artifact's own status line;
   it is evidence-blocked.
 - `IDR-L-002` resolves to an implementation-only defect plus an open residual GAP; it is
@@ -113,7 +119,8 @@ judgment is a recorded judgment, not an adjudication.
 > Excluded: `<IDs>` with one-line reason each.
 > Extracted leads: `IDR-L-001` `<hold / exclude>`; `IDR-L-002` `<exclude>`; `IDR-L-003`
 > `<include-with-review / hold>`; `IDR-L-004` `<include-with-review / hold>`; `IDR-L-005`
-> `<exclude, no artifact>`; `IDR-L-006` `<exclude, no artifact>`.
+> `<exclude, no artifact>`; `IDR-L-006` `<exclude, no artifact>`; `IDR-L-007`
+> `<include-with-review / hold>`; `IDR-L-008` `<include-with-review / hold, partial>`.
 >
 > Approval block
 > `approved: false`

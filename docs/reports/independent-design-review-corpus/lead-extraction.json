@@ -21,7 +21,9 @@
           "reason": "Edits only the status line and adds the sentence that names the gap; it contains the disclosure."
         }
       ],
-      "later_evidence": ["03a7d7d97912f22b708622791568240242a7e76d"],
+      "later_evidence": [
+        "03a7d7d97912f22b708622791568240242a7e76d"
+      ],
       "later_evidence_independent": false,
       "later_evidence_note": "The only later record is the same artifact's own post-merge status line. CORPUS-PREPARATION-PLAN.md §2.3 rejects a document whose only defect evidence is its own later status line.",
       "permitted_references": [
@@ -57,7 +59,9 @@
           "reason": "Rename to docs/history/plans with no content change; not a distinct revision."
         }
       ],
-      "later_evidence": ["aa3e1d364d4bf6a6a5d575291a4739e35b956f00"],
+      "later_evidence": [
+        "aa3e1d364d4bf6a6a5d575291a4739e35b956f00"
+      ],
       "later_evidence_independent": true,
       "permitted_references": [
         {
@@ -276,6 +280,117 @@
     "verified_defect_holds": 2,
     "unverified_holds": 3,
     "excluded_recorded": 8,
+    "independently_adjudicated": 0
+  },
+  "additional_leads": [
+    {
+      "id": "IDR-L-007",
+      "added_after": "PR #587 merge ebe26a11",
+      "artifact": "docs/specs/PLAN-HISTORICALIZATION.md",
+      "commit": "fcf53888109500b4a12f330b88f1e19ffcad3c3b",
+      "artifact_sha256": "a9d5f644487db1b3be45c531231ce1b6b7174647639471ef9c4b14f7e4a2458b",
+      "pre_defect_status": "earliest",
+      "pre_defect_note": "Content is byte-identical at f2cdffb0d013a4382b71f0c830bfe48fbd7a2210, the parent of the fix.",
+      "rejected_later_revisions": [
+        {
+          "commit": "b14fcabeccfbd0634989cbbfef8e650d40815854",
+          "reason": "The fix; rewrites the slot layout and updates RECOVERY.md and the CLI reference."
+        }
+      ],
+      "later_evidence": [
+        "b14fcabeccfbd0634989cbbfef8e650d40815854",
+        "49a8f589"
+      ],
+      "later_evidence_independent": true,
+      "permitted_references": [
+        {
+          "path": "internal/planflow/planflow.go",
+          "blob_sha256": "ae690f2e7b7b2b2a9c479dc391170b9a588d624dadedb01ccfe9c73630312b72"
+        },
+        {
+          "path": "internal/planflow/historicalize.go",
+          "blob_sha256": "a5faf3d724993d91afbb9ac65e810915bbf80a7e549a0f00652b8c7bb5424206"
+        },
+        {
+          "path": "docs/specs/EXECUTION.md",
+          "blob_sha256": "2d3f0517532ea2c2d21323625e55316b0f4e1ea2f44193e4231368213aec27e8"
+        },
+        {
+          "path": "docs/specs/RECOVERY.md",
+          "blob_sha256": "4e6d6ddecdc3a6c93c03ec377afa06d1c1d67a0423d1a34d81214c6d92475046"
+        }
+      ],
+      "defect_class": "missing-identity-dimension",
+      "defect_summary": "The archive is keyed to .agent-sdlc/archive/<plan-id>/ with an idempotency rule, but planID is a basename slug, so same-named or re-activated plans share one slot and a later activation overwrites the earlier archive. The fix adds archive/<id>.<n>/ slots.",
+      "design_or_implementation": "design",
+      "proposed_determinability": "strict",
+      "evidence_state": "EXTRACTED",
+      "proposed_inclusion": "hold",
+      "disposition": "Extracted; proposed strict determinability. Not eligible and not counted until the corpus owner records it.",
+      "authorship": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "decisions 2 and 3"
+    },
+    {
+      "id": "IDR-L-008",
+      "added_after": "PR #587 merge ebe26a11",
+      "artifact": "docs/specs/RAG-RETRIEVAL-CONTRACT.md",
+      "commit": "c6ef5f5651cb822d501cf8b095c9f6dd54f1755a",
+      "artifact_sha256": "20ab7c62867de9868b0b40bda056882b48c885b811cfc2b9e07f7455fcb05080",
+      "pre_defect_status": "last-pre-defect-not-earliest",
+      "pre_defect_note": "The parent of the fix; the contract has two revisions and the other is the fix.",
+      "rejected_later_revisions": [
+        {
+          "commit": "e15b8b0942e20bd89e12a052fe1bf21932182dc0",
+          "reason": "The fix; adds chunk_hash and EVIDENCE_HASH_MISMATCH to the contract."
+        }
+      ],
+      "later_evidence": [
+        "e15b8b0942e20bd89e12a052fe1bf21932182dc0",
+        "97d08c1a"
+      ],
+      "later_evidence_independent": true,
+      "permitted_references": [
+        {
+          "path": "internal/ragclient/ragclient.go",
+          "blob_sha256": "0c60c98c2860d37682af27de02124c978a636fdc1e6e9c7a22b82508c8162e6a"
+        },
+        {
+          "path": "docs/specs/RAG-SECURITY-THREAT-MODEL.md",
+          "blob_sha256": "fdf3b7b93e2b8fe66128188dfb6f9c569bb4a433e868f6fb594a608e4c749693"
+        }
+      ],
+      "excluded_references": [
+        {
+          "path": "migrations/002_ingestion_metadata.sql",
+          "reason": "Named by the contract but does not exist at the pinned revision; not reviewer-visible."
+        }
+      ],
+      "defect_class": "missing-integrity-control",
+      "defect_summary": "document_hash is the whole-document ingestion fingerprint, but the evidence unit is a chunk text, so the returned evidence cannot be verified. The fix adds an optional chunk_hash over the exact text bytes.",
+      "design_or_implementation": "design",
+      "proposed_determinability": "partial",
+      "determinability_ambiguity": "The contract explicitly chooses whole-document projection and lower-confidence handling for legacy rows; whether the missing chunk-level check is a defect or a documented limitation is a judgment.",
+      "evidence_state": "EXTRACTED",
+      "proposed_inclusion": "hold",
+      "disposition": "Extracted; proposed partial determinability. Not eligible and not counted until the corpus owner records it.",
+      "authorship": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "decisions 2 and 3"
+    }
+  ],
+  "counts_after_additional_extraction": {
+    "additional_leads_investigated": 2,
+    "additional_pre_defect_artifacts_extracted": 2,
+    "additional_proposed_strict_plans": 1,
+    "additional_proposed_strict_defects": 1,
+    "additional_proposed_partial_plans": 1,
+    "additional_proposed_partial_defects": 1,
+    "combined_proposed_strict_plans": 3,
+    "combined_proposed_strict_defects": 4,
+    "combined_proposed_partial_plans": 11,
+    "combined_proposed_partial_defects": 11,
+    "manifest_entries_unchanged": 23,
+    "strict_proposed_determinable_recorded": 0,
+    "partial_proposed_determinable_recorded": 10,
     "independently_adjudicated": 0
   }
 }
