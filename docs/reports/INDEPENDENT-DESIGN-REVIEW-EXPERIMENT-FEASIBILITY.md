@@ -4,8 +4,9 @@
 defined by
 [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](EGM-GOLDFISH-REVIEW-ASSESSMENT.md). It is not an
 experiment result and does not change behavior.
-**Status:** Workstream A reviewed; Workstream B pending; no experiment or pilot
-inference was executed.
+**Status:** Workstream A reviewed; Workstream B merged (PR #574) with open runtime items;
+no inference was executed for the experiment. §10 records the two separately authorized
+four-call pilots, and §11 records the post-Workstream B reconciliation.
 **Plan of record:**
 [PLAN-Independent-Design-Review-Feasibility.md](../plans/PLAN-Independent-Design-Review-Feasibility.md).
 **Conditional contract:**
@@ -16,12 +17,16 @@ inference was executed.
 - **Verified** — directly observed in the repository at the recorded baseline.
 - **Proposed** — a judgment awaiting the corpus owner's freeze or independent
   adjudication.
-- **Unverified** — depends on evidence not available here (Linux report, operator
-  decision, or a human adjudicator).
+- **Unverified** — depends on evidence not available here (the Workstream B report, an
+  operator decision, or a human adjudicator).
 
 ## 1. Protocol baseline
 
-- Repository baseline: `origin/main` @ `64101f9e`, the merge of PR #565.
+- Repository baseline: `origin/main` @ `64101f9e`, the merge of PR #565. The original
+  feasibility findings below are preserved at that baseline.
+- Current reconciliation baseline: `origin/main` @ `a10edc28`, the merge of PR #574
+  (Workstream B). Later sections record what changed; they do not rewrite the earlier
+  findings.
 - Authoritative protocol:
   [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](EGM-GOLDFISH-REVIEW-ASSESSMENT.md).
   It owns the corpus rules, thresholds, statistical comparator, PASS/FAIL/INCONCLUSIVE
@@ -247,22 +252,27 @@ is not authorship.
 
 ### 4.1 Intake status
 
-**UNAVAILABLE.** I searched the repository, `/Users/imhttran/agentic-workspace`, `/tmp`,
-and `/Users/imhttran/Downloads` for report-like files, and listed open pull requests;
-no Linux report file, branch, or PR was found. Workstream B remains pending. No provider,
-routing, token, latency, or pilot-readiness claim is made from Linux evidence.
+**RECEIVED (merged after this report was first written).** At the original feasibility
+inventory no Linux report file, branch, or PR was found in the repository,
+`/Users/imhttran/agentic-workspace`, `/tmp`, or `/Users/imhttran/Downloads`, and no open
+pull request carried one. That historical finding is preserved. Workstream B has since
+merged as
+[INDEPENDENT-DESIGN-REVIEW-EXECUTION-PATH-VERIFICATION.md](INDEPENDENT-DESIGN-REVIEW-EXECUTION-PATH-VERIFICATION.md)
+in PR #574 (merge `a10edc28`). It records per-requirement results for the execution path,
+not experiment results, and it leaves EP-15 UNVERIFIED and several requirements PARTIAL.
+The reconciliation is in
+[WORKSTREAM-B-RECONCILIATION.md](independent-design-review-corpus/WORKSTREAM-B-RECONCILIATION.md).
 
-Static code-path readings of the §4.3 items (request composition, provider and model
-resolution, the requested-model key, token reporting, concurrent runs and isolation) are
-recorded in a
+The earlier static code-path readings of the §4.3 items are recorded in a
 [comment on PR #565](https://github.com/imhttran/agentic-sop/pull/565#issuecomment-7065856929)
-and in PR #567. They are not the independent Workstream B report, they are static
-reading and not measured behavior, and the runtime items they list remain open.
+and in PR #567. They were not the independent Workstream B report at the time. The merged
+verification re-checks the same paths at a later baseline and confirms some of them while
+qualifying others (notably EP-16).
 
-### 4.2 Baseline verification (assessment, not Linux confirmation)
+### 4.2 Baseline verification (assessment baseline, re-checked by Workstream B)
 
-The assessment's code-path claims were re-checked at `64101f9e` and remain the baseline
-for what the Linux report must confirm:
+The assessment's code-path claims were re-checked at `64101f9e` and were the baseline
+for what the Workstream B report had to confirm:
 
 - `sop prompt` builds its agent with the selected model, while `FromConfig` resolves
   `SOP_AGENT_MODEL` > provider-specific environment > configured model;
@@ -279,12 +289,15 @@ for what the Linux report must confirm:
   latency must be timed outside SOP.
 - The project config is tracked in `.agent-sdlc/config.yaml`, so a scratch clone inherits
   the historical config; a fixed overlay and its sha256 are required. Under the Ollama
-  REVIEW harness, the reviewer performs a bounded read-only repository inspection; a
-  text-only provider has no repository access.
+  REVIEW harness, the reviewer has a bounded read-only repository inspection available; a
+  text-only provider has no repository access. Whether a given model uses the inspection
+  is model-dependent and was not observed in the four Pilot B runs (EP-16).
 
-These are code-path readings at `64101f9e`, not measured provider behavior. Workstream B
-must confirm them; they are not a substitute for the Linux agent's independent
-investigation.
+These are code-path readings at `64101f9e`, not measured provider behavior. The merged
+Workstream B verification re-checked them at a later baseline: EP-01, EP-03, EP-04, EP-05,
+EP-06, EP-07, EP-08, EP-11, EP-13 and EP-14 are VERIFIED; EP-02, EP-09, EP-10, EP-12 and
+EP-16 are PARTIAL; EP-15 is UNVERIFIED. The readings remain the historical basis for what
+the Workstream B report had to confirm.
 
 ### 4.3 Required Workstream B evidence
 
@@ -296,6 +309,14 @@ investigation.
 - Token-reporting behavior, including unreported-call counts.
 - Parallel execution, per-call project isolation, and wall-clock latency measurement.
 - Four-call pilot readiness and the exact commands/artifacts.
+
+**Post-merge mapping.** Each item is now recorded in the Workstream B report as follows:
+request composition by code reading and synthetic runtime (EP-04, EP-11); provider and
+model resolution by code and synthetic runtime (EP-01, EP-08, EP-13, EP-14); requested-model
+verification by synthetic runtime (EP-02, PARTIAL for attested identity); token reporting by
+synthetic runtime and the pilots (EP-03); isolation and concurrency by existing tests,
+synthetic runtime and a cross-process check (EP-06, EP-07, EP-08); parallel-batch latency as
+UNVERIFIED (EP-15); and pilot readiness by the two pilots (excluded from the dataset).
 
 ## 5. Estimated inference and human-review cost
 
@@ -327,15 +348,15 @@ currently identified.
 ## 6. Risks of an INCONCLUSIVE outcome
 
 | Risk                                 | Evidence                                                                                      | Effect                                                     |
-| ------------------------------------ | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Corpus shortfall                     | 1 proposed determinable vs 15; 8 evidence-verified candidate plans vs 15                      | No PASS possible until the corpus is assembled and frozen. |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Corpus shortfall                     | 0 strict proposed determinable vs 15; 10 partial (proposed) and 2 held vs the 15-plan floor; the original "1 proposed determinable, 8 candidate plans" count is superseded in §2.6 | No PASS possible until the corpus is assembled and frozen.            |
 | Seeded/no-known-defect corpus absent | 0 of about 8 and 0 of about 6                                                                 | False-positive and calibration evidence is missing.        |
 | Adjudicator availability             | Only the operator is a human author; no second human identified                               | No PASS; at best INCONCLUSIVE.                             |
 | Reproducibility floor                | 15 contributing plans per arm; at the 15-plan floor one empty plan makes the arm INCONCLUSIVE | Small corpora are likely to fail the gate.                 |
 | Kappa floor                          | Fewer than 20 double-adjudicated findings cannot PASS                                         | Low finding volume makes the result INCONCLUSIVE.          |
 | Token reporting                      | No-usage provider cannot pass the requested-model check                                       | Cost and model-attribution criteria are INCONCLUSIVE.      |
 | Model mismatch                       | Prompt path can serve an environment- or `.env`-overridden model                              | A single un-replaced mismatch invalidates the comparison.  |
-| Linux evidence pending               | No provider/execution report available                                                        | Pilot readiness is unconfirmed.                            |
+| Workstream B runtime items           | Report merged; EP-15 UNVERIFIED, EP-16 PARTIAL                                                                                                                                     | Provider-side concurrency and observed inspection remain unconfirmed. |
 | Small sample                         | About 15 defects gives wide intervals                                                         | Only large effects are detectable.                         |
 
 INCONCLUSIVE is a valid experimental outcome. It is not evidence of improvement, and it
@@ -343,7 +364,9 @@ does not authorize the conditional PRD.
 
 ## 7. Pilot readiness
 
-**Status: NOT READY.** The four-call pilot is prepared but not authorized or executed.
+**Status: NOT READY (at the time of writing).** The four-call pilot was prepared but not
+authorized or executed when this section was written. §10 records the two pilots that later
+ran under separate authorization. The full experiment and Arm D remain not ready.
 
 ### 7.1 Prerequisites
 
@@ -381,13 +404,16 @@ the affected pilot check fail; it is not a review finding.
 
 ### 7.3 Blockers
 
-- No operator authorization for the pilot.
-- No Linux provider/execution report.
+- No operator authorization for the full experiment (the four-call pilots were separately
+  authorized later; §10).
+- Workstream B report received (PR #574); EP-15 remains UNVERIFIED.
 - Pilot plans are not frozen.
-- No requested-model or provider-side identity evidence for the chosen provider.
+- No provider-side model identity evidence for the chosen provider; attribution is
+  client-side only (EP-02).
 
-Do not execute the pilot until these are resolved. Do not execute the full experiment or
-Arm D.
+The instruction to wait governed the state at the time of writing. The four-call pilots
+later ran under separate authorization (§10); the full experiment and Arm D remain
+unauthorized.
 
 ## 8. Required operator decisions
 
@@ -405,13 +431,23 @@ Arm D.
    before freezing.
 6. **Protocol:** confirm that no threshold changes are approved. Any change is a new
    protocol revision and invalidates the affected comparison.
-7. **Workstream B:** decide whether to wait for the Linux report or proceed with
-   Workstream B explicitly pending.
+7. **Workstream B (intake resolved; runtime item open):** the report is merged as PR #574.
+   Decide whether to authorize the minimum EP-15 concurrency/latency check, or to accept
+   that arm C's latency is first measured in the full run. See decision 9 in the operator
+   decision package.
 8. **Freeze:** authorize the corpus owner to record `FROZEN`, or keep the manifest
    `NOT FROZEN`. The current manifest is not frozen.
 9. **Held candidates:** decide whether ACP-ZED and LLM02 can enter the corpus at all.
    Both have verified defect evidence but no uncontaminated pre-defect artifact in git;
    they are held pending corpus-owner review and count toward no floor.
+
+The authoritative nine-decision matrix is
+[OPERATOR-DECISION-PACKAGE.md](independent-design-review-corpus/OPERATOR-DECISION-PACKAGE.md).
+This list records the feasibility-time framing; it does not replace the matrix. The mapping
+is: item 1 → decision 1; item 2 → decisions 3 and 4; item 3 → decisions 5 and 6; item 4 →
+decisions 7 and 9 (the pilots ran under separate authorization and remain excluded); item 5
+→ decisions 2 and 3; item 6 → decision 7; item 7 → decision 9; item 8 → decision 8; item 9 →
+decision 2.
 
 ## 9. Final feasibility verdict
 
@@ -421,9 +457,9 @@ Arm D.
   candidates, and 2 held candidates, for 10 proposed eligible plans. The strict shortfall
   is 15 plans and 15 determinable defects; if all 10 partial candidates are frozen
   determinable, the shortfall is still 5 and 5. The seeded and no-known-defect corpus is not
-  constructed; no two independent human adjudicators are identified; Workstream B is
-  pending; and the four-call pilot was unauthorized at this verdict (see §10 for the later
-  authorized pilots).
+  constructed; no two independent human adjudicators are identified; Workstream B evidence
+  is merged but leaves EP-15 UNVERIFIED and several requirements PARTIAL; and the four-call
+  pilot was unauthorized at this verdict (see §10 for the later authorized pilots).
 - **Not BLOCKED:** the missing work is actionable. The repository contains evidence
   pointers for corpus assembly, and the operator can designate adjudicators and authorize
   a pilot.
@@ -431,7 +467,8 @@ Arm D.
   experiment was run, no inference was spent, and no threshold was changed.
 
 The next step is corpus assembly and operator designation of two independent human
-adjudicators, followed by the Linux evidence intake. See §10 for the later pilot addendum.
+adjudicators, followed by the Workstream B residual items (EP-15) and a freeze decision.
+See §10 for the later pilot addendum and §11 for the post-Workstream B addendum.
 
 ## 10. Post-feasibility pilot addendum
 
@@ -457,4 +494,29 @@ rewriting the corpus findings or counts.
   frozen, the seeded and no-known-defect cases are not constructed, no two independent
   human adjudicators are named, thresholds are not approved, and the concurrent-run and
   parallel-latency checks remain. The pilots exercised four calls and do not replace the
-  pending Linux provider/execution report.
+  provider/execution report, which has since merged (see §11).
+
+## 11. Post-Workstream B addendum (current)
+
+This section is later than the pilot addendum. It records the merged Workstream B evidence
+without rewriting the corpus findings, counts or pilot results above.
+
+- **Merge.** PR #574 (merge `a10edc28`) merged the execution-path verification and the
+  `promptRunID` collision fix. The report is
+  [INDEPENDENT-DESIGN-REVIEW-EXECUTION-PATH-VERIFICATION.md](INDEPENDENT-DESIGN-REVIEW-EXECUTION-PATH-VERIFICATION.md).
+- **Execution path.** The report records the infrastructure as READY for controlled
+  execution of arms A and B, including concurrent calls. EP-01, EP-03, EP-04, EP-05, EP-06,
+  EP-07, EP-08, EP-11, EP-13 and EP-14 are VERIFIED.
+- **Open items.** EP-15 (provider-side concurrency and parallel-batch latency) is
+  UNVERIFIED. EP-02, EP-09, EP-10, EP-12 and EP-16 are PARTIAL. The full mapping and the
+  freeze dependencies are in
+  [WORKSTREAM-B-RECONCILIATION.md](independent-design-review-corpus/WORKSTREAM-B-RECONCILIATION.md).
+- **One deviation.** The Workstream B report records one unintended real cloud call while
+  checking EP-13 (no plan or repository content, output not kept, call count unknown). It is
+  disclosed there and is not experiment or pilot data.
+- **Counts unchanged.** 0 strict proposed determinable, 10 proposed partial, 2
+  verified-defect holds, 3 unverified holds, 8 excluded. Shortfall 15/15 strict, or 5/5 if
+  all 10 partial candidates are independently frozen determinable.
+- **Verdict unchanged.** Corpus **NOT FROZEN**; full experiment **NOT YET READY**; H1/H2
+  **NOT ESTABLISHED**. Workstream B intake is complete, but its merge is not an approval of
+  any governance decision.

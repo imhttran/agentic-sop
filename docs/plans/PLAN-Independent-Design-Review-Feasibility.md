@@ -1,11 +1,11 @@
 # PLAN — Independent Design Review Experiment Feasibility
 
-**Status:** DRAFT — coordination record. Workstream A reviewed; Workstream B pending;
-not activated; no experiment or pilot inference authorized.
-**Baseline:** `origin/main` @ `ade6864a`.
-**Baseline note:** advances from `64101f9e` through `1b61db64` to `ade6864a` to include
-PRs #567–#571 and the readiness package. Candidate revisions remain pinned to the
-commits recorded in `candidates.json`.
+**Status:** DRAFT — coordination record. Workstream A reviewed; Workstream B merged
+(PR #574) with open runtime items; not activated; no experiment inference authorized.
+**Baseline:** `origin/main` @ `a10edc28`.
+**Baseline note:** advances from `64101f9e` through `1b61db64` and `ade6864a` to `a10edc28`
+to include PRs #567–#574 and the post-Workstream B reconciliation. Candidate revisions
+remain pinned to the commits recorded in `candidates.json`.
 **Authoritative protocol:**
 [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](../reports/EGM-GOLDFISH-REVIEW-ASSESSMENT.md).
 **Conditional contract:**
@@ -30,7 +30,9 @@ investigation. This plan does not execute the experiment.
 - **Workstream C — integration (SOP-owned).** The feasibility report, validation, and PR.
 
 Claude Code owns the technical investigation, not SOP lifecycle transitions. Workstream
-B is not complete until its evidence is received and independently checked.
+B evidence was received and independently checked and merged as PR #574; its open runtime
+items (EP-15 UNVERIFIED; several PARTIAL) are recorded in the reconciliation, not resolved
+by the merge.
 
 ## Non-goals
 
@@ -142,8 +144,10 @@ implementation and the assessment. Record agreement, disagreement, and missing e
 - A disagreement is resolved with repository evidence, not assumption.
 - Workstream B remains pending when the report is unavailable.
 
-**State:** Pending. No Linux report file, branch, or PR was available during this
-inventory.
+**State:** Complete with open runtime items. The execution-path verification merged as
+PR #574 (merge `a10edc28`); EP-15 remains UNVERIFIED and EP-16, EP-02, EP-09, EP-10 and
+EP-12 are PARTIAL. The mapping is in
+[WORKSTREAM-B-RECONCILIATION.md](../reports/independent-design-review-corpus/WORKSTREAM-B-RECONCILIATION.md).
 
 ### FEAS-C1 — Integrated feasibility report
 
@@ -156,8 +160,9 @@ required sections and a verdict of READY, NOT YET READY, or BLOCKED.
 - The feasibility verdict is not presented as the experiment outcome.
 - The report links the assessment and PRD.
 
-**State:** Complete with unverified sections. The report records Workstream B as pending
-and §§4, 7 and 8 as unverified or awaiting operator decisions. The readiness package links
+**State:** Complete with unverified sections. The report records Workstream B as merged
+with open runtime items and §§4, 7, 8 and 11 as reconciling or awaiting operator
+decisions. The readiness package links
 the [candidate manifest](../reports/independent-design-review-corpus/candidates.json),
 [candidate verification](../reports/independent-design-review-corpus/CANDIDATE-VERIFICATION.md),
 [readiness summary](../reports/independent-design-review-corpus/READINESS.md),
@@ -177,8 +182,9 @@ against `main`. Do not merge.
 - The applicable SOP validation and review gates are recorded.
 - One PR is open; no merge is performed.
 
-**State:** In progress. The readiness package PR is pending; no merge is authorized by
-this record.
+**State:** In progress. The readiness package merged as PR #572 and the Workstream B
+verification as PR #574. The post-Workstream B reconciliation PR is the current deliverable;
+no merge is authorized by this record.
 
 ## Dependencies and status
 
@@ -192,9 +198,9 @@ was activated.
 | FEAS-A3 | SOP         | Not met                           | `READINESS.md` §4                 |
 | FEAS-A4 | SOP         | Blocked                           | Report §3                         |
 | FEAS-A5 | SOP         | Reviewed                          | Report §§5–7                      |
-| FEAS-B1 | Claude Code | Pending                           | Report §4                         |
+| FEAS-B1 | Claude Code | Complete with open runtime items  | Report §4; reconciliation            |
 | FEAS-C1 | SOP         | Complete with unverified sections | Readiness package; report; amendment |
-| FEAS-C2 | SOP         | In progress                       | Readiness PR pending              |
+| FEAS-C2 | SOP         | In progress                       | Reconciliation PR pending            |
 
 ## Read-only guarantee
 

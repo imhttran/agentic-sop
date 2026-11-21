@@ -15,6 +15,11 @@ branch). The code paths read are unchanged from the
 `1e8cb005` baseline the assessment used (no change under `internal/`, `cmd/` or `skills/`
 across those commits).
 
+**Merge status (post-merge note):** this report was merged as PR #574 (merge `a10edc28`,
+branch head `b784f2dc`). The `promptRunID` fix and its regression tests are on `main`.
+Everything else in this document is the point-in-time record it was when written and is
+not rewritten.
+
 ## 1. Verdict
 
 **Execution infrastructure: READY for controlled execution of arms A and B, including
@@ -23,7 +28,8 @@ concurrent calls (arm C and the B×3 control).** The verification found that con
 (EP-07); that is **fixed in this change** (`promptRunID` now reserves its directory
 atomically) and covered by regression tests and a cross-process check. The protocol's rule of
 one project per concurrent call stays, for request-file isolation and leakage control. Two
-runtime questions stay UNVERIFIED without real inference (§6).
+runtime questions cannot be fully settled without real inference: EP-15 is UNVERIFIED and
+EP-16 is PARTIAL (§6).
 
 This verdict is about the execution path only. It is not corpus readiness, adjudicator
 readiness, or experiment readiness, and it does not equal PASS, FAIL or INCONCLUSIVE.
@@ -59,24 +65,24 @@ Reproduce: `go test ./internal/cli -run 'TestVerify|TestPromptRunID|TestConcurre
 
 ## 4. Summary
 
-| ID    | Requirement                                                   | Result                          |
-| ----- | ------------------------------------------------------------- | ------------------------------- |
-| EP-01 | Provider and model selected as configured                     | VERIFIED (with a routing hazard, EP-13) |
-| EP-02 | Requested versus provider-attested model identity             | PARTIAL                         |
-| EP-03 | Token reporting and `unreported_calls`                        | VERIFIED                        |
-| EP-04 | Harness selection and its effect                              | VERIFIED                        |
-| EP-05 | Repository-tool availability and read-only inspection         | VERIFIED                        |
-| EP-06 | Run-directory creation and identity                           | VERIFIED (allocation fixed)     |
-| EP-07 | Concurrent-run behavior in one project                        | FIXED (defect first VERIFIED)   |
-| EP-08 | Environment and credential isolation                          | VERIFIED                        |
-| EP-09 | Failure handling and retry                                    | PARTIAL                         |
-| EP-10 | Evidence persistence                                          | PARTIAL                         |
-| EP-11 | Output shape across harnesses                                 | VERIFIED difference             |
-| EP-12 | Timing                                                        | PARTIAL                         |
-| EP-13 | `--model-class` without a `models:` block                     | VERIFIED, as specified          |
-| EP-14 | Cache off and JEV off by default                              | VERIFIED                        |
-| EP-15 | Provider-side concurrency and parallel-batch latency          | UNVERIFIED                      |
-| EP-16 | Native-agent inspection behavior of real models               | PARTIAL                         |
+| ID    | Requirement                                           | Result                                  |
+| ----- | ----------------------------------------------------- | --------------------------------------- |
+| EP-01 | Provider and model selected as configured             | VERIFIED (with a routing hazard, EP-13) |
+| EP-02 | Requested versus provider-attested model identity     | PARTIAL                                 |
+| EP-03 | Token reporting and `unreported_calls`                | VERIFIED                                |
+| EP-04 | Harness selection and its effect                      | VERIFIED                                |
+| EP-05 | Repository-tool availability and read-only inspection | VERIFIED                                |
+| EP-06 | Run-directory creation and identity                   | VERIFIED (allocation fixed)             |
+| EP-07 | Concurrent-run behavior in one project                | FIXED (defect first VERIFIED)           |
+| EP-08 | Environment and credential isolation                  | VERIFIED                                |
+| EP-09 | Failure handling and retry                            | PARTIAL                                 |
+| EP-10 | Evidence persistence                                  | PARTIAL                                 |
+| EP-11 | Output shape across harnesses                         | VERIFIED difference                     |
+| EP-12 | Timing                                                | PARTIAL                                 |
+| EP-13 | `--model-class` without a `models:` block             | VERIFIED, as specified                  |
+| EP-14 | Cache off and JEV off by default                      | VERIFIED                                |
+| EP-15 | Provider-side concurrency and parallel-batch latency  | UNVERIFIED                              |
+| EP-16 | Native-agent inspection behavior of real models       | PARTIAL                                 |
 
 ## 5. Requirements
 
@@ -134,13 +140,13 @@ Ids are unique within one project only; identical ids in different projects are 
 Result VERIFIED.
 
 **EP-07 Concurrent runs in one project.** Defect first observed, then fixed.
-*Before the fix* (code at `main` `1b61db64`): `promptRunID` only checked that a directory did
+_Before the fix_ (code at `main` `1b61db64`): `promptRunID` only checked that a directory did
 not exist, `runpkg.New` (`MkdirAll`) did not fail when it did, and `sop prompt` takes no project
 lock. Eight simultaneous in-process prompts left **1 run directory and 1 surviving result in
 19 of 20 trials**; **4 parallel `sop` processes in one project against a synthetic local server
 left 1 run directory and the same `work_item_id` in all 4 stdout results in 5 of 5 trials**
 (each process still printed its own result on stdout; the on-disk run artifacts collided).
-*After the fix* (this change): `TestPromptRunIDIsUniqueUnderConcurrency` (32 simultaneous ids,
+_After the fix_ (this change): `TestPromptRunIDIsUniqueUnderConcurrency` (32 simultaneous ids,
 all distinct) and `TestConcurrentPromptsInOneProjectKeepSeparateRuns` (8 simultaneous prompts,
 8 run directories, 8 distinct results) pass, including repeated with the race detector; a `sop`
 binary built from this change, with the same 4-parallel-process trial against the synthetic
@@ -235,9 +241,10 @@ model ever inspects is model-dependent and observed only in these four runs.
 ## 7. Outstanding decisions
 
 1. **Concurrency/latency check (EP-15).** Authorize the minimum real-inference check above, or
-   accept that arm C's latency is first measured in the full run.
-2. **Merge.** Whether to merge this change, which includes one production fix
-   (`promptRunID`, `internal/cli/prompt.go`).
+   accept that arm C's latency is first measured in the full run. This remains open.
+2. **Merge (resolved).** This change, including the one production fix (`promptRunID`,
+   `internal/cli/prompt.go`), was merged as PR #574 (merge `a10edc28`). The merge is not
+   approval of any governance decision, and it does not resolve EP-15.
 
 ## 8. Verification conduct and one deviation
 
