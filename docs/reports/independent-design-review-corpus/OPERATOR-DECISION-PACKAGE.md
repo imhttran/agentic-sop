@@ -67,7 +67,8 @@ of the six leads. Do not count a lead until it is extracted and classified.
 
 - Accept the held candidates: rejected on evidence; both contain the answer or lack a
   pre-defect revision.
-- Count partials toward the plan floor: changes eligibility and requires the amendment.
+- Apply the amendment: a plan counts only when the corpus owner independently determines
+  at least one defect; a merely partial defect still counts toward neither floor.
 - Expand only with historical leads: slower, but preserves the "real defect" property.
 - Use seeded cases to reach the floor: faster, but changes the corpus mix and must be
   reported separately.
@@ -90,14 +91,19 @@ denominator.
 
 **Alternatives and trade-offs.**
 
-- Approve the amendment: raises the plan count only if the corpus owner independently
-  supports each partial; does not raise the defect count.
-- Count partials toward both floors: rejected; it would dilute recall.
+- Approve the amendment: it does not admit a partial defect as partial. It changes the
+  plan-floor test to require a determinable defect, so both counts rise only if the corpus
+  owner independently determines defects; the amendment's §5 shows 10/10 under that
+  condition.
+- Count a partial defect as determinable without independent support: rejected; it would
+  dilute recall.
 - Add seeded cases: raises counts without changing historical eligibility, but must be
   reported as a separate stratum.
 
-**Effect on experiment validity.** A relaxed rule can make the corpus look sufficient while
-the detectable-defect denominator stays too small, producing an underpowered PASS.
+**Effect on experiment validity.** The amendment aligns the plan floor with the defect
+floor. It cannot raise either count without an independently recorded determination, so it
+does not by itself make the experiment powered. Treating a partial defect as determinable
+without that support would dilute recall.
 
 **Consequence of deferral.** The strict reading stands and the shortfall remains 15/15.
 
@@ -113,13 +119,15 @@ support for each partial candidate, then decide with the actual counts in hand.
 
 **Alternatives and trade-offs.**
 
-- Approve now: unblocks a plan-floor interpretation, but risks counting plans whose defects
-  cannot enter the denominator.
+- Approve now: unblocks the plan-floor interpretation. It does not by itself raise either
+  count; every counted plan still needs an independently determined defect, and the
+  amendment's §5 shows 10/10 only under that condition. Approving before those
+  determinations exist risks recording determinations the corpus owner cannot support.
 - Reject now: preserves the strict reading and may force a larger corpus.
-- Revise: for example, allow partials only in a separately reported stratum.
+- Revise: for example, use a separately reported stratum.
 
-**Effect on experiment validity.** The amendment cannot change the defect floor, so it cannot
-by itself make the experiment powered.
+**Effect on experiment validity.** The amendment cannot change the defect floor and cannot by
+itself raise the plan count, so it cannot by itself make the experiment powered.
 
 **Consequence of deferral.** The conservative reading applies.
 
