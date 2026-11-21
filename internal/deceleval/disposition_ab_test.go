@@ -1,8 +1,10 @@
 package deceleval
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -285,5 +287,39 @@ func TestABRunBatchStopsDispatchingOnCancel(t *testing.T) {
 	}
 	if sum.Attempted != len(attempts) {
 		t.Fatalf("attempted = %d, want %d", sum.Attempted, len(attempts))
+	}
+}
+
+type abFailWriter struct{ err error }
+
+func (w abFailWriter) Write([]byte) (int, error) { return 0, w.err }
+
+// TestABAttemptLogSurfacesWriteFailure proves a failed evidence write is
+// retained rather than discarded, so the runner cannot publish a successful
+// completion summary over missing JSONL evidence.
+func TestABAttemptLogSurfacesWriteFailure(t *testing.T) {
+	log := NewABAttemptLog(abFailWriter{err: errors.New("disk full")})
+	log.Write(ABAttempt{CaseID: "a"})
+	if log.Err() == nil || !strings.Contains(log.Err().Error(), "disk full") {
+		t.Fatalf("write error = %v, want disk full", log.Err())
+	}
+	// A later write must not replace the first error.
+	log.Write(ABAttempt{CaseID: "b"})
+	if !strings.Contains(log.Err().Error(), "disk full") {
+		t.Fatalf("first error was replaced: %v", log.Err())
+	}
+}
+
+// TestABAttemptLogWritesEvidence proves the healthy path writes one JSON object
+// per attempt and retains no error.
+func TestABAttemptLogWritesEvidence(t *testing.T) {
+	var buf bytes.Buffer
+	log := NewABAttemptLog(&buf)
+	log.Write(ABAttempt{CaseID: "case-1", ExpectedAction: "AUTO_FIX"})
+	if err := log.Err(); err != nil {
+		t.Fatalf("unexpected write error: %v", err)
+	}
+	if !strings.Contains(buf.String(), `"case_id":"case-1"`) {
+		t.Fatalf("evidence not written: %s", buf.String())
 	}
 }

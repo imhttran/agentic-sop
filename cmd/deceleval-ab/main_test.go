@@ -2,8 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/deceleval"
@@ -98,5 +101,36 @@ func TestWarmupFailure(t *testing.T) {
 		if (err != nil) != c.want {
 			t.Fatalf("category %q: got err=%v, want failure=%v", c.cat, err, c.want)
 		}
+	}
+}
+
+type abFailCloser struct{ err error }
+
+func (c abFailCloser) Close() error { return c.err }
+
+type abOKCloser struct{}
+
+func (abOKCloser) Close() error { return nil }
+
+type abFailWriterForSeal struct{ err error }
+
+func (w abFailWriterForSeal) Write([]byte) (int, error) { return 0, w.err }
+
+// TestSealABEvidenceRefusesFailedEvidence proves the runner cannot publish a
+// completion summary when the attempt log failed to write or close.
+func TestSealABEvidenceRefusesFailedEvidence(t *testing.T) {
+	writeFail := deceleval.NewABAttemptLog(abFailWriterForSeal{err: errors.New("no space")})
+	writeFail.Write(deceleval.ABAttempt{CaseID: "x"})
+	if err := sealABEvidence(writeFail, abOKCloser{}, "attempts.jsonl"); err == nil || !strings.Contains(err.Error(), "no space") {
+		t.Fatalf("write failure not surfaced: %v", err)
+	}
+
+	okLog := deceleval.NewABAttemptLog(io.Discard)
+	if err := sealABEvidence(okLog, abFailCloser{err: errors.New("close failed")}, "attempts.jsonl"); err == nil || !strings.Contains(err.Error(), "close failed") {
+		t.Fatalf("close failure not surfaced: %v", err)
+	}
+
+	if err := sealABEvidence(okLog, abOKCloser{}, "attempts.jsonl"); err != nil {
+		t.Fatalf("healthy evidence was rejected: %v", err)
 	}
 }

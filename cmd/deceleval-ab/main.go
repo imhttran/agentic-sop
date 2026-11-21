@@ -22,12 +22,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/deceleval"
@@ -179,21 +179,8 @@ func runMode(ctx context.Context, mode, split, dir string, corpus *deceleval.ABC
 	if err != nil {
 		return err
 	}
-	enc := json.NewEncoder(attemptsFile)
-	var (
-		writeMu  sync.Mutex
-		writeErr error
-	)
-	writeAttempt := func(a deceleval.ABAttempt) {
-		writeMu.Lock()
-		defer writeMu.Unlock()
-		if writeErr != nil {
-			return
-		}
-		if err := enc.Encode(a); err != nil {
-			writeErr = err
-		}
-	}
+	attemptsLog := deceleval.NewABAttemptLog(attemptsFile)
+	writeAttempt := attemptsLog.Write
 
 	meta := deceleval.ABRunMeta{
 		Mode:             mode,
@@ -276,12 +263,8 @@ func runMode(ctx context.Context, mode, split, dir string, corpus *deceleval.ABC
 
 	// Never publish a "complete" summary whose per-case JSONL evidence was not
 	// persisted. A write or close failure is an error, not a silent success.
-	if writeErr != nil {
-		_ = attemptsFile.Close()
-		return fmt.Errorf("write attempts %s: %w", attemptsPath, writeErr)
-	}
-	if err := attemptsFile.Close(); err != nil {
-		return fmt.Errorf("close attempts %s: %w", attemptsPath, err)
+	if err := sealABEvidence(attemptsLog, attemptsFile, attemptsPath); err != nil {
+		return err
 	}
 
 	meta.ModelStatus = statuses
@@ -515,6 +498,20 @@ func printEndpoint(info deceleval.ABEndpointInfo) {
 	for _, m := range info.Models {
 		fmt.Printf("  - %s (type=%s, max_model_len=%d, owned_by=%s)\n", m.ID, m.ModelType, m.MaxModelLen, m.OwnedBy)
 	}
+}
+
+// sealABEvidence refuses to publish a run whose per-case evidence was not
+// persisted. It reports the first write failure (and still closes the file), or
+// a close failure, so the caller cannot write a successful completion summary.
+func sealABEvidence(log *deceleval.ABAttemptLog, f io.Closer, path string) error {
+	if err := log.Err(); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("write attempts %s: %w", path, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close attempts %s: %w", path, err)
+	}
+	return nil
 }
 
 func writeJSON(path string, v any) error {

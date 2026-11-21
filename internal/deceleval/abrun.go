@@ -15,6 +15,33 @@ import (
 	"time"
 )
 
+// ABAttemptLog is the benchmark's per-case evidence sink. It writes one JSON
+// object per attempt and retains the first write error, so a failed write can
+// never be mistaken for a complete artifact.
+type ABAttemptLog struct {
+	enc *json.Encoder
+	err error
+}
+
+// NewABAttemptLog wraps w as an attempt log.
+func NewABAttemptLog(w io.Writer) *ABAttemptLog {
+	return &ABAttemptLog{enc: json.NewEncoder(w)}
+}
+
+// Write appends one attempt. After the first write failure, later attempts are
+// dropped and the first error is retained.
+func (l *ABAttemptLog) Write(a ABAttempt) {
+	if l.err != nil {
+		return
+	}
+	if err := l.enc.Encode(a); err != nil {
+		l.err = err
+	}
+}
+
+// Err reports the first write failure, or nil.
+func (l *ABAttemptLog) Err() error { return l.err }
+
 // RunABBatch runs the cases in corpus order with a bounded worker pool. The
 // measured batch wall time starts before the workers are created and stops after
 // the last attempt is collected. Every case produces exactly one attempt record;
