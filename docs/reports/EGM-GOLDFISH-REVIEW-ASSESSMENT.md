@@ -272,8 +272,12 @@ vendored. If their text is quoted, it is credited (Apache-2.0).
   arms' request files and other runs' outputs live outside the project. After checkout a
   fixed `.agent-sdlc/config.yaml` replaces the committed one, its sha256 is recorded in
   the manifest, and no `.env` is present, so provider, harness and model configuration
-  are identical across plans. Where the provider is a cloud service, the operator
-  records that decision before the first run.
+  are identical across plans. The overlay also defines `models.small`, `models.medium` and
+  `models.large`. `--model-class` with no `models:` block routes to the built-in class table
+  of [MODEL-ROUTING.md](../specs/MODEL-ROUTING.md) (provider `ollama`; the `medium` default is
+  a cloud model) and ignores `agent.provider`, so an undefined class can send content off the
+  machine. Where the provider is a cloud service, the operator records that decision before
+  the first run.
 - **Latency timing.** The A timer starts immediately before the single invocation and
   stops at process exit. The C timer starts immediately before the three parallel
   invocations and stops when all three exit. Request-file reads, agent construction and
@@ -547,7 +551,7 @@ A second round of clarifications, made on 2026-11-21 after the merge of #565 and
 any run, comes from a static feasibility read of the code at `64101f9e`: the
 requested-model check and the unreported-usage rule (§1.2, §5.1, §6.1), the environment
 and project-isolation rules (§5.1), and the run-directory check for parallel batches
-(§5.1). They state how the existing validity conditions are measured. No threshold or
+(§5.1), and the rule that the overlay defines every model class (§5.1). They state how the existing validity conditions are measured. No threshold or
 outcome rule changed.
 
 ### 6.1 Validity conditions (checked first)

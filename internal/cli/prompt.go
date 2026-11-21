@@ -221,7 +221,11 @@ func runPrompt(args []string, stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 
-	wi, err := workitem.FromPrompt(promptRunID(dir), capability, text)
+	runID := promptRunID(dir)
+	// The id reserved its run directory. Remove an unused (still empty) reservation when
+	// the command fails before the run writes anything; os.Remove leaves a used one alone.
+	defer func() { _ = os.Remove(promptRunPath(dir, runID)) }()
+	wi, err := workitem.FromPrompt(runID, capability, text)
 	if err != nil {
 		fmt.Fprintf(stderr, "prompt: %v\n", err)
 		return exitUsage
@@ -336,22 +340,29 @@ func resolvePromptFile(dir, file string) (string, error) {
 	return absPath, nil
 }
 
-// promptRunID builds a run identity for a prompt. It is used only for run/report
-// organization: it never influences routing, policy, or capability. It is unique
-// within the run root, so two prompts in the same second never share a directory.
+// promptRunID builds a run identity for a prompt and reserves it by creating its run
+// directory. It is used only for run/report organization: it never influences routing,
+// policy, or capability. os.Mkdir fails when the directory exists, so the reservation is
+// atomic: two prompts started in the same second, from one process or several, never
+// share an id or a directory. If the run root cannot be created, the base id is returned
+// and the run reports the real error when it creates its own directory.
 func promptRunID(dir string) string {
 	base := "prompt-" + time.Now().UTC().Format("20060102-150405")
+	if err := os.MkdirAll(filepath.Dir(promptRunPath(dir, base)), 0o755); err != nil {
+		return base
+	}
 	id := base
-	for i := 2; runDirExists(dir, id); i++ {
+	for i := 2; ; i++ {
+		if err := os.Mkdir(promptRunPath(dir, id), 0o755); !os.IsExist(err) {
+			return id
+		}
 		id = fmt.Sprintf("%s-%d", base, i)
 	}
-	return id
 }
 
-// runDirExists reports whether a run directory already exists for id.
-func runDirExists(dir, id string) bool {
-	_, err := os.Stat(filepath.Join(dir, stateDirName, "runs", promptsDirName, id))
-	return err == nil
+// promptRunPath is the absolute run directory of a prompt run id.
+func promptRunPath(dir, id string) string {
+	return filepath.Join(dir, stateDirName, "runs", promptsDirName, id)
 }
 
 // runPromptReadOnly executes a read-only prompt: one bounded agent call, with the
