@@ -11,7 +11,10 @@ for its candidate revisions.
 **Candidate verification:** [CANDIDATE-VERIFICATION.md](CANDIDATE-VERIFICATION.md).
 **Preparation plan:** [CORPUS-PREPARATION-PLAN.md](CORPUS-PREPARATION-PLAN.md).
 **Operator decision package:** [OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md).
+**Decision record draft:** [OPERATOR-DECISION-RECORD-DRAFT.md](OPERATOR-DECISION-RECORD-DRAFT.md).
 **Freeze procedure:** [FREEZE-PROCEDURE.md](FREEZE-PROCEDURE.md).
+**Historical lead investigation:** [HISTORICAL-LEAD-INVESTIGATION.md](HISTORICAL-LEAD-INVESTIGATION.md).
+**Case construction specification:** [CASE-CONSTRUCTION-SPECIFICATION.md](CASE-CONSTRUCTION-SPECIFICATION.md).
 **Pilot evidence:** [INDEPENDENT-DESIGN-REVIEW-PILOT-RESULTS.md](../INDEPENDENT-DESIGN-REVIEW-PILOT-RESULTS.md).
 **Workstream B evidence:** [INDEPENDENT-DESIGN-REVIEW-EXECUTION-PATH-VERIFICATION.md](../INDEPENDENT-DESIGN-REVIEW-EXECUTION-PATH-VERIFICATION.md).
 **Workstream B reconciliation:** [WORKSTREAM-B-RECONCILIATION.md](WORKSTREAM-B-RECONCILIATION.md).
@@ -307,3 +310,187 @@ independently frozen determinable.
 **What changed since §8:** only the Workstream B intake status. No candidate was promoted,
 no case was constructed, no adjudicator was named, no threshold or eligibility rule was
 approved, and the corpus was not frozen.
+
+## 10. Workstream A lead investigation and feasibility (current)
+
+This section is later than §9 and records the lead investigation. It does not rewrite any
+earlier count. It promotes nothing, constructs nothing, and approves nothing.
+
+**Chronology (continued):**
+
+6. Lead investigation and preparatory extraction (this revision, Workstream A).
+
+### 10.1 Historical extraction result
+
+All six leads in [CORPUS-PREPARATION-PLAN.md](CORPUS-PREPARATION-PLAN.md) §2.2 are now
+resolved against git history. The evidence is in
+[HISTORICAL-LEAD-INVESTIGATION.md](HISTORICAL-LEAD-INVESTIGATION.md) and
+[lead-extraction.json](lead-extraction.json).
+
+| Lead | Result | Kind |
+| --- | --- | --- |
+| `IDR-L-001` | Clean pre-defect artifact extracted; the only later evidence is the artifact's own status line | Design defect, evidence-blocked |
+| `IDR-L-002` | Resolves to an implementation-only fixed defect and an open residual GAP | Not a design defect |
+| `IDR-L-003` | `PLAN-09…` @ `4fb3b8a3`; rebuild-scope acceptance criterion is unverifiable | Design defect, proposed strict |
+| `IDR-L-004` | `REVIEW.md` @ `5fce2b6a`; two defects (review-scope contamination, missing malformed-output boundary) | Design defects, proposed strict |
+| `IDR-L-005` | Backlog of production-readiness gaps; no single pre-defect design artifact | No artifact |
+| `IDR-L-006` | End-to-end assessment and backlog; no single pre-defect design artifact | No artifact |
+
+Two corrections are recorded, not applied:
+
+- `IDR-E-005` points at `ba7736d4`, a post-fix commit that added the requirements it is
+  cited as lacking. The exclusion stands as recorded; `5fce2b6a` is the correct pre-defect
+  revision and is the basis for `IDR-L-004`.
+- `IDR-L-002` does not become a design candidate because a later fix exists. The fixed
+  defect is a missing redaction call in an outbound notification path that Plan 08 did not
+  claim to cover.
+
+### 10.2 Counts
+
+The manifest is unchanged. The extraction is an increment, not a promotion.
+
+| Measure | Recorded (§9) | After extraction (proposed, uncounted) |
+| --- | --- | --- |
+| Manifest entries | 23 | 23 |
+| Strict proposed determinable | 0 | 2 plans / 3 defects (`IDR-L-003`, `IDR-L-004`) |
+| Partially determinable | 10 | 10 |
+| Verified-defect holds | 2 | 2 |
+| Unverified holds | 3 | 3 |
+| Excluded | 8 | 8 |
+| Independently adjudicated determinable | 0 | **0** |
+| Seeded / no-known-defect constructed | 0 / 0 | 0 / 0 |
+
+The two proposed-strict plans and three defects are **not counted** toward any floor.
+The corpus owner records the classification under decisions 2 and 3. A corpus-owner
+determinability record is not an independent adjudication: adjudicator-confirmed
+determinability remains **0**.
+
+### 10.3 Does the seeded set count toward the floor?
+
+The protocol text does not settle this, and this section does **not** resolve it.
+
+- §5.3 lists a historical target of 12–15, a seeded set of about 8, and a no-known-defect
+  set of about 6, then says: "Minimum to run: 15 determinable known defects … across at
+  least 15 plans with known defects; **the no-known-defect set is additional and does not
+  count toward this floor**." Naming only the no-known-defect set as additional admits a
+  reading in which the **seeded** set *does* count.
+- The preparation plan's gap table and [FREEZE-PROCEDURE.md](FREEZE-PROCEDURE.md) §8 treat
+  the seeded set as a **separate** floor. That is the conservative reading this package has
+  applied.
+
+Both arithmetics are reported below. Neither is used to declare the corpus ready, and no
+threshold is changed. Which reading is in force is a decision for the corpus owner and
+operator (decisions 2 and 3), recorded verbatim.
+
+### 10.4 Scenario A — strict protocol
+
+Only independently supported, strictly determinable defects count. Read as: the corpus
+owner records a determinability judgment with a one-line basis for each defect.
+
+| Case | Historical plans | Historical defects | + 8 seeded (if they count) | Shortfall vs 15/15 |
+| --- | --- | --- | --- | --- |
+| A1 — as recorded, nothing further recorded | 0 | 0 | 8 / 8 | 15 / 15 (seeded separate) or 7 / 7 |
+| A2 — the two new proposals recorded strict | 2 | 3 | 10 / 11 | 13 / 12 (seeded separate) or 5 / 4 |
+
+Under every cell, the historical strict corpus is far below 15 plans and 15 defects. The
+repository cannot supply 15 strict historical design plans from its own defect history
+(§4 and §10.1).
+
+### 10.5 Scenario B — proposed amendment
+
+[PROPOSED-PROTOCOL-AMENDMENT.md](PROPOSED-PROTOCOL-AMENDMENT.md) is not approved. It lets a
+plan count toward the plan floor only when it carries at least one **determinable** known
+defect. It does not count a partial or hindsight-only defect toward either floor. Its effect
+is therefore conditional on the corpus owner independently determining the defects.
+
+| Case | Historical plans | Historical defects | + 8 seeded (if they count) | Shortfall vs 15/15 |
+| --- | --- | --- | --- | --- |
+| B1 — no partial candidate supported | 2 | 3 | 10 / 11 | 13 / 12 (seeded separate) or 5 / 4 |
+| B2 — all 10 partial candidates independently determined and the two new proposals recorded | 12 | 13 | 20 / 21 | 3 / 2 (seeded separate) or **floor met in arithmetic only** |
+
+The amendment's own §5 table reports 10 plans / 10 defects with a 5/5 shortfall; it
+predates the two new leads, which add two plans and three defects. Even the best case is
+short unless the seeded set counts, and the seeded set is **0 of about 8 constructed**, with
+no designated seeder and no sealed manifest.
+
+### 10.6 Remaining shortfall
+
+| Floor | Scenario A (as recorded) | Scenario A2 (two proposals recorded) | Scenario B2 (amendment, all partials supported) |
+| --- | --- | --- | --- |
+| 15 plans with known defects, seeded separate | 15 | 13 | 3 |
+| 15 determinable known defects, seeded separate | 15 | 12 | 2 |
+| About 8 seeded-defect cases | 8 | 8 | 8 |
+| About 6 no-known-defect cases | 6 | 6 | 6 |
+| 15 contributing plans per arm | 15 | 13 | 3 |
+
+If the seeded set counts, subtract 8 from each plan/defect shortfall, but the seeded set
+is unbuilt, so the operational shortfall is unchanged today.
+
+### 10.7 Required additional sources
+
+- **Strict historical plans.** Scenario A2 needs 13 more plans with strictly determinable
+  design defects and 12 more defects. The repository's remaining material is mostly
+  implementation-level or interaction-level, and the investigation found only two plausible
+  strict design artifacts in the six leads. New historical sources would have to come from
+  pre-fix revisions of normative specs with a later correcting commit, or from follow-ups
+  that name a pre-fix design artifact — the same test that excluded `IDR-L-002`,
+  `IDR-L-005`, and `IDR-L-006`.
+- **Partial determinations.** Scenario B2 needs the corpus owner to independently determine
+  all 10 partial candidates and record the basis. Without that support the conservative
+  reading applies and B2 collapses to B1.
+- **Seeded and control cases.** Eight seeded and six control cases, constructed under
+  [CASE-CONSTRUCTION-SPECIFICATION.md](CASE-CONSTRUCTION-SPECIFICATION.md), sealed outside
+  the reviewer project, and independently checked.
+
+### 10.8 Independent verification requirements
+
+- The corpus owner records each determinability judgment and its one-line basis; the
+  adjudicators do not select or freeze the corpus.
+- Two independent human adjudicators, distinct from each other, from the seeder, from the
+  corpus owner, and from the author of every case they adjudicate.
+- A second adjudicator covers the larger of 20 findings or a random 20% sample; kappa is
+  reported, and a PASS requires at least 20 double-adjudicated findings.
+- The seeder is independent of the adjudicators and may not adjudicate a case they wrote.
+- Each control has a recorded independent check; "no known defect" is not assumed.
+- Each run's reviewer-visible tree is pinned, hashed, and free of later evidence, answer
+  keys, and the sealed manifest.
+- A model that could have seen the case, or that has project-directory access, is recorded
+  as a contamination risk; keyword absence is not evidence of non-access.
+
+### 10.9 Effect on statistical validity
+
+- Below 15 determinable known defects or below 15 plans with known defects, **every recall
+  comparison is INCONCLUSIVE** (assessment §6.1), before the recall rules are applied.
+- Below 15 contributing plans per arm, that arm's reproducibility gate is **INCONCLUSIVE**
+  (§5.5).
+- A PASS additionally needs at least 20 double-adjudicated findings (§6.2); the current
+  corpus would produce none.
+- The plan is the unit of analysis and differences are paired by plan (§5.7). With about 15
+  defects the 90% cluster-bootstrap intervals are expected to be wide and to drive an
+  INCONCLUSIVE outcome; at 2, 12, or 13 plans they are wider still.
+- The H1 PASS rule needs at least 25% relative recall gain, at least 3 more confirmed
+  defects, a 90% interval lower bound above zero, and a median reproducibility of at least
+  70% (§6.2). A 12-plan / 13-defect corpus cannot be assumed to support that claim.
+- A seeded stratum that is reported separately cannot rescue a historical recall
+  comparison that is below its floor; if the seeded set counts, the operator must record
+  that reading before the freeze, not after seeing data.
+
+### 10.10 Verdict (unchanged)
+
+| Measure | Verdict |
+| --- | --- |
+| Corpus | **NOT FROZEN** |
+| Corpus-owner freeze readiness | **NOT READY** |
+| Historical strict floor | **NOT MET** (0 recorded; 2 plans / 3 defects proposed) |
+| Historical partial-inclusive floor | **NOT MET** (10 / 15, or 12 / 15 under the amendment best case) |
+| Seeded / no-known-defect | **NOT CONSTRUCTED** (0 / 8, 0 / 6) |
+| Independent seeder | **NOT DESIGNATED** |
+| Two independent human adjudicators | **NOT IDENTIFIED**; adjudicator-confirmed determinability is 0 |
+| Full experiment | **NOT YET READY** |
+| H1/H2 outcomes | **NOT ESTABLISHED** |
+
+**What changed since §9:** the six historical leads are resolved, two proposed-strict design
+candidates are extracted and uncounted, and the case-construction and decision-record
+scaffolding is prepared. No candidate was promoted, no case was constructed, no answer key
+exists, no adjudicator was named, no threshold or eligibility rule was approved, and the
+corpus was not frozen. The floors are not met and were not lowered.
