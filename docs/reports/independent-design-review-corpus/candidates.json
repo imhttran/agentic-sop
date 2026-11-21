@@ -104,18 +104,23 @@
       "id": "IDR-H-005",
       "inventory_source": "feasibility §2.2",
       "original_artifact": "docs/plans/PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.md",
-      "pre_fix_commit": "8d2bd3b6",
-      "artifact_sha256": "c24daefdfda1d5ab23cefe7d85241e7870c16db64ccf6bec2f4a41ac4d6041c7",
-      "permitted_references": ["docs/reports/owasp-llm/llm02-disclosure.md"],
+      "pre_fix_commit": "e5d45fc1",
+      "pre_fix_note": "e5d45fc1 is the plan revision before the LLM02 fix merge aa23217; the later disclosure report is not part of the reviewer input.",
+      "artifact_sha256": "92058d6dd8f78825a4318ed3fd417666897d0b6763b8cc8dc9406cfc80ed13ff",
+      "permitted_references": [
+        "internal/cli/redaction.go",
+        "internal/redact",
+        "docs/specs/SECURITY.md"
+      ],
       "later_evidence": [
         "docs/reports/owasp-llm/llm02-disclosure.md GAP-01, GAP-02, GAP-03."
       ],
       "defect_classification": "secret-exposure",
-      "defect_summary": "Acceptance-check logs, model-visible validation failures, and JSON-escaped Go test output exposed credential-shaped text; all three were fixed later.",
+      "defect_summary": "Acceptance-check logs, model-visible validation failures, and JSON-escaped Go test output exposed credential-shaped text; all three were fixed later. The pre-fix plan at e5d45fc1 precedes the fix merge aa23217.",
       "proposed_determinability": "partially-determinable",
       "proposed_inclusion": "include-with-review",
       "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
-      "outstanding_decision": "Corpus owner must confirm the pre-fix plan revision and whether the report's GAP entries are later evidence rather than the plan's own text.",
+      "outstanding_decision": "Corpus owner must confirm e5d45fc1 as the pre-fix revision and keep the disclosure report out of the reviewer input.",
       "evidence_state": "VERIFIED"
     },
     {

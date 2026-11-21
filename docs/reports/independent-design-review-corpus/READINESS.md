@@ -20,8 +20,11 @@ determinable design defect; four are verified gaps whose determinability is part
 | `IDR-H-001` | `docs/plans/PLAN-SOP-ACP-ZED.md` @ `e462deed`                                   | `docs/plans/ACP-EXECUTION-EXCLUSION-GAP.md`                                 | The ACP acceptance matrix claims the project lock protects CLI, MCP, and ACP equally; the lock is metadata-only and not held for execution. | **Determinable with referenced code.** |
 | `IDR-H-003` | `docs/plans/PLAN-SOP-RUN-ACCEPT-001.md` @ `56ff82ac`                            | `docs/reports/PLAN-STATUS-AUDIT-2026-11-04.md`                              | Six acceptance checks fail after the later acceptance-mapping contract.                                                                     | Partially determinable.                |
 | `IDR-H-004` | `docs/plans/PLAN-04-SOP-LLM04-Supply-Chain.md` @ `e55527f4`                     | The plan status and `llm04-supply-chain.md`.                                | Historical outcomes remain PARTIAL until re-execution under the new acceptance mapping.                                                     | Partially determinable.                |
-| `IDR-H-005` | `docs/plans/PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.md` @ `8d2bd3b6` | `docs/reports/owasp-llm/llm02-disclosure.md` GAP-01/02/03.                  | Credential-shaped text in acceptance logs, validation failures, and JSON-escaped test output.                                               | Partially determinable.                |
+| `IDR-H-005` | `docs/plans/PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.md` @ `e5d45fc1` | `docs/reports/owasp-llm/llm02-disclosure.md` GAP-01/02/03.                  | Credential-shaped text in acceptance logs, validation failures, and JSON-escaped test output.                                               | Partially determinable.                |
 | `IDR-H-006` | `docs/plans/PLAN-Security-Scanner-Addon.md` @ `1b611711`                        | `SECURITY-SCANNER-RESIDUAL-FINDINGS.md`, `SECURITY-DEPENDENCY-COVERAGE.md`. | Residual scanner findings and coverage gaps.                                                                                                | Partially determinable.                |
+
+The LLM02 candidate uses the pre-fix plan revision `e5d45fc1`, which precedes the fix
+merge `aa23217`; the later disclosure report is excluded from the reviewer input.
 
 The remaining three evidence-verified candidates in the feasibility report are not
 corpus inputs:
