@@ -15,6 +15,33 @@ import (
 	"time"
 )
 
+// ABAttemptLog is the benchmark's per-case evidence sink. It writes one JSON
+// object per attempt and retains the first write error, so a failed write can
+// never be mistaken for a complete artifact.
+type ABAttemptLog struct {
+	enc *json.Encoder
+	err error
+}
+
+// NewABAttemptLog wraps w as an attempt log.
+func NewABAttemptLog(w io.Writer) *ABAttemptLog {
+	return &ABAttemptLog{enc: json.NewEncoder(w)}
+}
+
+// Write appends one attempt. After the first write failure, later attempts are
+// dropped and the first error is retained.
+func (l *ABAttemptLog) Write(a ABAttempt) {
+	if l.err != nil {
+		return
+	}
+	if err := l.enc.Encode(a); err != nil {
+		l.err = err
+	}
+}
+
+// Err reports the first write failure, or nil.
+func (l *ABAttemptLog) Err() error { return l.err }
+
 // RunABBatch runs the cases in corpus order with a bounded worker pool. The
 // measured batch wall time starts before the workers are created and stops after
 // the last attempt is collected. Every case produces exactly one attempt record;
@@ -35,25 +62,53 @@ func RunABBatch(ctx context.Context, model, split string, cases []Scenario, conc
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for i := range jobs {
-				results <- result{idx: i, a: runOneAB(ctx, model, split, concurrency, cases[i], timeout, decide)}
+			for {
+				if ctx.Err() != nil {
+					return
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case i, ok := <-jobs:
+					if !ok {
+						return
+					}
+					results <- result{idx: i, a: runOneAB(ctx, model, split, concurrency, cases[i], timeout, decide)}
+				}
 			}
 		}()
 	}
 	go func() {
+		defer close(jobs)
 		for i := range cases {
-			jobs <- i
+			// A canceled batch stops dispatching. Sending the remaining cases
+			// with a canceled context would record near-zero cancellation
+			// failures and could make an interrupted batch look complete.
+			if ctx.Err() != nil {
+				return
+			}
+			select {
+			case jobs <- i:
+			case <-ctx.Done():
+				return
+			}
 		}
-		close(jobs)
+	}()
+	go func() {
 		wg.Wait()
 		close(results)
 	}()
-	attempts := make([]ABAttempt, len(cases))
+	var got []result
 	for r := range results {
-		attempts[r.idx] = r.a
+		got = append(got, r)
 		if onAttempt != nil {
 			onAttempt(r.a)
 		}
+	}
+	sort.Slice(got, func(i, j int) bool { return got[i].idx < got[j].idx })
+	attempts := make([]ABAttempt, 0, len(got))
+	for _, r := range got {
+		attempts = append(attempts, r.a)
 	}
 	return attempts, time.Since(start)
 }

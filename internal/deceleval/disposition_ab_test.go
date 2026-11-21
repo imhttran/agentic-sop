@@ -1,13 +1,16 @@
 package deceleval
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -252,5 +255,71 @@ func TestABEndpointDiscovery(t *testing.T) {
 	}
 	if len(info.Health) == 0 || !strings.Contains(string(info.Health), "healthy") {
 		t.Fatalf("health = %s", info.Health)
+	}
+}
+
+// TestABRunBatchStopsDispatchingOnCancel proves an interrupted batch stops
+// dispatching cases and reports the interrupted batch as incomplete, so a
+// canceled quick run cannot later satisfy the full-run smoke guard.
+func TestABRunBatchStopsDispatchingOnCancel(t *testing.T) {
+	cases := []Scenario{
+		{ID: "a", Split: ABSplitSmoke, Observable: "a", Expected: Expected{Action: AutoFix}},
+		{ID: "b", Split: ABSplitSmoke, Observable: "b", Expected: Expected{Action: Continue}},
+		{ID: "c", Split: ABSplitSmoke, Observable: "c", Expected: Expected{Action: Retry}},
+		{ID: "d", Split: ABSplitSmoke, Observable: "d", Expected: Expected{Action: Block}},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var calls atomic.Int32
+	decide := func(_ context.Context, s Scenario) ABObservation {
+		if calls.Add(1) == 1 {
+			cancel()
+		}
+		return ABObservation{SchemaValid: true, ActualAction: string(s.Expected.Action)}
+	}
+	attempts, _ := RunABBatch(ctx, "m", ABSplitSmoke, cases, 1, 5*time.Second, decide, nil)
+	if len(attempts) >= len(cases) {
+		t.Fatalf("attempts = %d, want fewer than %d after cancellation", len(attempts), len(cases))
+	}
+	sum := SummarizeAB(attempts, len(cases), time.Second)
+	if sum.Complete {
+		t.Fatalf("an interrupted batch must not be complete: %+v", sum)
+	}
+	if sum.Attempted != len(attempts) {
+		t.Fatalf("attempted = %d, want %d", sum.Attempted, len(attempts))
+	}
+}
+
+type abFailWriter struct{ err error }
+
+func (w abFailWriter) Write([]byte) (int, error) { return 0, w.err }
+
+// TestABAttemptLogSurfacesWriteFailure proves a failed evidence write is
+// retained rather than discarded, so the runner cannot publish a successful
+// completion summary over missing JSONL evidence.
+func TestABAttemptLogSurfacesWriteFailure(t *testing.T) {
+	log := NewABAttemptLog(abFailWriter{err: errors.New("disk full")})
+	log.Write(ABAttempt{CaseID: "a"})
+	if log.Err() == nil || !strings.Contains(log.Err().Error(), "disk full") {
+		t.Fatalf("write error = %v, want disk full", log.Err())
+	}
+	// A later write must not replace the first error.
+	log.Write(ABAttempt{CaseID: "b"})
+	if !strings.Contains(log.Err().Error(), "disk full") {
+		t.Fatalf("first error was replaced: %v", log.Err())
+	}
+}
+
+// TestABAttemptLogWritesEvidence proves the healthy path writes one JSON object
+// per attempt and retains no error.
+func TestABAttemptLogWritesEvidence(t *testing.T) {
+	var buf bytes.Buffer
+	log := NewABAttemptLog(&buf)
+	log.Write(ABAttempt{CaseID: "case-1", ExpectedAction: "AUTO_FIX"})
+	if err := log.Err(); err != nil {
+		t.Fatalf("unexpected write error: %v", err)
+	}
+	if !strings.Contains(buf.String(), `"case_id":"case-1"`) {
+		t.Fatalf("evidence not written: %s", buf.String())
 	}
 }
