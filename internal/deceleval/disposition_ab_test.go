@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -252,5 +253,37 @@ func TestABEndpointDiscovery(t *testing.T) {
 	}
 	if len(info.Health) == 0 || !strings.Contains(string(info.Health), "healthy") {
 		t.Fatalf("health = %s", info.Health)
+	}
+}
+
+// TestABRunBatchStopsDispatchingOnCancel proves an interrupted batch stops
+// dispatching cases and reports the interrupted batch as incomplete, so a
+// canceled quick run cannot later satisfy the full-run smoke guard.
+func TestABRunBatchStopsDispatchingOnCancel(t *testing.T) {
+	cases := []Scenario{
+		{ID: "a", Split: ABSplitSmoke, Observable: "a", Expected: Expected{Action: AutoFix}},
+		{ID: "b", Split: ABSplitSmoke, Observable: "b", Expected: Expected{Action: Continue}},
+		{ID: "c", Split: ABSplitSmoke, Observable: "c", Expected: Expected{Action: Retry}},
+		{ID: "d", Split: ABSplitSmoke, Observable: "d", Expected: Expected{Action: Block}},
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var calls atomic.Int32
+	decide := func(_ context.Context, s Scenario) ABObservation {
+		if calls.Add(1) == 1 {
+			cancel()
+		}
+		return ABObservation{SchemaValid: true, ActualAction: string(s.Expected.Action)}
+	}
+	attempts, _ := RunABBatch(ctx, "m", ABSplitSmoke, cases, 1, 5*time.Second, decide, nil)
+	if len(attempts) >= len(cases) {
+		t.Fatalf("attempts = %d, want fewer than %d after cancellation", len(attempts), len(cases))
+	}
+	sum := SummarizeAB(attempts, len(cases), time.Second)
+	if sum.Complete {
+		t.Fatalf("an interrupted batch must not be complete: %+v", sum)
+	}
+	if sum.Attempted != len(attempts) {
+		t.Fatalf("attempted = %d, want %d", sum.Attempted, len(attempts))
 	}
 }

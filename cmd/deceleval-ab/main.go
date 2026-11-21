@@ -179,13 +179,20 @@ func runMode(ctx context.Context, mode, split, dir string, corpus *deceleval.ABC
 	if err != nil {
 		return err
 	}
-	defer attemptsFile.Close()
 	enc := json.NewEncoder(attemptsFile)
-	var writeMu sync.Mutex
+	var (
+		writeMu  sync.Mutex
+		writeErr error
+	)
 	writeAttempt := func(a deceleval.ABAttempt) {
 		writeMu.Lock()
 		defer writeMu.Unlock()
-		_ = enc.Encode(a)
+		if writeErr != nil {
+			return
+		}
+		if err := enc.Encode(a); err != nil {
+			writeErr = err
+		}
 	}
 
 	meta := deceleval.ABRunMeta{
@@ -265,6 +272,16 @@ func runMode(ctx context.Context, mode, split, dir string, corpus *deceleval.ABC
 		if interrupted {
 			break
 		}
+	}
+
+	// Never publish a "complete" summary whose per-case JSONL evidence was not
+	// persisted. A write or close failure is an error, not a silent success.
+	if writeErr != nil {
+		_ = attemptsFile.Close()
+		return fmt.Errorf("write attempts %s: %w", attemptsPath, writeErr)
+	}
+	if err := attemptsFile.Close(); err != nil {
+		return fmt.Errorf("close attempts %s: %w", attemptsPath, err)
 	}
 
 	meta.ModelStatus = statuses

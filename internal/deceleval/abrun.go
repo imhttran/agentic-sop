@@ -35,25 +35,53 @@ func RunABBatch(ctx context.Context, model, split string, cases []Scenario, conc
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for i := range jobs {
-				results <- result{idx: i, a: runOneAB(ctx, model, split, concurrency, cases[i], timeout, decide)}
+			for {
+				if ctx.Err() != nil {
+					return
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case i, ok := <-jobs:
+					if !ok {
+						return
+					}
+					results <- result{idx: i, a: runOneAB(ctx, model, split, concurrency, cases[i], timeout, decide)}
+				}
 			}
 		}()
 	}
 	go func() {
+		defer close(jobs)
 		for i := range cases {
-			jobs <- i
+			// A canceled batch stops dispatching. Sending the remaining cases
+			// with a canceled context would record near-zero cancellation
+			// failures and could make an interrupted batch look complete.
+			if ctx.Err() != nil {
+				return
+			}
+			select {
+			case jobs <- i:
+			case <-ctx.Done():
+				return
+			}
 		}
-		close(jobs)
+	}()
+	go func() {
 		wg.Wait()
 		close(results)
 	}()
-	attempts := make([]ABAttempt, len(cases))
+	var got []result
 	for r := range results {
-		attempts[r.idx] = r.a
+		got = append(got, r)
 		if onAttempt != nil {
 			onAttempt(r.a)
 		}
+	}
+	sort.Slice(got, func(i, j int) bool { return got[i].idx < got[j].idx })
+	attempts := make([]ABAttempt, 0, len(got))
+	for _, r := range got {
+		attempts = append(attempts, r.a)
 	}
 	return attempts, time.Since(start)
 }
