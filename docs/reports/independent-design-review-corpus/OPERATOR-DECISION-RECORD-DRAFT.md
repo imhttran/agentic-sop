@@ -255,6 +255,8 @@ adjudicator re-adjudicates the larger of 20 findings or a random 20% sample.
 > First adjudicator: `<operator-supplied name>`. Authorship check: `<evidence>`.
 > Second adjudicator: `<operator-supplied name>`. Authorship check: `<evidence>`.
 > Second-adjudication sampling rule: `<larger of 20 findings or a random 20% sample>`.
+> Adjudicator-visible defect list: `<blinded export derived from the sealed manifest;
+> defect ids and descriptions only, with no stratum or arm/run mapping>`.
 > Conflict-of-interest record: `<statement or "none">`.
 > If two cannot be obtained, best attainable outcome: `INCONCLUSIVE`.
 >

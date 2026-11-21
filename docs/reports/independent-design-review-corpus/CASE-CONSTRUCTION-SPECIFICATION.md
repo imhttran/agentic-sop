@@ -170,14 +170,25 @@ case:
   sealed_sha256: <sha256 of this record>
 ```
 
-### 6.2 Access and unblinding
+### 6.2 Access, the blinded defect list, and unblinding
 
-- Access to the sealed manifest: the seeder, the analyst, and the corpus owner. Not the
-  adjudicators, and not any reviewer.
+- The **sealed answer key** — expected locations, severities, acceptable alternatives, and
+  the determinability rationale — is accessible only to the seeder, the case checker, the
+  analyst, and the corpus owner. Not the adjudicators, and not any reviewer.
+- The **adjudicator-visible defect list** is a separate export derived from the sealed
+  manifest. It maps each case to a neutral plan id and lists that case's known defects:
+  defect id, location, class, and a one-sentence description. Protocol §5.4 requires the
+  adjudicator to record "matches known defect `<id>`" versus "valid and not on the list",
+  so the adjudicator needs the defect ids and descriptions. The export contains no stratum
+  label, no seeder identity, no determinability rationale, no expected-severity or
+  acceptable-alternative field, no arm/repetition/run mapping, and no model identity. A
+  no-known-defect case appears with an empty defect list.
 - The adjudicators see findings with arm, repetition, model, and run ids removed, and with
-  the case id replaced by a neutral plan id.
+  the case id replaced by the same neutral plan id used in the defect list.
 - The analyst holds the unblinding key and applies the within-run deduplication. The
   adjudicator never sees arm labels.
+- Neither the sealed answer key nor the blinded defect list may appear in a reviewer's
+  project directory or exported tree.
 - The manifest hash is recorded in the freeze record; the manifest itself is not.
 
 ## 7. Revision pinning and artifact hashing
@@ -244,8 +255,10 @@ A case may enter the freeze record only when every gate is recorded:
 10. Exported tree hash and archive hash recorded.
 11. Independent case checker signs the determinability and the no-leak result.
 12. Sealed manifest hash recorded outside the reviewer project.
-13. Access list recorded; adjudicators excluded.
-14. Freeze record updated.
+13. Access list recorded; adjudicators excluded from the sealed answer key.
+14. Blinded defect list exported for the adjudicators: defect ids and descriptions only,
+    with no stratum, arm/run, expected-severity, or acceptable-alternative field.
+15. Freeze record updated.
 
 ## 11. What this document does not do
 
