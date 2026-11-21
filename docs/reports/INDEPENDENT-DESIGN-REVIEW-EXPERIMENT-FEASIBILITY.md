@@ -31,9 +31,8 @@ inference was executed.
   It is unapproved and does not authorize implementation.
 - The experiment has **not** run. No threshold was changed. No inference call was made
   for the experiment or pilot.
-- The §1.2/§5.1 corrections under review in PR #567 are incorporated here. If PR #567 is
-  not merged before this report, the merged assessment remains authoritative and this
-  report's requested-model wording is ahead of it.
+- The §1.2/§5.1 corrections from PR #567 are merged into the assessment, and this
+  report's requested-model wording matches it.
 - The feasibility verdict below is **not** the experiment's PASS/FAIL/INCONCLUSIVE
   outcome.
 
