@@ -546,8 +546,9 @@ is not an independent adjudication.
 | A1 — PR #587 proposals recorded | 2 | 3 | 10 / 11 | 13 / 12 (seeded separate) or 5 / 4 |
 | A2 — this expansion recorded | 3 | 4 | 11 / 12 | 12 / 11 (seeded separate) or 4 / 3 |
 
-The repository still cannot supply 15 strict historical design plans from its own defect
-history. The strict shortfall under the conservative reading is **12 plans and 11 defects**.
+On the evidence reviewed so far, the repository cannot supply 15 strict historical design
+plans from its own defect history. The strict shortfall under the conservative reading is
+**12 plans and 11 defects**.
 
 ### 11.4 Scenario B — proposed amendment
 
@@ -570,17 +571,31 @@ freeze, and an EP-15 disposition. None of those exists.
 The question of whether the seeded set counts toward the floor (§10.3) remains unresolved;
 both readings are shown. No threshold is changed.
 
-### 11.5 Workstream B dependency (unchanged in effect)
+### 11.5 Workstream B dependencies on the freeze
 
-Workstream B's latest hardening results are on an **unmerged** branch
-(`verify/egm-workstream-b-execution-hardening`). They are not recorded here as corpus
-facts and are left to the Linux agent. For the freeze record, the dependencies are
-unchanged: EP-15 (provider concurrency and batch latency) remains UNVERIFIED; EP-02
-(provider-attested model identity) and EP-12 (reproducibility) require an operator
-disposition; and the execution-path items in
-[WORKSTREAM-B-RECONCILIATION.md](WORKSTREAM-B-RECONCILIATION.md) remain as recorded. The
-freeze record must also record the operator's instruction-boundary and environment choices
-once that branch merges.
+The execution-hardening evidence merged as PR #588 (`e829e5d9`); its detailed results are in
+[INDEPENDENT-DESIGN-REVIEW-WORKSTREAM-B-HARDENING.md](../INDEPENDENT-DESIGN-REVIEW-WORKSTREAM-B-HARDENING.md)
+and are not restated here. The freeze-relevant dependencies are:
+
+- **EP-15 remains UNVERIFIED.** Provider concurrency and parallel-batch latency need a
+  real-provider run that the operator must authorize; otherwise C-arm latency is first
+  measured in the full run, as the protocol already says.
+- **EP-02 and EP-12 need an operator disposition.** Model identity is client-side plus
+  proxy-observed request; a server-returned `model` field is self-reported, not attested.
+  Reproducibility has no sampling control; repetition carries the variance.
+- **EP-16 needs a real-provider run.** The inspection instrument (the tool audit sink) is
+  verified; whether a real model inspects the repository is not.
+- **Instruction boundary.** SOP appends its own prose output requirement after the
+  experiment's request. The wrapper is identical across arms, so it is not a fairness
+  defect, but the frozen request template must be written knowing it follows.
+- **Environment.** An ambient shell that exports `SOP_*` variables fails the preflight by
+  design; runs use an explicit environment. A project `.env` fails it outright.
+- **Model class.** The `small` class carries a built-in cloud fallback candidate that an
+  overlay cannot remove, so the experiment must not use it.
+- **Raw reply bodies** are hashed, not kept; the operator may choose to retain them.
+
+These are inputs to the freeze record and to decisions 7–9. They change no corpus count,
+eligibility rule, or threshold.
 
 ### 11.6 Verdict (unchanged)
 
