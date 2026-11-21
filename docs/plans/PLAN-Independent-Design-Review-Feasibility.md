@@ -155,10 +155,14 @@ required sections and a verdict of READY, NOT YET READY, or BLOCKED.
 - The feasibility verdict is not presented as the experiment outcome.
 - The report links the assessment and PRD.
 
-**State:** Complete with unverified sections. The report records Workstream B as pending,
-§§4, 7 and 8 as unverified or awaiting operator decisions, and links the candidate
-manifest,
-[readiness summary](../reports/independent-design-review-corpus/READINESS.md), and
+**State:** Complete with unverified sections. The report records Workstream B as pending
+and §§4, 7 and 8 as unverified or awaiting operator decisions. The readiness package links
+the [candidate manifest](../reports/independent-design-review-corpus/candidates.json),
+[candidate verification](../reports/independent-design-review-corpus/CANDIDATE-VERIFICATION.md),
+[readiness summary](../reports/independent-design-review-corpus/READINESS.md),
+[preparation plan](../reports/independent-design-review-corpus/CORPUS-PREPARATION-PLAN.md),
+[operator decision package](../reports/independent-design-review-corpus/OPERATOR-DECISION-PACKAGE.md),
+[freeze procedure](../reports/independent-design-review-corpus/FREEZE-PROCEDURE.md), and
 [proposed classification amendment](../reports/independent-design-review-corpus/PROPOSED-PROTOCOL-AMENDMENT.md).
 
 ### FEAS-C2 — Validation and pull request
@@ -172,7 +176,8 @@ against `main`. Do not merge.
 - The applicable SOP validation and review gates are recorded.
 - One PR is open; no merge is performed.
 
-**State:** In progress.
+**State:** In progress. The readiness package PR is pending; no merge is authorized by
+this record.
 
 ## Dependencies and status
 
@@ -187,8 +192,8 @@ was activated.
 | FEAS-A4 | SOP         | Blocked                           | Report §3                         |
 | FEAS-A5 | SOP         | Reviewed                          | Report §§5–7                      |
 | FEAS-B1 | Claude Code | Pending                           | Report §4                         |
-| FEAS-C1 | SOP         | Complete with unverified sections | Report; `READINESS.md`; amendment |
-| FEAS-C2 | SOP         | In progress                       | PR pending                        |
+| FEAS-C1 | SOP         | Complete with unverified sections | Readiness package; report; amendment |
+| FEAS-C2 | SOP         | In progress                       | Readiness PR pending              |
 
 ## Read-only guarantee
 

@@ -3,12 +3,34 @@
 **Type:** Corpus evidence summary (non-normative). It records the Workstream A candidate
 corpus, its evidence states, and whether it is ready for a corpus-owner freeze. It is not
 an experiment result and does not authorize the conditional PRD.
-**Baseline:** `origin/main` @ `1b61db6427e73ab18cab532834504359ea41de04`.
+**Baseline:** `origin/main` @ `ade6864a`, plus the restored pilot evidence commit. The
+manifest records the earlier `1b61db64` baseline for its candidate revisions.
 **Manifest:** [candidates.json](candidates.json).
+**Candidate verification:** [CANDIDATE-VERIFICATION.md](CANDIDATE-VERIFICATION.md).
+**Preparation plan:** [CORPUS-PREPARATION-PLAN.md](CORPUS-PREPARATION-PLAN.md).
+**Operator decision package:** [OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md).
+**Freeze procedure:** [FREEZE-PROCEDURE.md](FREEZE-PROCEDURE.md).
+**Pilot evidence:** [INDEPENDENT-DESIGN-REVIEW-PILOT-RESULTS.md](../INDEPENDENT-DESIGN-REVIEW-PILOT-RESULTS.md).
 **Protocol:** [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](../EGM-GOLDFISH-REVIEW-ASSESSMENT.md).
 **Feasibility report:** [INDEPENDENT-DESIGN-REVIEW-EXPERIMENT-FEASIBILITY.md](../INDEPENDENT-DESIGN-REVIEW-EXPERIMENT-FEASIBILITY.md).
 **Plan of record:** [PLAN-Independent-Design-Review-Feasibility.md](../../plans/PLAN-Independent-Design-Review-Feasibility.md).
 **Freeze status:** **NOT FROZEN.**
+
+## 0. Readiness package
+
+This summary is part of a five-document package:
+
+- [CANDIDATE-VERIFICATION.md](CANDIDATE-VERIFICATION.md) — revision, hash, permitted-reference,
+  leakage, and discoverability checks for every manifest entry.
+- [CORPUS-PREPARATION-PLAN.md](CORPUS-PREPARATION-PLAN.md) — the plan for additional
+  historical leads, seeded cases, no-known-defect cases, sealing, and input boundaries.
+- [OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md) — the nine decisions, their
+  evidence, options, and consequences.
+- [FREEZE-PROCEDURE.md](FREEZE-PROCEDURE.md) — the freeze record and post-freeze mutation
+  controls, not executed.
+- This summary.
+
+The package is evidence preparation. It does not freeze, approve, nominate, or execute.
 
 ## 1. Verified historical defect chains
 
@@ -52,6 +74,11 @@ corpus inputs:
   evidence, but no uncontaminated pre-defect artifact, so neither counts toward a floor.
 - **Unverified:** 3.
 - **Not determinable or not a defect:** 8.
+
+All 17 recorded artifacts resolve at their pinned revisions and match their SHA-256 values.
+Two permitted-reference lists were corrected (`IDR-H-003`, `IDR-H-006`) and two excluded
+lists were cleared (`IDR-H-007`, `IDR-H-008`); the checks are recorded in
+[CANDIDATE-VERIFICATION.md](CANDIDATE-VERIFICATION.md).
 
 A strict determinable defect is one a reviewer could identify from the pre-fix artifact
 and its permitted repository context, without the later report. Partially determinable
@@ -112,7 +139,12 @@ entry and is not in the manifest.
 
 No seeded-defect or no-known-defect case is constructed. The assessment requires about
 eight seeded cases and about six no-known-defect cases, with an independent seeder and a
-sealed manifest before the run. This work is not started because:
+sealed manifest before the run. The construction method, case records, sealing, and input
+boundaries are defined in
+[CORPUS-PREPARATION-PLAN.md](CORPUS-PREPARATION-PLAN.md); that plan constructs nothing and
+counts nothing.
+
+This work is not started because:
 
 - A seeder has not been designated.
 - The sealed manifest and answer key must live outside the reviewer's project directory.
@@ -147,30 +179,28 @@ Repository evidence:
 **Availability is unconfirmed and insufficient.** Two independent human adjudicators who
 did not author or directly edit the corpus plans are required for PASS. None is
 identified. The operator may be the corpus owner, seeder, or analyst, but not an
-adjudicator.
+adjudicator. The designations and the authorship checks are decisions 1 and 6 in
+[OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md).
 
 ## 7. Outstanding operator decisions
 
-1. **Classification amendment:** approve, reject, or revise the proposed eligibility rule
-   in [PROPOSED-PROTOCOL-AMENDMENT.md](PROPOSED-PROTOCOL-AMENDMENT.md). It is not applied.
-2. **Parent artifacts:** confirm the nine extracted pre-fix artifact references
-   (`IDR-E-001`–`IDR-E-005`, `IDR-E-007`–`IDR-E-010`), note that `IDR-E-005` is excluded
-   because its pre-fix spec already contained the correct behavior, and decide whether to
-   extract the three missing parents (`IDR-E-006`, `IDR-E-011`, `IDR-E-012`).
-3. **Corpus freeze:** authorize a corpus owner to freeze the eligible set. The corpus is
-   **not frozen**.
-4. **Exclusions:** confirm the eight excluded candidates, especially the review-scope
-   plan, which points at a pre-fix spec that already contained the correct behavior.
-5. **Seeded and no-known-defect cases:** designate a seeder and authorize construction of
-   the sealed manifest and the about-eight/about-six cases.
-6. **Adjudicators:** identify two independent human adjudicators and record the authorship
-   evidence for each.
-7. **Target size:** decide whether to proceed with the 10 proposed eligible plans or
-   expand the historical corpus before freeze. The strict shortfall is 15 plans and 15
-   determinable defects; the partial-inclusive shortfall is 5 and 5.
-8. **Held candidates:** decide whether `IDR-H-001` (ACP-ZED) and `IDR-H-005` (LLM02) can
-   enter the corpus at all. Both have verified defect evidence but no uncontaminated
-   pre-defect artifact in git, so they are held pending corpus-owner review.
+The full options, trade-offs, validity effects, and deferral consequences are in
+[OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md). None is decided here.
+
+| # | Decision | Current state |
+| --- | --- | --- |
+| 1 | Corpus owner | Not designated |
+| 2 | Historical inclusion and exclusion | 0 strict, 10 partial, 2 held, 8 excluded, 3 unverified; 6 leads uncounted |
+| 3 | Strict versus partial eligibility | Conservative reading applied |
+| 4 | Proposed protocol amendment | Proposed, not applied |
+| 5 | Independent seeder | Not designated |
+| 6 | Two independent human adjudicators | None identified; operator treated as an author |
+| 7 | Thresholds and cost limits | Pre-registered, unapproved |
+| 8 | Corpus and instruction freeze | **NOT FROZEN**; procedure prepared, not executed |
+| 9 | Full experiment execution | Not authorized |
+
+The strict shortfall remains 15 plans and 15 determinable defects; the partial-inclusive
+shortfall is 5 and 5.
 
 ## 8. Workstream A freeze readiness
 
@@ -190,5 +220,24 @@ ready to freeze because:
 - The classification amendment is not approved.
 - Workstream B remains pending.
 
+### 8.1 Workstream B dependency
+
+Workstream B (the independent Linux provider and execution report) remains pending. The
+two four-call pilots provide routing, token, isolation, and timing observations, but they do
+not replace that report and are excluded from the experiment dataset. The pilot limitations
+are recorded in
+[INDEPENDENT-DESIGN-REVIEW-PILOT-RESULTS.md](../INDEPENDENT-DESIGN-REVIEW-PILOT-RESULTS.md):
+Pilot A's external timing record is invalid, and Pilot B's ACP-ZED runs are contaminated by
+the gap report in the clone.
+
+### 8.2 Full-experiment readiness verdict
+
+**NOT YET READY.** The historical corpus is 0 strict and 10 partial, the seeded and
+no-known-defect cases are not constructed, no two independent human adjudicators are
+designated, the eligibility amendment is unapproved, the thresholds are unapproved,
+Workstream B is pending, and the corpus is not frozen.
+
 Workstream A can proceed to a corpus-owner review of the manifest. It must not label the
-corpus `FROZEN` without the operator's decision and the corpus owner's recorded freeze.
+corpus `FROZEN` without the operator's decision and the corpus owner's recorded freeze. The
+freeze record and post-freeze controls are specified in
+[FREEZE-PROCEDURE.md](FREEZE-PROCEDURE.md) and have not been executed.
