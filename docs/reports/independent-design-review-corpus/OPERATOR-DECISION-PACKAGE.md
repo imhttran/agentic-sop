@@ -34,7 +34,7 @@ evidence, not approval of any decision in this package.
 | --- | ---------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | --------------------------------------------- |
 | 1   | Corpus owner                       | **Designated: Tom Tran (2026-11-21)**                                                            | Designate one named human who is not an adjudicator                                                                           | None; needed by 2, 8                        | Corpus cannot be frozen                       |
 | 2   | Historical inclusion and exclusion | **Recorded 2026-11-21** — see DECISION-RECORD-002                                                | Confirm the exclusions and holds; classify the extracted leads explicitly; keep unverified entries out of every floor         | 1                                           | Shortfall remains                             |
-| 3   | Strict versus partial eligibility  | Conservative reading applied; amendment not approved                                             | Keep the conservative reading until the corpus is powered                                                                     | 2, 4                                        | Freeze rule undefined                         |
+| 3   | Strict versus partial eligibility  | **Recorded 2026-11-21** — conservative; seeded set additional                                    | Keep the conservative reading until the corpus can meet both floors without relaxing the recall denominator                   | 2, 4                                        | Shortfall remains                             |
 | 4   | Proposed protocol amendment        | Proposed, not applied                                                                            | Defer until the corpus owner records independent support for each partial                                                     | 1, 3                                        | Conservative reading stands                   |
 | 5   | Independent seeder                 | Not designated                                                                                   | Designate a human independent of the adjudicators                                                                             | None; needed by 6, 8                        | No seeded or no-known-defect cases            |
 | 6   | Two independent human adjudicators | None identified; operator is treated as an author                                                | Designate two external humans and record authorship checks                                                                    | 5 (seeder must differ), 1                   | PASS is impossible; best outcome INCONCLUSIVE |
@@ -121,17 +121,20 @@ shortfall would remain.
 
 ## 3. Strict versus partial eligibility
 
-**Current status.** Open. The conservative reading is applied provisionally; no eligibility
-rule is recorded.
+**Current status.** **RECORDED 2026-11-21.** The conservative rule and the seeded-case
+interpretation are recorded in [DECISION-RECORD-003](DECISION-RECORD-003-ELIGIBILITY.md).
 
 **Verified evidence.** The conservative reading counts a partially determinable defect
-toward neither floor. Under it, the corpus is 0/15 strict and 10/15 partial-inclusive. The
-proposed amendment would let a plan count toward the plan floor only when it has at least
-one determinable defect. No independent adjudicator has confirmed any classification.
+toward neither floor. Under it, the proposed strict corpus is 3 plans / 4 defects (0 finally
+eligible, 0 adjudicated); the 11 proposed partials are outside the denominator. The
+registered protocol names only the no-known-defect set as additional, so this decision also
+records that the seeded set is additional and does not count toward either historical
+minimum. The proposed amendment would let a plan count toward the plan floor only when it
+has at least one determinable defect. No independent adjudicator has confirmed any
+classification.
 
-**Recommended disposition.** Keep the conservative reading until the corpus can meet both
-floors without relaxing the recall denominator. Do not let a partial defect enter the recall
-denominator.
+**Recorded disposition.** The conservative rule was recorded, with the seeded set additional.
+The analysis below is preserved.
 
 **Alternatives and trade-offs.**
 
@@ -152,10 +155,11 @@ floor. It cannot raise either count without an independently recorded determinat
 does not by itself make the experiment powered. Treating a partial defect as determinable
 without that support would dilute recall.
 
-**Consequence of deferral.** The strict reading stands and the shortfall remains 15/15.
+**Consequence of deferral (no longer applicable).** The strict reading would have stood
+provisionally and the strict shortfall would remain 12 plans / 11 defects.
 
-**Exact operator action required.** Record the eligibility rule in force, verbatim
-(`conservative` or the amended text), with the date and the corpus owner's concurrence.
+**Recorded operator action.** The rule, the seeded interpretation, the approver, and the date
+are recorded in [DECISION-RECORD-003](DECISION-RECORD-003-ELIGIBILITY.md) §1.
 
 ## 4. Proposed protocol amendment
 
@@ -369,7 +373,8 @@ The operator is asked to record, in writing:
 8. The freeze authorization, with the freeze commit and manifest hash.
 9. The execution authorization, with the budget, stop condition, and EP-15 disposition.
 
-Items 1–2 are recorded in [DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md) and
-[DECISION-RECORD-002](DECISION-RECORD-002-HISTORICAL-DISPOSITIONS.md). Items 3–9 do not yet
-exist in the repository. PR #574 is merged evidence; it is not an approval of any
+Items 1–3 are recorded in [DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md),
+[DECISION-RECORD-002](DECISION-RECORD-002-HISTORICAL-DISPOSITIONS.md), and
+[DECISION-RECORD-003](DECISION-RECORD-003-ELIGIBILITY.md). Items 4–9 do not yet exist in the
+repository. PR #574 is merged evidence; it is not an approval of any
 item above.
