@@ -27,6 +27,16 @@ skills` is empty. References were read as shallow clones outside the checkout: E
 `34ff1179`, Superpowers `22f0b46`, OpenSpec `0c737dc`. Nothing was installed. The
 feasibility notes are static reading of the code; no model call or pilot has been run.
 
+**Later evidence (not part of this protocol):** two separately authorized four-call
+feasibility pilots were run after the baseline above, on 2026-11-21. Their observed
+results are in
+[INDEPENDENT-DESIGN-REVIEW-PILOT-RESULTS.md](INDEPENDENT-DESIGN-REVIEW-PILOT-RESULTS.md);
+the readiness state at that point is in
+[INDEPENDENT-DESIGN-REVIEW-EXPERIMENT-FEASIBILITY.md](INDEPENDENT-DESIGN-REVIEW-EXPERIMENT-FEASIBILITY.md).
+The statements in this assessment describe the state at `64101f9e`. Neither report changes
+this protocol, its thresholds or its outcomes: no H1 or H2 outcome exists, the full
+experiment remains NOT YET READY, and the conditional PRD is not authorized.
+
 ## 1. Verified architecture
 
 Line references were verified at `ad8a9c6c`; symbol names are authoritative if lines
