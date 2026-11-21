@@ -25,7 +25,7 @@ interface:
 ACP and MCP **starts** are mutually exclusive, and this is covered by a
 deterministic test:
 
-- `startWork` takes a cross-process start lock, `.agent-sdlc/runs/work/.start.lock`,
+- `startWork` takes a cross-process start lock, `.agent-sdlc/runs/mcp-work/.start.lock`,
   created with `O_EXCL` (`internal/cli/mcp_start_work.go`, `acquireWorkLock`).
 - While holding it, `startWork` re-reads the persisted started-work records and
   refuses a duplicate fingerprint (`already_running` / `already_ran`) or a

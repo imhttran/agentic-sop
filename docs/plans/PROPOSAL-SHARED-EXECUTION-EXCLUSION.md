@@ -25,7 +25,7 @@ concerns must stay distinct.
 
 Introduce one **project execution lease** at
 `.agent-sdlc/state.exec.lock`, separate from `state.lock` (metadata) and from
-`state/runs/work/.lock` (start serialization).
+`.agent-sdlc/runs/mcp-work/.start.lock` (start serialization).
 
 The lease file records, atomically:
 
