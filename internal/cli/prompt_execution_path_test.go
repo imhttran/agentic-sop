@@ -13,6 +13,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -24,7 +25,6 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/perf"
-	runpkg "github.com/imhttran/agentic-sop/internal/run"
 )
 
 const verifyModel = "Qwen3-4B-4bit"
@@ -469,55 +469,52 @@ func TestVerifyNativeModelOverrideChangesRequestedModel(t *testing.T) {
 	}
 }
 
-// TestVerifyPromptRunIDReservationGap characterizes how prompt run directories are
-// allocated. promptRunID only checks that a directory does not exist yet; it does not
-// create it, and runpkg.New (MkdirAll) does not fail when the directory exists. Two
-// callers that both choose an id before either creates its directory therefore get
-// the same id and the same directory. This documents a gap; when run-id allocation is
-// made atomic, update or delete this test.
-func TestVerifyPromptRunIDReservationGap(t *testing.T) {
+// TestPromptRunIDReservesItsDirectory: promptRunID reserves the run directory it returns,
+// so two ids drawn back to back (the same second) differ and both directories exist.
+// Before the fix the id was only checked, never reserved, and both callers got the same id.
+func TestPromptRunIDReservesItsDirectory(t *testing.T) {
 	dir := t.TempDir()
-	var a, b string
-	for range 5 { // ids carry second resolution; retry across a boundary
-		a, b = promptRunID(dir), promptRunID(dir)
-		if a == b {
-			break
+	a, b := promptRunID(dir), promptRunID(dir)
+	if a == b {
+		t.Fatalf("two ids drawn in sequence are equal: %q", a)
+	}
+	for _, id := range []string{a, b} {
+		if info, err := os.Stat(promptRunPath(dir, id)); err != nil || !info.IsDir() {
+			t.Errorf("run directory for %q was not reserved: %v", id, err)
 		}
-	}
-	if a != b {
-		t.Skip("could not draw two ids within one second")
-	}
-	first, err := runpkg.New(dir, promptRunDir(a))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := first.Write("result.md", "first"); err != nil {
-		t.Fatal(err)
-	}
-	second, err := runpkg.New(dir, promptRunDir(b)) // same directory; must not fail today
-	if err != nil {
-		t.Fatalf("second New on the same id failed: %v", err)
-	}
-	if err := second.Write("result.md", "second"); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := os.ReadFile(filepath.Join(dir, stateDirName, "runs", promptRunDir(a), "result.md"))
-	if string(data) != "second" {
-		t.Errorf("result.md = %q; expected the later writer to overwrite the earlier one today", data)
-	}
-	if n := len(promptRunDirs(t, dir)); n != 1 {
-		t.Errorf("run dirs = %d, want 1 shared directory for two logical runs", n)
 	}
 }
 
-// TestVerifyConcurrentPromptsObservation runs prompts concurrently in one project and
-// reports how many distinct run directories and surviving results there are. It is an
-// observation, not a gate: it only runs when SOP_VERIFY_CONCURRENT=1, and fails on a
-// collision only when SOP_VERIFY_CONCURRENT_STRICT=1.
-func TestVerifyConcurrentPromptsObservation(t *testing.T) {
-	if os.Getenv("SOP_VERIFY_CONCURRENT") != "1" {
-		t.Skip("observation only; set SOP_VERIFY_CONCURRENT=1")
+// TestPromptRunIDIsUniqueUnderConcurrency: ids drawn simultaneously are all distinct.
+func TestPromptRunIDIsUniqueUnderConcurrency(t *testing.T) {
+	dir := t.TempDir()
+	const n = 32
+	ids := make([]string, n)
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			ids[i] = promptRunID(dir)
+		}()
 	}
+	close(start)
+	wg.Wait()
+	seen := map[string]bool{}
+	for _, id := range ids {
+		if seen[id] {
+			t.Fatalf("duplicate run id %q among %v", id, ids)
+		}
+		seen[id] = true
+	}
+}
+
+// TestConcurrentPromptsInOneProjectKeepSeparateRuns: simultaneous prompts in one project
+// each keep their own run directory and result. Before the fix, 8 simultaneous prompts left
+// one run directory and one surviving result in most trials.
+func TestConcurrentPromptsInOneProjectKeepSeparateRuns(t *testing.T) {
 	clearProviderEnv(t)
 	dir := t.TempDir()
 	writeFile(t, dir, "request.md", "synthetic\n")
@@ -526,16 +523,16 @@ func TestVerifyConcurrentPromptsObservation(t *testing.T) {
 	start := make(chan struct{})
 	for i := range n {
 		wg.Add(1)
-		go func(i int) {
+		go func() {
 			defer wg.Done()
-			a := &fakeCapabilityAgent{review: "reply-" + string(rune('A'+i))}
+			a := &fakeCapabilityAgent{review: fmt.Sprintf("reply-%d", i)}
 			d := defaultDeps()
 			d.getwd = func() (string, error) { return dir, nil }
 			d.newAgent = func(string, string, string, string) (agent.Agent, error) { return a, nil }
 			var out, errOut bytes.Buffer
 			<-start
 			run([]string{"prompt", "--capability", "review", "--file", "request.md", "--json"}, &out, &errOut, d)
-		}(i)
+		}()
 	}
 	close(start)
 	wg.Wait()
@@ -546,8 +543,21 @@ func TestVerifyConcurrentPromptsObservation(t *testing.T) {
 			replies[strings.TrimSpace(string(data))] = true
 		}
 	}
-	t.Logf("concurrent prompts=%d distinct run dirs=%d surviving distinct results=%d", n, len(runs), len(replies))
-	if os.Getenv("SOP_VERIFY_CONCURRENT_STRICT") == "1" && (len(runs) != n || len(replies) != n) {
-		t.Errorf("collision: %d runs produced %d run dirs and %d surviving results", n, len(runs), len(replies))
+	if len(runs) != n || len(replies) != n {
+		t.Errorf("%d concurrent prompts produced %d run dirs and %d distinct results", n, len(runs), len(replies))
+	}
+}
+
+// TestFailedPromptLeavesNoRunDirectory: a command that fails before the run writes anything
+// removes the empty reservation, so a failed invocation leaves no stray run directory.
+func TestFailedPromptLeavesNoRunDirectory(t *testing.T) {
+	clearProviderEnv(t)
+	dir := verifyProject(t, "mlx", verifyModel)
+	code, _, _ := runRealPrompt(t, dir, "prompt", "--capability", "review", "--model-class", "bogus", "--file", "request.md")
+	if code == exitOK {
+		t.Fatal("an unknown model class should fail")
+	}
+	if runs := promptRunDirs(t, dir); len(runs) != 0 {
+		t.Errorf("failed prompt left run directories: %v", runs)
 	}
 }

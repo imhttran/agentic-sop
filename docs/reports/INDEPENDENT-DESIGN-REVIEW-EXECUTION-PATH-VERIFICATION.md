@@ -17,11 +17,13 @@ across those commits).
 
 ## 1. Verdict
 
-**Execution infrastructure: READY for controlled, per-run-isolated execution of arms A and
-B; NOT READY for parallel execution inside one project (arm C and the B×3 control as
-specified would lose run evidence there).** A separate project directory per concurrent call,
-which the protocol already requires, removes the collision. Two behaviors need operator
-decisions (§7). Two runtime questions stay UNVERIFIED without real inference (§6).
+**Execution infrastructure: READY for controlled execution of arms A and B, including
+concurrent calls (arm C and the B×3 control).** The verification found that concurrent
+`sop prompt` runs in one project shared a run directory and overwrote each other's evidence
+(EP-07); that is **fixed in this change** (`promptRunID` now reserves its directory
+atomically) and covered by regression tests and a cross-process check. The protocol's rule of
+one project per concurrent call stays, for request-file isolation and leakage control. Two
+runtime questions stay UNVERIFIED without real inference (§6).
 
 This verdict is about the execution path only. It is not corpus readiness, adjudicator
 readiness, or experiment readiness, and it does not equal PASS, FAIL or INCONCLUSIVE.
@@ -53,10 +55,7 @@ Every result below names how it was established:
   `sop` binary against a synthetic local server. No real provider, model or credential.
 - **PILOT** — recorded in the two four-call pilots (PR #570). Not repeated.
 
-Reproduce: `go test ./internal/cli -run TestVerify -count=1 -v`; and, for the collision
-observation, `SOP_VERIFY_CONCURRENT=1 go test ./internal/cli -run
-TestVerifyConcurrentPromptsObservation -count=20 -v` (add `SOP_VERIFY_CONCURRENT_STRICT=1` to
-make a collision fail).
+Reproduce: `go test ./internal/cli -run 'TestVerify|TestPromptRunID|TestConcurrentPrompts|TestFailedPrompt' -count=1 -v`.
 
 ## 4. Summary
 
@@ -67,14 +66,14 @@ make a collision fail).
 | EP-03 | Token reporting and `unreported_calls`                        | VERIFIED                        |
 | EP-04 | Harness selection and its effect                              | VERIFIED                        |
 | EP-05 | Repository-tool availability and read-only inspection         | VERIFIED                        |
-| EP-06 | Run-directory creation and identity                           | VERIFIED                        |
-| EP-07 | Concurrent-run behavior in one project                        | VERIFIED defect; BLOCKED for same-project parallel arms |
+| EP-06 | Run-directory creation and identity                           | VERIFIED (allocation fixed)     |
+| EP-07 | Concurrent-run behavior in one project                        | FIXED (defect first VERIFIED)   |
 | EP-08 | Environment and credential isolation                          | VERIFIED                        |
 | EP-09 | Failure handling and retry                                    | PARTIAL                         |
 | EP-10 | Evidence persistence                                          | PARTIAL                         |
 | EP-11 | Output shape across harnesses                                 | VERIFIED difference             |
 | EP-12 | Timing                                                        | PARTIAL                         |
-| EP-13 | `--model-class` without a `models:` block                     | VERIFIED hazard                 |
+| EP-13 | `--model-class` without a `models:` block                     | VERIFIED, as specified          |
 | EP-14 | Cache off and JEV off by default                              | VERIFIED                        |
 | EP-15 | Provider-side concurrency and parallel-batch latency          | UNVERIFIED                      |
 | EP-16 | Native-agent inspection behavior of real models               | PARTIAL                         |
@@ -124,26 +123,31 @@ project, the file content reaches the model on the next call, the file is unchan
 `TestReviewEarlyFinalCompletesImmediately`. Result VERIFIED. Residual: no per-run tool trace is
 persisted; the call count is the only artifact-level signal of inspection.
 
-**EP-06 Run directory creation and identity.** Code: `promptRunID`
-(`prompt-YYYYMMDD-HHMMSS`, unique only within one project's run root) and `runpkg.New`.
-SYNTHETIC RUNTIME: `TestVerifyMLXPromptIdentityAndUsage` — one directory per run, named
-`work_item_id`, with consistent `metadata.json`. Identical ids in different projects are
-expected. Result VERIFIED.
+**EP-06 Run directory creation and identity.** Code: `promptRunID` and `promptRunPath`
+(`internal/cli/prompt.go`): the id is `prompt-YYYYMMDD-HHMMSS`, with a numeric suffix when taken,
+and the call **reserves** the directory with `os.Mkdir` (atomic; fails if it exists). An unused
+(empty) reservation is removed if the command fails before the run writes anything. Before the
+fix the id was only checked, never reserved. SYNTHETIC RUNTIME:
+`TestVerifyMLXPromptIdentityAndUsage` (one directory per run, named `work_item_id`, consistent
+`metadata.json`), `TestPromptRunIDReservesItsDirectory`, `TestFailedPromptLeavesNoRunDirectory`.
+Ids are unique within one project only; identical ids in different projects are expected.
+Result VERIFIED.
 
-**EP-07 Concurrent runs in one project.** Code: `promptRunID` checks that a directory does
-not exist and returns an id; `runpkg.New` creates it with `MkdirAll` (no error if it exists)
-and `sop prompt` takes no project lock. SYNTHETIC RUNTIME:
-`TestVerifyPromptRunIDReservationGap` (deterministic: two ids drawn before either directory is
-created are equal, both `New` calls succeed, the later writer overwrites the earlier). Observed
-with concurrency (not gated in CI): 8 simultaneous in-process prompts left **1 run directory and
-1 surviving result in 19 of 20 trials** (2 and 2 in the other); a real `sop` binary
-(built from `main` at `1b61db64`) with **4 parallel processes in one project against a
-synthetic local server left 1 run directory and the same `work_item_id` in all 4 stdout results
-in 5 of 5 trials**. Each process still printed its own result on stdout; the on-disk run
-artifacts are what collide. Result: defect VERIFIED. Parallel arms (C, B×3) in one project
-are BLOCKED. Mitigation: one project directory per concurrent call (the protocol's rule) —
-EXISTING TEST `TestPromptProjectsAreIsolated`; not exercised with real parallel inference.
-Remediation (operator decision): keep the harness rule, or make id allocation atomic in SOP.
+**EP-07 Concurrent runs in one project.** Defect first observed, then fixed.
+*Before the fix* (code at `main` `1b61db64`): `promptRunID` only checked that a directory did
+not exist, `runpkg.New` (`MkdirAll`) did not fail when it did, and `sop prompt` takes no project
+lock. Eight simultaneous in-process prompts left **1 run directory and 1 surviving result in
+19 of 20 trials**; **4 parallel `sop` processes in one project against a synthetic local server
+left 1 run directory and the same `work_item_id` in all 4 stdout results in 5 of 5 trials**
+(each process still printed its own result on stdout; the on-disk run artifacts collided).
+*After the fix* (this change): `TestPromptRunIDIsUniqueUnderConcurrency` (32 simultaneous ids,
+all distinct) and `TestConcurrentPromptsInOneProjectKeepSeparateRuns` (8 simultaneous prompts,
+8 run directories, 8 distinct results) pass, including repeated with the race detector; a `sop`
+binary built from this change, with the same 4-parallel-process trial against the synthetic
+server, left **4 run directories, 4 `metadata.json` files and 4 distinct `work_item_id`s in 5
+of 5 trials** (the pre-fix binary reproduced the collision in 5 of 5 trials as a control).
+Result FIXED. Residual: the protocol still requires one project per concurrent call, for
+request-file isolation and leakage control, and provider-side concurrency is untested (EP-15).
 
 **EP-08 Environment and credential isolation.** SYNTHETIC RUNTIME:
 `TestVerifyModelOverrideChangesRequestedModel`, `TestVerifyNativeModelOverrideChangesRequestedModel`
@@ -187,11 +191,12 @@ been measured (EP-15).
 **EP-13 `--model-class` without a `models:` block.** SYNTHETIC RUNTIME:
 `TestVerifyModelClassWithoutModelsBlockRoutesToBuiltInDefault` — the request routes to the
 built-in class default (provider `ollama`, model `nemotron-3-super:cloud`), **ignoring the
-configured `agent` provider**, and nothing reaches the configured endpoint. The built-in
-default can be a cloud model, so a project that names a class without defining `models.<class>`
-can send content off the machine unnoticed. Result VERIFIED hazard. Remediation: the
-experiment's config overlay must define all three classes (the pilot overlays do); consider a
-guard in SOP (operator decision).
+configured `agent` provider**, and nothing reaches the configured endpoint. This **conforms to
+[MODEL-ROUTING.md](../specs/MODEL-ROUTING.md)**: a `--model-class` override activates routing
+and the built-in class table applies (`medium` is a cloud model). It is a hazard for an
+experiment, not a defect, so no SOP change is made. Result VERIFIED, as specified. Residual: a
+project that names a class without defining `models.<class>` can send content off the machine.
+Remediation (done): the assessment's §5.1 now requires the overlay to define every class.
 
 **EP-14 Cache and JEV defaults.** EXISTING TEST: `TestPromptWithoutCacheAlwaysCallsAgent`;
 code: `--cache` is opt-in, JEV triage is a no-op unless enabled. Result VERIFIED.
@@ -229,17 +234,17 @@ model ever inspects is model-dependent and observed only in these four runs.
 
 ## 7. Outstanding decisions
 
-1. **Same-project parallelism.** Keep the harness rule (one project per concurrent call), or
-   change SOP so run ids are allocated atomically. The report assumes the harness rule.
-2. **Routing default.** Whether SOP should refuse `--model-class` when no `models.<class>` is
-   defined, instead of routing to a built-in default that may be a cloud model.
-3. **Concurrency/latency verification (EP-15).** Authorize the minimum real-inference check
-   above, or accept arm C's latency as first measured in the full run.
+1. **Concurrency/latency check (EP-15).** Authorize the minimum real-inference check above, or
+   accept that arm C's latency is first measured in the full run.
+2. **Merge.** Whether to merge this change, which includes one production fix
+   (`promptRunID`, `internal/cli/prompt.go`).
 
 ## 8. Verification conduct and one deviation
 
-- No pilot was repeated and the full experiment was not run. No threshold was changed. No
-  production code was modified; the only code added is the test file named above.
+- No pilot was repeated and the full experiment was not run. No threshold was changed. One
+  production change was made after the verification, at the operator's instruction to fix the
+  collision: `promptRunID` in `internal/cli/prompt.go` (atomic reservation, plus removal of an
+  unused reservation on early failure). Everything else added is tests and documentation.
 - **Deviation: one unintended real cloud call.** While checking EP-13 I ran the pinned `sop`
   binary against a scratch project with no `models:` block and a one-word synthetic request.
   It routed to the built-in default `nemotron-3-super:cloud` through the local Ollama daemon and
