@@ -237,10 +237,12 @@ in the assessment; do not conflate them.
   the class table for a prompt path. No new configuration key is required. A text-only
   provider may be unable to verify repository paths and symbols; the review MUST report
   that as missing evidence rather than infer existence. The implementation MUST record
-  the actual provider and model and MUST verify that the served model key in the run's
-  provider-reported token record, when present, matches the resolved model. It MUST NOT
-  claim a stage pin for a prompt-path implementation, and it MUST record the attribution
-  as unverified when no served-model evidence exists.
+  the provider and the model name it sent, and MUST verify that the model key in the
+  run's token record, when present, matches the resolved model. That key is the name
+  sent to the provider, not a server-reported identity, so the implementation MUST NOT
+  present the match as proof of the model the server executed, and MUST record the
+  attribution as unverified when no provider-side identity exists or when any call
+  reported no usage. It MUST NOT claim a stage pin for a prompt-path implementation.
 - **FR-10 — Failure is not a clean review.** A provider failure, timeout, or
   unparseable response MUST be reported as "review not completed" with a non-zero
   exit. It MUST NOT be reported as a clean review or as an empty findings list.
@@ -360,8 +362,9 @@ shape OD-1 and OD-2 select; they do not require a particular one.
   credential.
 - **AC-5** Tests cover path confinement, symlink rejection, and redaction.
 - **AC-6** A test covers provider/model pinning through the routing surface of the
-  chosen entry point, with no new configuration key, and covers the served-model
-  mismatch check (resolved model vs. the provider-reported token key, when present).
+  chosen entry point, with no new configuration key, and covers the requested-model
+  mismatch check (resolved model vs. the token-record key, when present) and the case
+  where a call reports no usage.
 - **AC-7** An operator can run the review on a real plan and adjudicate the
   findings from the printed output and the evidence artifact.
 - **AC-8** The command, artifact, rubric version, and non-goals are documented in the
