@@ -340,8 +340,10 @@ are the repository's required validation, not a per-criterion substitute.
 - Change-set commits on `security/llm07-misinformation`: `257b9b40` (core
   evidence/lifecycle fixes), `a91d7493` (report revisions), `e93751ef`
   (alias/symlink boundary and external-completion stale verdict).
-- Follow-up commit on `security/llm07-content-binding`: `dcb553c8` (strict
-  content binding for manual acceptance decisions).
+- Follow-up commits on `security/llm07-content-binding`: `dcb553c8` (strict
+  content binding for manual acceptance decisions), `fed04deb` (P1 review fixes:
+  content identity after acceptance checks; preserve HOLD on fingerprint
+  failure), `037fae2b` (merge of the latest `origin/main`).
 - SOP external completion: GROUND-001 at `e93751ef`; GROUND-002 and GROUND-003 at
   `dcb553c8`; all validation PASS. Plan `plan-07-sop-llm07-misinformation` is
   `COMPLETE` and archived.
