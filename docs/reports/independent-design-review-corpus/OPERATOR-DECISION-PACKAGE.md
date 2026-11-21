@@ -1,7 +1,9 @@
 # Operator Decision Package — Independent Design Review
 
 **Type:** Decision package (non-normative). It presents options and consequences. It does
-**not** decide, approve, freeze, designate, or authorize anything.
+**not** decide, approve, freeze, designate, or authorize anything, except Decision 1, which
+the operator recorded separately in
+[DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md).
 **Baseline:** `origin/main` @ `a10edc28`, the merge of PR #574 (Workstream B). Earlier
 baselines quoted below are preserved as recorded by the source documents.
 **Protocol:** [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](../EGM-GOLDFISH-REVIEW-ASSESSMENT.md).
@@ -15,8 +17,9 @@ baselines quoted below are preserved as recorded by the source documents.
 It is unapproved and is not authorized by this package.
 
 The recommended option in each section is a recommendation, not a decision. The operator
-may choose any option, including deferral. No decision below is recorded, and none is
-implied by a merged pull request.
+may choose any option, including deferral. No decision below is recorded in this package
+except through the separate record named above, and none is implied by a merged pull
+request.
 
 **Workstream B status at this baseline.** PR #574 (merge `a10edc28`) merged the
 execution-path verification. It records the execution infrastructure as READY for
@@ -29,7 +32,7 @@ evidence, not approval of any decision in this package.
 
 | #   | Decision                           | Current state                                                                                    | Recommended disposition                                                                                                       | Depends on                                  | Deferral consequence                          |
 | --- | ---------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | --------------------------------------------- |
-| 1   | Corpus owner                       | Not designated                                                                                   | Designate one named human who is not an adjudicator                                                                           | None; needed by 2, 8                        | Corpus cannot be frozen                       |
+| 1   | Corpus owner                       | **Designated: Tom Tran (2026-11-21)**                                                            | Designate one named human who is not an adjudicator                                                                           | None; needed by 2, 8                        | Corpus cannot be frozen                       |
 | 2   | Historical inclusion and exclusion | 0 strict, 10 partial, 2 verified-defect holds, 3 unverified holds, 8 excluded; 6 leads uncounted | Confirm the 2 verified-defect holds, keep the 3 unverified holds out, confirm the 8 exclusions, and authorize lead extraction | 1 (owner records it)                        | Denominator undefined                         |
 | 3   | Strict versus partial eligibility  | Conservative reading applied; amendment not approved                                             | Keep the conservative reading until the corpus is powered                                                                     | 2, 4                                        | Freeze rule undefined                         |
 | 4   | Proposed protocol amendment        | Proposed, not applied                                                                            | Defer until the corpus owner records independent support for each partial                                                     | 1, 3                                        | Conservative reading stands                   |
@@ -41,16 +44,17 @@ evidence, not approval of any decision in this package.
 
 ## 1. Corpus-owner designation
 
-**Current status.** Open. No corpus owner is designated.
+**Current status.** **RECORDED 2026-11-21.** Tom Tran is designated as corpus owner; the
+record is [DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md).
 
 **Verified evidence.** The protocol assigns the corpus owner the selection, determinability,
-and freeze record (§5.3, §5.4). No person is designated. The repository shows only the
-operator as a human Git identity. The protocol permits the operator to be the corpus owner
-but not an adjudicator.
+and freeze record (§5.3, §5.4). One person is designated (Tom Tran, 2026-11-21). The
+repository shows only the operator as a human Git identity. The protocol permits the
+operator to be the corpus owner but not an adjudicator.
 
-**Recommended disposition.** Designate one named human as corpus owner, with a recorded
-statement that the person is not an adjudicator. The operator may serve if the operator
-accepts that the role is administrative and that the operator remains unable to adjudicate.
+**Recorded disposition.** Tom Tran was designated, with the recorded statement that he is
+not an adjudicator. The options below are preserved as the analysis that preceded the
+decision.
 
 **Alternatives and trade-offs.**
 
@@ -63,13 +67,14 @@ accepts that the role is administrative and that the operator remains unable to 
 **Dependencies.** None. Decisions 2 and 8 need a named owner to record the list and the
 freeze.
 
-**Effect on experiment validity.** The freeze record has no owner without this decision, so
-the corpus cannot be treated as pre-registered.
+**Effect on experiment validity.** The freeze record needed a named owner to be treated as
+pre-registered; that condition is now met.
 
-**Consequence of deferral.** Workstream A stays at `NOT READY FOR CORPUS-OWNER FREEZE`.
+**Consequence of deferral (no longer applicable).** Workstream A would have stayed at
+`NOT READY FOR CORPUS-OWNER FREEZE`.
 
-**Exact operator action required.** Record the corpus owner's name, the role title, the
-date, and a statement that the person is not an adjudicator of any corpus plan.
+**Recorded operator action.** The name, role, date, and independence statement are recorded
+in [DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md) §1.
 
 ## 2. Historical candidate inclusion and exclusion
 
@@ -359,5 +364,6 @@ The operator is asked to record, in writing:
 8. The freeze authorization, with the freeze commit and manifest hash.
 9. The execution authorization, with the budget, stop condition, and EP-15 disposition.
 
-None of these approvals exists in the repository at this baseline. PR #574 is merged
-evidence; it is not an approval of any item above.
+Item 1 is recorded in [DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md). Items 2–9 do
+not yet exist in the repository. PR #574 is merged evidence; it is not an approval of any
+item above.

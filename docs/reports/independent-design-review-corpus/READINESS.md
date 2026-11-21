@@ -200,11 +200,12 @@ adjudicator. The designations and the authorship checks are decisions 1 and 6 in
 ## 7. Outstanding operator decisions
 
 The full options, trade-offs, validity effects, and deferral consequences are in
-[OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md). None is decided here.
+[OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md). Only Decision 1 is recorded
+([DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md)); the others are open.
 
 | #   | Decision                           | Current state                                                                                    | Blocking evidence                                                            |
 | --- | ---------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| 1   | Corpus owner                       | Not designated                                                                                   | No named human and no independence statement; the freeze record has no owner |
+| 1   | Corpus owner                       | **Designated: Tom Tran (2026-11-21)**                                                            | Recorded in DECISION-RECORD-001; not an adjudicator                          |
 | 2   | Historical inclusion and exclusion | 0 strict, 10 partial, 2 verified-defect holds, 3 unverified holds, 8 excluded; 6 leads uncounted | No confirmed inclusion/exclusion list; the six leads are not extracted       |
 | 3   | Strict versus partial eligibility  | Conservative reading applied                                                                     | No recorded eligibility rule; the amendment is not approved                  |
 | 4   | Proposed protocol amendment        | Proposed, not applied                                                                            | No operator approve, reject, or revise decision                              |
@@ -616,3 +617,14 @@ proposed strict, one proposed partial — and the amended-best-case arithmetic n
 defect floor and misses the plan floor by one. No candidate was promoted, no case was
 constructed, no answer key exists, no adjudicator was named, no threshold or eligibility rule
 was approved, and the corpus was not frozen. The floors are not met and were not lowered.
+
+## 12. Decision 1 recorded (current)
+
+**Decision 1 — Corpus owner: APPROVED 2026-11-21.** Tom Tran is designated as corpus owner
+for the EGM corpus and is excluded from independent adjudication. The record is
+[DECISION-RECORD-001-CORPUS-OWNER.md](DECISION-RECORD-001-CORPUS-OWNER.md).
+
+This changes no candidate classification or count. The corpus remains **NOT FROZEN**, the
+experiment **NOT YET READY**, and H1/H2 **NOT ESTABLISHED**. Decisions 2–9 remain open; the
+freeze precondition that needed a named owner is now met, and the other preconditions are
+unchanged.

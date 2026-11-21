@@ -25,7 +25,8 @@ inference.
 
 The freeze cannot be executed until:
 
-1. The corpus owner is designated (decision 1).
+1. The corpus owner is designated (decision 1). **MET 2026-11-21 — Tom Tran; see
+   [DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md).**
 2. The inclusion and exclusion list is confirmed (decision 2).
 3. The eligibility rule is recorded (decision 3).
 4. The amendment decision is recorded (decision 4).
@@ -33,6 +34,8 @@ The freeze cannot be executed until:
 6. The two human adjudicators are designated and their authorship checks are recorded
    (decision 6).
 7. The thresholds and cost ceiling are approved (decision 7).
+
+Precondition 1 is met (owner designated 2026-11-21). Preconditions 2–7 remain open.
 
 The operator's freeze authorization is decision 8. Execution authorization is decision 9
 and is separate.
