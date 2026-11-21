@@ -1,11 +1,12 @@
 # Operator Decision Record — Draft Entries for Decisions 1–6
 
 **Type:** Decision-record draft (non-normative). It prepared record entries for the first six
-decisions of the [OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md). Decision 1
-was recorded by the operator on 2026-11-21 in
-[DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md); Decisions 2–6 remain unrecorded
-drafts.
-**Status:** **PARTIALLY RECORDED — Decision 1 approved 2026-11-21; Decisions 2–6 remain draft.**
+decisions of the [OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md). Decisions 1
+and 2 were recorded by the operator on 2026-11-21 in
+[DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md) and
+[DECISION-RECORD-002](DECISION-RECORD-002-HISTORICAL-DISPOSITIONS.md); Decisions 3–6 remain
+unrecorded drafts.
+**Status:** **PARTIALLY RECORDED — Decisions 1–2 approved 2026-11-21; Decisions 3–6 remain draft.**
 **Baseline:** `origin/main` @ `5a94dfe1`.
 **Protocol:** [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](../EGM-GOLDFISH-REVIEW-ASSESSMENT.md).
 **Decision package:** [OPERATOR-DECISION-PACKAGE.md](OPERATOR-DECISION-PACKAGE.md).
@@ -31,7 +32,7 @@ the operator records it. Decision 1 names Tom Tran; the remaining drafts use `<o
 | # | Decision | Current state | Recommended option | Depends on | Approval recorded |
 | --- | --- | --- | --- | --- | --- |
 | 1 | Corpus owner | **Designated: Tom Tran (2026-11-21)** | One named human who is not an adjudicator; the operator may serve | — | **Yes** — DECISION-RECORD-001 |
-| 2 | Historical inclusion and exclusion | 0 strict, 10 partial, 2 verified-defect holds, 3 unverified holds, 8 excluded; eight leads now extracted (3 proposed strict, 1 proposed partial, 1 evidence-blocked, 1 implementation-only, 2 no artifact) | Confirm the exclusions and holds; classify the extracted leads explicitly; keep unverified entries out of every floor | 1 | **No** |
+| 2 | Historical inclusion and exclusion | **Recorded 2026-11-21** — see DECISION-RECORD-002 | Confirm the exclusions and holds; classify the extracted leads explicitly; keep unverified entries out of every floor | 1 | **Yes** — DECISION-RECORD-002 |
 | 3 | Strict versus partial eligibility | Conservative reading applied; no rule recorded | Keep the conservative reading until the corpus can meet both floors without relaxing the recall denominator | 2, 4 | **No** |
 | 4 | Proposed protocol amendment | PROPOSED, not applied | Defer until the corpus owner records independent support for each partial, then decide with the actual counts | 1, 3 | **No** |
 | 5 | Independent seeder | Not designated; 0 of about 8 and 0 of about 6 cases | One named human who is not an adjudicator; record the sealed-manifest location and access list | — | **No** |
@@ -71,9 +72,13 @@ DECISION-RECORD-001; this draft proposes no other name.
 
 ## 3. Decision 2 — Historical inclusion and exclusion
 
-**Verified current state.** The manifest has 23 entries: 5 `VERIFIED`, 7 `PROPOSED`, 3
-`UNVERIFIED`, 8 `EXCLUDED`. The proposed disposition is 0 strict, 10 partial, 2
-verified-defect holds (`IDR-H-001`, `IDR-H-005`), 3 unverified holds (`IDR-E-006`,
+**Status: APPROVED 2026-11-21.** Recorded in
+[DECISION-RECORD-002](DECISION-RECORD-002-HISTORICAL-DISPOSITIONS.md); the preparation
+analysis below is preserved.
+
+**Verified current state (at preparation).** The manifest has 23 entries: 5 `VERIFIED`, 7
+`PROPOSED`, 3 `UNVERIFIED`, 8 `EXCLUDED`. The proposed disposition was 0 strict, 10 partial,
+2 verified-defect holds (`IDR-H-001`, `IDR-H-005`), 3 unverified holds (`IDR-E-006`,
 `IDR-E-010`, `IDR-E-012`), and 8 excluded. The manifest's `hold` inclusion value is 5.
 
 The six leads in the preparation plan, plus two additional leads found after PR #587, are
@@ -97,12 +102,10 @@ now extracted in [HISTORICAL-LEAD-INVESTIGATION.md](HISTORICAL-LEAD-INVESTIGATIO
 The extraction also corrects a premise: `IDR-E-005` points at `ba7736d4`, which is a
 post-fix revision that added the requirements. The exclusion stands as recorded.
 
-**Recommended option.** Confirm the 8 exclusions and the 2 verified-defect holds; keep the
-3 unverified entries out of every floor; classify each extracted lead explicitly — for
-`IDR-L-003` and `IDR-L-004`, record **include-with-review** at most, not `include`, until
-the independent support exists; keep `IDR-L-001` held; confirm `IDR-L-002`, `IDR-L-005`, and
-`IDR-L-006` as excluded/no-artifact. Do not count a lead until the owner records its
-classification.
+**Recorded option.** The 8 exclusions and 2 verified-defect holds were confirmed; the 3
+unverified entries stay out of every floor; `IDR-L-003`, `IDR-L-004`, `IDR-L-007`, and
+`IDR-L-008` are include with review; `IDR-L-001` is held; `IDR-L-002`, `IDR-L-005`, and
+`IDR-L-006` are excluded. No candidate is promoted to final eligibility.
 
 **Dependencies.** Decision 1 (the owner records the list). Decision 3 determines how the 10
 partial candidates and the newly extracted proposals are counted.
@@ -110,29 +113,17 @@ partial candidates and the newly extracted proposals are counted.
 **Independence constraint.** The owner is not an adjudicator. The owner's determinability
 judgment is a recorded judgment, not an adjudication.
 
-**Exact text to record (per candidate ID):**
-
-> Included: `<IDs, or "none">`.
-> Included with corpus-owner review: `<IDs>`.
-> Held, verified defect, no pre-defect input: `<IDs>`.
-> Held, unverified: `<IDs>`.
-> Excluded: `<IDs>` with one-line reason each.
-> Extracted leads: `IDR-L-001` `<hold / exclude>`; `IDR-L-002` `<exclude>`; `IDR-L-003`
-> `<include-with-review / hold>`; `IDR-L-004` `<include-with-review / hold>`; `IDR-L-005`
-> `<exclude, no artifact>`; `IDR-L-006` `<exclude, no artifact>`; `IDR-L-007`
-> `<include-with-review / hold>`; `IDR-L-008` `<include-with-review / hold, partial>`.
->
-> Approval block
-> `approved: false`
-> `identity: null`
-> `date: null`
+**Recorded text.** The exact dispositions, counts, holds, and exclusions are in
+[DECISION-RECORD-002](DECISION-RECORD-002-HISTORICAL-DISPOSITIONS.md) §2.
 
 **Effect if recorded.** The recall and false-positive denominators become defined. A
 contaminated or unclassified candidate stays out.
 
-**Consequence of deferral.** The denominator stays undefined and the corpus cannot freeze.
+**Consequence of deferral (no longer applicable).** The denominator would stay undefined and
+the corpus could not freeze.
 
-**Explicitly not approved.** No candidate is promoted by this draft, and no count is changed.
+**Recorded elsewhere.** The dispositions are in DECISION-RECORD-002; no candidate is promoted
+to final eligibility by this draft.
 
 ## 4. Decision 3 — Strict versus partial eligibility
 

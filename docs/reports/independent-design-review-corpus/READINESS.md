@@ -206,7 +206,7 @@ The full options, trade-offs, validity effects, and deferral consequences are in
 | #   | Decision                           | Current state                                                                                    | Blocking evidence                                                            |
 | --- | ---------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
 | 1   | Corpus owner                       | **Designated: Tom Tran (2026-11-21)**                                                            | Recorded in DECISION-RECORD-001; not an adjudicator                          |
-| 2   | Historical inclusion and exclusion | 0 strict, 10 partial, 2 verified-defect holds, 3 unverified holds, 8 excluded; 6 leads uncounted | No confirmed inclusion/exclusion list; the six leads are not extracted       |
+| 2   | Historical inclusion and exclusion | **Recorded 2026-11-21** — see DECISION-RECORD-002 for the full disposition set                   | Recorded; no candidate promoted or adjudicated                               |
 | 3   | Strict versus partial eligibility  | Conservative reading applied                                                                     | No recorded eligibility rule; the amendment is not approved                  |
 | 4   | Proposed protocol amendment        | Proposed, not applied                                                                            | No operator approve, reject, or revise decision                              |
 | 5   | Independent seeder                 | Not designated                                                                                   | No seeder, no sealed manifest, no seeded or no-known-defect cases            |
@@ -628,3 +628,17 @@ This changes no candidate classification or count. The corpus remains **NOT FROZ
 experiment **NOT YET READY**, and H1/H2 **NOT ESTABLISHED**. Decisions 2–9 remain open; the
 freeze precondition that needed a named owner is now met, and the other preconditions are
 unchanged.
+
+## 13. Decision 2 recorded (current)
+
+**Decision 2 — Historical inclusion and exclusion: APPROVED 2026-11-21.** The approved
+dispositions are 3 proposed strict plans / 4 defects and 11 proposed partial plans / 11
+defects (all include with review), 2 verified-defect holds, 3 unverified holds, 1
+evidence-blocked hold, 8 confirmed exclusions, and 3 excluded leads. The record is
+[DECISION-RECORD-002-HISTORICAL-DISPOSITIONS.md](DECISION-RECORD-002-HISTORICAL-DISPOSITIONS.md).
+
+This changes no candidate classification in the manifest. Approved historical disposition,
+proposed determinability, final eligibility, and independent adjudication remain distinct:
+no candidate is promoted, and the adjudicated count is **0**. The corpus remains **NOT
+FROZEN**, the experiment **NOT YET READY**, and H1/H2 **NOT ESTABLISHED**. Decisions 3–9
+remain open; the freeze preconditions that needed an owner and an inclusion list are now met.

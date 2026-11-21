@@ -33,7 +33,7 @@ evidence, not approval of any decision in this package.
 | #   | Decision                           | Current state                                                                                    | Recommended disposition                                                                                                       | Depends on                                  | Deferral consequence                          |
 | --- | ---------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- | --------------------------------------------- |
 | 1   | Corpus owner                       | **Designated: Tom Tran (2026-11-21)**                                                            | Designate one named human who is not an adjudicator                                                                           | None; needed by 2, 8                        | Corpus cannot be frozen                       |
-| 2   | Historical inclusion and exclusion | 0 strict, 10 partial, 2 verified-defect holds, 3 unverified holds, 8 excluded; 6 leads uncounted | Confirm the 2 verified-defect holds, keep the 3 unverified holds out, confirm the 8 exclusions, and authorize lead extraction | 1 (owner records it)                        | Denominator undefined                         |
+| 2   | Historical inclusion and exclusion | **Recorded 2026-11-21** — see DECISION-RECORD-002                                                | Confirm the exclusions and holds; classify the extracted leads explicitly; keep unverified entries out of every floor         | 1                                           | Shortfall remains                             |
 | 3   | Strict versus partial eligibility  | Conservative reading applied; amendment not approved                                             | Keep the conservative reading until the corpus is powered                                                                     | 2, 4                                        | Freeze rule undefined                         |
 | 4   | Proposed protocol amendment        | Proposed, not applied                                                                            | Defer until the corpus owner records independent support for each partial                                                     | 1, 3                                        | Conservative reading stands                   |
 | 5   | Independent seeder                 | Not designated                                                                                   | Designate a human independent of the adjudicators                                                                             | None; needed by 6, 8                        | No seeded or no-known-defect cases            |
@@ -78,19 +78,24 @@ in [DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md) §1.
 
 ## 2. Historical candidate inclusion and exclusion
 
-**Current status.** Open. The proposed list is unconfirmed.
+**Current status.** **RECORDED 2026-11-21.** The dispositions are approved in
+[DECISION-RECORD-002](DECISION-RECORD-002-HISTORICAL-DISPOSITIONS.md).
 
 **Verified evidence.** Twenty-three manifest entries: 5 `VERIFIED`, 7 `PROPOSED`, 3
 `UNVERIFIED`, 8 `EXCLUDED`. Current disposition: 0 strict determinable, 10 proposed
 partial, 2 verified-defect holds (ACP-ZED `IDR-H-001`, LLM02 `IDR-H-005`), 3 unverified
-holds (`IDR-E-006`, `IDR-E-010`, `IDR-E-012`), 8 excluded. Six evidence-backed leads are
-listed in the preparation plan but are not counted. The manifest's `hold` inclusion value
+holds (`IDR-E-006`, `IDR-E-010`, `IDR-E-012`), 8 excluded. Eight evidence-backed leads are
+extracted in [HISTORICAL-LEAD-INVESTIGATION.md](HISTORICAL-LEAD-INVESTIGATION.md): three
+proposed strict, one proposed partial, one evidence-blocked, one implementation-only, and
+two with no single artifact. The manifest's `hold` inclusion value
 is therefore 5, not 2; only the 2 verified-defect holds are "held pending corpus-owner
 review". All 17 entries that record an artifact resolve and match their SHA-256.
 
-**Recommended disposition.** Confirm the 8 exclusions and the 2 verified-defect holds, and
-authorize extraction of the six leads. Do not count a lead until it is extracted and
-classified. Keep the 3 unverified entries out of every floor count.
+**Recorded disposition.** The 8 exclusions, the 2 verified-defect holds, the 3 unverified
+holds, the evidence-blocked hold, and the lead dispositions are approved in
+[DECISION-RECORD-002](DECISION-RECORD-002-HISTORICAL-DISPOSITIONS.md). Approved: 3 proposed
+strict plans / 4 defects and 11 proposed partial plans / 11 defects, all include with
+review; no candidate is promoted to final eligibility. The analysis below is preserved.
 
 **Alternatives and trade-offs.**
 
@@ -102,17 +107,17 @@ classified. Keep the 3 unverified entries out of every floor count.
 - Use seeded cases to reach the floor: faster, but changes the corpus mix and must be
   reported separately.
 
-**Dependencies.** Decision 1 (the corpus owner records the confirmed list). Decision 3
-determines how the 10 partial candidates are counted.
+**Dependencies.** Decision 1 is recorded. Decision 3 determines how the 11 partial
+candidates are counted.
 
 **Effect on experiment validity.** Inclusion determines the recall denominator and the
 false-positive denominator. A contaminated candidate invalidates the comparison.
 
-**Consequence of deferral.** The corpus cannot be frozen and the shortfall remains.
+**Consequence of deferral (no longer applicable).** The corpus could not be frozen and the
+shortfall would remain.
 
-**Exact operator action required.** Record the confirmed include, include-with-review,
-hold, and exclude sets by candidate ID; record the reason for each hold and exclusion; and
-record a go/no-go for extracting the six leads.
+**Recorded operator action.** The dispositions are recorded in
+[DECISION-RECORD-002](DECISION-RECORD-002-HISTORICAL-DISPOSITIONS.md) §2.
 
 ## 3. Strict versus partial eligibility
 
@@ -364,6 +369,7 @@ The operator is asked to record, in writing:
 8. The freeze authorization, with the freeze commit and manifest hash.
 9. The execution authorization, with the budget, stop condition, and EP-15 disposition.
 
-Item 1 is recorded in [DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md). Items 2–9 do
-not yet exist in the repository. PR #574 is merged evidence; it is not an approval of any
+Items 1–2 are recorded in [DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md) and
+[DECISION-RECORD-002](DECISION-RECORD-002-HISTORICAL-DISPOSITIONS.md). Items 3–9 do not yet
+exist in the repository. PR #574 is merged evidence; it is not an approval of any
 item above.
