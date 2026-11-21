@@ -247,8 +247,14 @@ Fixed and written down before the first run:
   and not on the list (needs a one-line justification from the document); invalid or
   immaterial; duplicate of finding `<n>`. Judgment is against the document and the
   pre-registered defect list, never the reviewer's stated confidence.
-- Deduplication is therefore done by the adjudicator and is the only merge step. No
-  merge tooling is built.
+- Deduplication is done by the adjudicator and is the only merge step. The adjudicator
+  does not see arm labels; duplicate labels reference finding IDs. A separate analyst
+  holds the key and applies the within-arm deduplication after adjudication: a duplicate
+  is removed only when its original is in the same arm. Identical findings in different
+  arms remain distinct, because each arm is evaluated separately. Duplicate occurrences
+  are removed from both the numerator and the denominator of every metric, so a repeated
+  invalid finding cannot change the false-positive rate through repetition or shuffle
+  order. No merge tooling is built.
 - The adjudicator is not the author of the plan or the seeder of its defect.
 - **Independence.** A human adjudicates. A second person independently adjudicates a
   random 20% sample of findings and agreement is reported (Cohen's kappa). A model may
@@ -258,19 +264,18 @@ Fixed and written down before the first run:
 - **Adjudication is evidence work, not an approval.** It creates no SOP approval
   record and changes no lifecycle state. The protocol records findings and judgments;
   it does not record an operator decision to implement.
-- **False-positive rate** is invalid plus immaterial findings divided by all findings,
-  per arm and separately on the no-known-defect set. "Valid and not on the list" counts
-  as a true positive but is reported separately and is not used in the recall numerator.
-  The adjudicator assigns one class per finding; a duplicate that repeats an invalid
-  finding is recorded as a duplicate and is not counted a second time in the
-  false-positive numerator.
+- **False-positive rate** is invalid plus immaterial distinct findings divided by all
+  distinct findings, per arm and separately on the no-known-defect set. Duplicates are
+  removed before this computation and are not counted again. "Valid and not on the list"
+  counts as a true positive but is reported separately and is not used in the recall
+  numerator.
 
 ### 5.5 Repetition
 
 - Three repetitions per plan per arm, random order. Recall for a plan is the mean
   across repetitions; the union across repetitions is reported separately.
-- Reproducibility is the share of confirmed findings that recur in at least two of
-  three repetitions.
+- Reproducibility is the share of confirmed distinct findings that recur in at least
+  two of three repetitions.
 - A failed call (timeout, transport error, unparseable result) is recorded as a failed
   run and counted, not dropped, and is not retried beyond what SOP itself does
   (`REVIEW.md` §6.4: a failure to review is not a finding).
@@ -279,10 +284,10 @@ Fixed and written down before the first run:
 
 | Metric                 | Definition                                                                                                         |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Recall                 | known defects matched ÷ known defects, per arm                                                                     |
-| Precision              | confirmed findings ÷ all findings                                                                                  |
+| Recall                 | known defects matched by distinct findings ÷ known defects, per arm                                                |
+| Precision              | confirmed distinct findings ÷ all distinct findings, per arm                                                       |
 | False-positive rate    | per §5.4                                                                                                           |
-| Token cost             | tokens from `metadata.json` per plan (all calls of the arm, summed); cost per confirmed defect                     |
+| Token cost             | tokens from `metadata.json` per plan (all calls of the arm, summed); cost per confirmed distinct defect            |
 | Latency                | wall-clock around the command, timed outside SOP; for C, the parallel batch, with the sequential sum also reported |
 | Reproducibility        | per §5.5                                                                                                           |
 | Adjudication agreement | kappa on the double-adjudicated sample                                                                             |
