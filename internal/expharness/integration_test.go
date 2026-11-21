@@ -57,7 +57,7 @@ type fake struct {
 	turns  []string
 	fail   int // fail this many requests with 500 first
 	delay  time.Duration
-	lock   *sync.Mutex // shared across fakes to serialize them
+	gate   *gate // when set, replies wait until every gated request has arrived
 	ollama bool
 }
 
@@ -75,9 +75,8 @@ func (f *fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		reply, f.turns = f.turns[0], f.turns[1:]
 	}
 	f.mu.Unlock()
-	if f.lock != nil {
-		f.lock.Lock()
-		defer f.lock.Unlock()
+	if f.gate != nil {
+		f.gate.wait()
 	}
 	time.Sleep(f.delay)
 	if failNow {
@@ -94,6 +93,31 @@ func (f *fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"usage": map[string]any{"prompt_tokens": 50, "completion_tokens": 20}}
 	}
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// gate releases its waiters once want requests are in flight at the same time: a
+// provider-side observation of concurrency that does not depend on wall-clock timing.
+type gate struct {
+	mu         sync.Mutex
+	n, want    int
+	open       chan struct{}
+	Concurrent bool
+}
+
+func newGate(want int) *gate { return &gate{want: want, open: make(chan struct{})} }
+
+func (g *gate) wait() {
+	g.mu.Lock()
+	g.n++
+	if g.n == g.want {
+		g.Concurrent = true
+		close(g.open)
+	}
+	g.mu.Unlock()
+	select {
+	case <-g.open:
+	case <-time.After(90 * time.Second):
+	}
 }
 
 func (f *fake) saw(marker string) int {
@@ -177,12 +201,17 @@ func (r *rig) runDir(t *testing.T, stdout string) string {
 var integPol = Policy{AllowedProviders: []string{"mlx", "ollama"}, UsedClasses: []string{"medium"},
 	AllowedEnv: []string{"SOP_MLX_BASE_URL", "SOP_OLLAMA_BASE_URL", "SOP_TOOL_AUDIT_LOG"}}
 
-// batch runs three calls concurrently (one project each) under one process timer.
-func batch(t *testing.T, tag string, delay time.Duration, lock *sync.Mutex) ([]*rig, []string, time.Duration) {
-	t.Helper()
+// TestThreeConcurrentCallsAreIsolatedAndAttributed is the EP-15 dry run on a
+// synthetic provider: three concurrent calls, one project each, per-call attribution
+// with no problems, and no cross-contamination. The provider holds every reply until
+// all three requests are in flight, so the test proves the harness really issues them
+// concurrently (observed at the provider, not inferred from timing). Wall-clock
+// latency is deliberately not asserted here: it is only meaningful on a real provider.
+func TestThreeConcurrentCallsAreIsolatedAndAttributed(t *testing.T) {
+	g := newGate(3)
 	rigs := []*rig{}
 	for i := 0; i < 3; i++ {
-		rigs = append(rigs, newRig(t, "mlx", fmt.Sprintf("%s%d", tag, i), &fake{delay: delay, lock: lock}, 1))
+		rigs = append(rigs, newRig(t, "mlx", fmt.Sprintf("M%d", i), &fake{gate: g}, 1))
 	}
 	for _, r := range rigs {
 		if pf := Preflight(r.dir, r.env, integPol); !pf.OK() {
@@ -191,26 +220,13 @@ func batch(t *testing.T, tag string, delay time.Duration, lock *sync.Mutex) ([]*
 	}
 	outs := make([]string, 3)
 	var wg sync.WaitGroup
-	start := time.Now() // one-process timer around all three
 	for i, r := range rigs {
 		wg.Add(1)
 		go func() { defer wg.Done(); outs[i], _ = r.run(t) }()
 	}
 	wg.Wait()
-	return rigs, outs, time.Since(start)
-}
-
-// TestThreeConcurrentCallsAreIsolatedAndAttributed is the EP-15 dry run on a
-// synthetic provider: three concurrent calls, one project each, one process timer,
-// per-call attribution with no problems, and no cross-contamination. The same batch
-// against a provider that serializes shows a wall time at least one delay longer,
-// which is what the protocol's C-arm latency is meant to capture.
-func TestThreeConcurrentCallsAreIsolatedAndAttributed(t *testing.T) {
-	const delay = time.Second // process start-up jitter is ~0.5s
-	rigs, outs, parallel := batch(t, "M", delay, nil)
-	_, _, serial := batch(t, "S", delay, &sync.Mutex{})
-	if serial < parallel+delay/2 {
-		t.Errorf("serial batch %v not distinguishable from parallel batch %v", serial, parallel)
+	if !g.Concurrent {
+		t.Fatal("the three requests were never in flight together")
 	}
 	seen := map[string]bool{}
 	for i, r := range rigs {

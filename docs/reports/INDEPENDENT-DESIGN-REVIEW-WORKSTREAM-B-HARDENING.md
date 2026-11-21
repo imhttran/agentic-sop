@@ -135,10 +135,13 @@ safe, not that it is preferable.
 
 ## 5. EP-15 verification readiness (still UNVERIFIED)
 
-**Dry run done:** a synthetic provider under the same procedure distinguishes a parallel
-batch from a serialized one by wall time (`TestThreeConcurrentCallsAreIsolatedAndAttributed`),
-and the proxy's ceilings hold. This proves the **procedure and instruments**, not any real
-provider's behavior. EP-15 stays UNVERIFIED.
+**Dry run done:** a synthetic provider that holds each reply until all three requests are in
+flight confirms the harness issues three calls concurrently, one project each, with clean
+attribution (`TestThreeConcurrentCallsAreIsolatedAndAttributed`), and the proxy's ceilings
+hold. Concurrency is observed at the provider, not inferred from wall time: a first version
+that compared parallel and serialized batch wall times failed on loaded CI and was replaced.
+This proves the **procedure and instruments**, not any real provider's latency or
+concurrency. EP-15 stays UNVERIFIED.
 
 **Bounded procedure, to run only after the operator names provider, model, call count and
 ceiling:**
