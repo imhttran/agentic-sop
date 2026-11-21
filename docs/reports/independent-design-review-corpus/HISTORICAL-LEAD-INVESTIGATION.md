@@ -370,15 +370,16 @@ neither is eligible, counted, or adjudicated, and the manifest is still 23 entri
   (`ae690f2e…`), `internal/planflow/historicalize.go` (`a5faf3d7…`),
   `docs/specs/EXECUTION.md` (`2d3f0517…`), `docs/specs/RECOVERY.md` (`4e6d6dde…`).
 - **What the artifact says:** §1 "reuses the same archive storage
-  (`.agent-sdlc/archive/<plan-id>/`)"; §5.5 writes the record under that path; §6 makes a
+  (`.agent-sdlc/archive/<plan-id>/`)"; §5 step 5 writes the record under that path; §6 makes a
   re-run against a historicalized plan a deterministic no-op that MUST NOT duplicate
   history. `RECOVERY.md` §7 repeats the same `archive/<plan-id>/` path for handoff and
   supersession.
 - **What the permitted paths show at the pin:** `planID(rel)` is a slug of the file
-  **basename** (`internal/planflow/planflow.go:1826`), and `archiveID(id)` returns that id
-  unchanged (`internal/planflow/historicalize.go:658`). Two plans whose basenames agree —
-  for example `docs/plans/PLAN-X.md` and `docs/history/plans/PLAN-X.md` — and any
-  re-activation of a plan therefore share one archive directory.
+  **basename** (`internal/planflow/planflow.go:1484` at the pin), and `archiveID(id)`
+  returns that id unchanged (`internal/planflow/historicalize.go:571` at the pin). Two
+  plans whose basenames agree — for example `docs/plans/PLAN-X.md` and
+  `docs/history/plans/PLAN-X.md` — and any re-activation of a plan therefore share one
+  archive directory.
 - **Defect:** one archive slot is keyed to a plan id that is not unique across activations
   or source directories. A later activation at the same id overwrites the earlier
   activation's lifecycle, task snapshot, and disposition; a staged-release check that reads
