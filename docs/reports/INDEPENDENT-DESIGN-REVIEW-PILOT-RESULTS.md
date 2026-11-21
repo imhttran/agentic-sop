@@ -18,7 +18,7 @@ the conditional contract is
 is an earlier assessment. This report is later, point-in-time pilot evidence: it records
 what the pilots observed and does not rewrite any historical count or classification in
 that report. Where the pilots change a corpus classification, the change is recorded as a
-separate addendum there (§2.5, §10).
+separate addendum there (§2.6, §10).
 
 ## 1. Scope and authorization
 
@@ -65,7 +65,7 @@ The operator chose these two plans for the pilot. Neither is a clean corpus entr
   evidence that names the defect. ACP-ZED is therefore **not** a strict determinable
   historical defect. Its classification is **pending corpus-owner review**, and the
   feasibility report's historical "strict determinable" count is superseded by the
-  post-pilot addendum there (§2.5, §10).
+  post-pilot addendum there (§2.6, §10).
 - **LLM04** (`docs/plans/PLAN-04-SOP-LLM04-Supply-Chain.md`): the plan has one revision
   and its own status line states the gap (outcomes remain PARTIAL until re-execution
   under the newly recorded acceptance mapping), so a reviewer reads the defect in the
@@ -214,7 +214,7 @@ These are proposals only; nothing was changed.
 2. The ACP-ZED strict classification is **superseded pending corpus-owner review**: the
    plan and its gap report share `79acbfc1`, and no uncontaminated pre-defect revision
    exists in git. The feasibility report carries the corresponding post-pilot addendum
-   (§2.5, §10); its historical count is preserved, not rewritten.
+   (§2.6, §10); its historical count is preserved, not rewritten.
 3. Establish whether the native Ollama agent's repository tools are active in the
    `sop prompt` review path; each Pilot B run made a single model call.
 4. If these two plans are reused in the corpus, the corpus owner should rule on the
