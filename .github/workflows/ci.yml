@@ -155,6 +155,53 @@ jobs:
           export SOP_SECURITY_E2E_RULES="$tools/semgrep-rules"
           bash scripts/checks/stage2-gate-e2e.sh
 
+  # The repository's own required security gate. The jobs above scan fixtures or a
+  # temporary repository, so a new blocking finding in this repository's source
+  # (for example an unbaselined exec.Command in a test) used to reach main and only
+  # blocked later `sop run` tasks. This runs the real `sop security scan --required
+  # --scope workspace` with the committed config and baseline
+  # (scripts/checks/repo-security-gate.sh). Provisioning is explicit: the pinned
+  # scanners and rules come from the same script the jobs above use, and the
+  # offline OSV database is fetched here, never during the scan.
+  repo-security-gate:
+    name: repository required security gate
+    runs-on: ubuntu-latest
+    needs: security-integration
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/sop-security-tools
+          key: sop-security-tools-${{ runner.os }}-${{ hashFiles('scripts/security/*-manifest.json', 'scripts/checks/security-integration.sh', 'scripts/security/semgrep-requirements.lock') }}
+      - name: provision the pinned scanners and rules
+        env:
+          SOP_SECURITY_TOOLS_DIR: ${{ runner.temp }}/sop-security-tools
+          SOP_SECURITY_INTEGRATION_PROVISION_ONLY: "1"
+        run: bash scripts/checks/security-integration.sh
+      - name: provision the offline OSV database and the config's rules directory
+        env:
+          SOP_SECURITY_TOOLS_DIR: ${{ runner.temp }}/sop-security-tools
+        run: |
+          set -euo pipefail
+          bash scripts/security/fetch-osv-databases.sh
+          bash scripts/checks/osv-db-verify.sh --db .agent-sdlc/osv-db
+          cp -R "$SOP_SECURITY_TOOLS_DIR/semgrep-rules" .agent-sdlc/security-rules
+      - name: scan the repository with the required gate
+        env:
+          SOP_SECURITY_TOOLS_DIR: ${{ runner.temp }}/sop-security-tools
+        run: |
+          set -euo pipefail
+          tools="$SOP_SECURITY_TOOLS_DIR"
+          export PATH="$tools/gitleaks-8.30.1:$tools/osv-scanner-2.7.0:$tools/cargo-audit-0.22.2:$tools/semgrep-1.183.0-venv/bin:$PATH"
+          bash scripts/checks/repo-security-gate.sh
+
   # The suite under the race detector, which the lifecycle and scheduler tests rely on,
   # split across two runners (scripts/checks/race-shard.sh). Same RAM-backed TMPDIR
   # runner as the ordinary suite: SQLite I/O under -race is the slow part.
