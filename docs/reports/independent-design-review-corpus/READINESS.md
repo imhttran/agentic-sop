@@ -494,3 +494,110 @@ candidates are extracted and uncounted, and the case-construction and decision-r
 scaffolding is prepared. No candidate was promoted, no case was constructed, no answer key
 exists, no adjudicator was named, no threshold or eligibility rule was approved, and the
 corpus was not frozen. The floors are not met and were not lowered.
+
+## 11. Post-#587 historical expansion (current)
+
+This section is later than §10 and records two additional historical leads. It does not
+rewrite any earlier count. It promotes nothing, constructs nothing, freezes nothing, and
+approves nothing.
+
+**Chronology (continued):**
+
+7. PR #587 merged (`ebe26a11`): six leads resolved, case-construction and decision-record
+   scaffolding prepared.
+8. This expansion: two additional leads found by tracing commits that corrected a normative
+   specification.
+
+### 11.1 Additional extraction
+
+The evidence is in [HISTORICAL-LEAD-INVESTIGATION.md](HISTORICAL-LEAD-INVESTIGATION.md) §8 and
+[lead-extraction.json](lead-extraction.json) `additional_leads`.
+
+| Lead | Artifact @ revision | Result |
+| --- | --- | --- |
+| `IDR-L-007` | `docs/specs/PLAN-HISTORICALIZATION.md` @ `fcf53888` | The archive is keyed to `.agent-sdlc/archive/<plan-id>/` with an idempotency rule, but the plan id is a basename slug; same-named or re-activated plans share one slot and a later activation overwrites the earlier archive. Fixed by PR #322. **Proposed strict.** |
+| `IDR-L-008` | `docs/specs/RAG-RETRIEVAL-CONTRACT.md` @ `c6ef5f56` | `document_hash` covers the whole document while the evidence unit is a chunk, so the returned evidence is not checkable. Fixed by PR #330. The contract explicitly chose whole-document projection, so the classification is a judgment. **Proposed partial.** |
+
+Both artifacts are clean: they contain none of the fix vocabulary, and every permitted
+reference was checked to exist at the pinned revision.
+
+### 11.2 Counts, separated by state
+
+| Measure | Manifest recorded | PR #587 proposals | This expansion | Combined, uncounted |
+| --- | --- | --- | --- | --- |
+| Strict proposed plans | 0 | 2 | 1 | 3 |
+| Strict proposed defects | 0 | 3 | 1 | 4 |
+| Partial proposed plans | 10 | 0 | 1 | 11 |
+| Partial proposed defects | 10 | 0 | 1 | 11 |
+| Verified-defect holds | 2 | — | — | 2 |
+| Unverified holds | 3 | — | — | 3 |
+| Excluded | 8 | 1 lead | 0 | 8 entries / 9 leads |
+| Independently adjudicated | 0 | 0 | 0 | **0** |
+
+The manifest is still 23 entries. The combined column is **proposed and uncounted**; the
+corpus owner records each classification under decisions 2 and 3, and a corpus-owner record
+is not an independent adjudication.
+
+### 11.3 Scenario A — strict protocol
+
+| Case | Strict plans | Strict defects | + 8 seeded (if they count) | Shortfall vs 15/15 |
+| --- | --- | --- | --- | --- |
+| A0 — as recorded | 0 | 0 | 8 / 8 | 15 / 15 (seeded separate) or 7 / 7 |
+| A1 — PR #587 proposals recorded | 2 | 3 | 10 / 11 | 13 / 12 (seeded separate) or 5 / 4 |
+| A2 — this expansion recorded | 3 | 4 | 11 / 12 | 12 / 11 (seeded separate) or 4 / 3 |
+
+The repository still cannot supply 15 strict historical design plans from its own defect
+history. The strict shortfall under the conservative reading is **12 plans and 11 defects**.
+
+### 11.4 Scenario B — proposed amendment
+
+[PROPOSED-PROTOCOL-AMENDMENT.md](PROPOSED-PROTOCOL-AMENDMENT.md) is not approved. It counts a
+plan only when it carries at least one **determinable** known defect, and it counts only
+individually determinable defects. Its effect is therefore conditional on the corpus owner
+independently determining every partial candidate.
+
+| Case | Plans | Defects | + 8 seeded (if they count) | Shortfall vs 15/15 |
+| --- | --- | --- | --- | --- |
+| B0 — PR #587, all 10 manifest partials determined and the two strict proposals recorded | 12 | 13 | 20 / 21 | 3 / 2 (seeded separate) or floor met in arithmetic |
+| B1 — this expansion, all 11 partials determined and the three strict proposals recorded | 14 | 15 | 22 / 23 | 1 plan / 0 defects (seeded separate) or floor met in arithmetic |
+
+B1 reaches the **defect** floor (15) and misses the **plan** floor by one under the
+conservative reading. That is arithmetic, not readiness: it requires the unapproved
+amendment, a corpus-owner determination for each of 11 partials, eight constructed seeded
+cases, six controls, two independent adjudicators, an approved threshold and budget, a
+freeze, and an EP-15 disposition. None of those exists.
+
+The question of whether the seeded set counts toward the floor (§10.3) remains unresolved;
+both readings are shown. No threshold is changed.
+
+### 11.5 Workstream B dependency (unchanged in effect)
+
+Workstream B's latest hardening results are on an **unmerged** branch
+(`verify/egm-workstream-b-execution-hardening`). They are not recorded here as corpus
+facts and are left to the Linux agent. For the freeze record, the dependencies are
+unchanged: EP-15 (provider concurrency and batch latency) remains UNVERIFIED; EP-02
+(provider-attested model identity) and EP-12 (reproducibility) require an operator
+disposition; and the execution-path items in
+[WORKSTREAM-B-RECONCILIATION.md](WORKSTREAM-B-RECONCILIATION.md) remain as recorded. The
+freeze record must also record the operator's instruction-boundary and environment choices
+once that branch merges.
+
+### 11.6 Verdict (unchanged)
+
+| Measure | Verdict |
+| --- | --- |
+| Corpus | **NOT FROZEN** |
+| Corpus-owner freeze readiness | **NOT READY** |
+| Historical strict floor | **NOT MET** (0 recorded; 3 plans / 4 defects proposed) |
+| Historical partial-inclusive floor | **NOT MET** (10 / 15 recorded; 14 / 15 if the amendment is approved and every partial is determined) |
+| Seeded / no-known-defect | **NOT CONSTRUCTED** (0 / 8, 0 / 6) |
+| Independent seeder | **NOT DESIGNATED** |
+| Two independent human adjudicators | **NOT IDENTIFIED**; adjudicator-confirmed determinability is 0 |
+| Full experiment | **NOT YET READY** |
+| H1/H2 outcomes | **NOT ESTABLISHED** |
+
+**What changed since §10:** two additional historical design defects are extracted — one
+proposed strict, one proposed partial — and the amended-best-case arithmetic now reaches the
+defect floor and misses the plan floor by one. No candidate was promoted, no case was
+constructed, no answer key exists, no adjudicator was named, no threshold or eligibility rule
+was approved, and the corpus was not frozen. The floors are not met and were not lowered.
