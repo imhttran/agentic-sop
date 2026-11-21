@@ -1,9 +1,15 @@
 # Operator approval packet — ACP execution-lease wiring
 
 Status: **approval packet, read-only. Nothing here is approved, applied, or
-authorized.** This document requests the four decisions the blocked SOP run needs
-before implementation may resume. It follows the repository's decision-record
-convention (`docs/plans/PROPOSAL-*-OPERATOR-DECISION-RECORD.md`).
+authorized.** This document requests the decisions the blocked SOP run needs before
+implementation may resume. It follows the repository's decision-record convention
+(`docs/plans/PROPOSAL-*-OPERATOR-DECISION-RECORD.md`).
+
+Revision note: the first version of this packet was written while stage 1 (an
+inheritance helper) was still in the working tree and blocked on a security-baseline
+fingerprint. Stage 1 was reviewed and **dropped** before any commit (design record
+D1), which removes that blocker. This version replaces the recovery sequence and the
+baseline and reconcile decisions accordingly.
 
 Plan (untracked working-tree document, so it is named rather than linked):
 `docs/plans/PLAN-ACP-EXECUTION-LEASE-WIRING.md`
@@ -13,23 +19,25 @@ Acceptance mapping: [`ACCEPTANCE-MAPPING-ACP-EXECUTION-LEASE-WIRING.md`](ACCEPTA
 Gap record: [`ACP-EXECUTION-EXCLUSION-GAP.md`](ACP-EXECUTION-EXCLUSION-GAP.md).
 Follow-up tests: #575.
 
-## Current state (verified 2026-11-21, `main` = `c673d442`)
+## Current state (2026-11-21, `main` = `c673d442`)
 
-| Item               | State                                                                                                                                                                             |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Plan authorization | absent — the plan still says it authorizes no implementation                                                                                                                      |
-| Approval artifacts | none (`.agent-sdlc/approval.json` absent)                                                                                                                                         |
-| SOP plan           | `plan-acp-execution-lease-wiring`, `ACTIVE`                                                                                                                                       |
-| Tasks              | `stage-1`, `stage-10` `BLOCKED` (RETRIES_EXHAUSTED, attempt 0/3); 14 `PLANNED`; 0 completed                                                                                       |
-| `execution.lease`  | absent from `.agent-sdlc/config.yaml` ⇒ `off`                                                                                                                                     |
-| Stage-1 work       | uncommitted: `internal/executionlease/inherit.go`, `internal/cli/execution_lease.go`, `internal/cli/mcp_start_work.go` (+6 lines), and two test files. Builds; inherit tests pass |
-| Security baseline  | unchanged; `internal/cli/mcp_start_work.go` entry still holds `semgrep:1c1fe971…86180`                                                                                            |
-| Plan digest        | `plan.meta.json` `source_sha256` = `6e9922ed…`; the plan file is unchanged, so the digest still matches                                                                           |
+| Item               | State                                                                                                                                                      |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Plan authorization | absent — the plan still says it authorizes no implementation                                                                                               |
+| Approval artifacts | none (`.agent-sdlc/approval.json` absent)                                                                                                                  |
+| SOP plan           | `plan-acp-execution-lease-wiring`, `ACTIVE`, compiled from the plan **before** stage 1 was dropped                                                         |
+| Tasks (persisted)  | `stage-1`, `stage-10` `BLOCKED` (RETRIES_EXHAUSTED, attempt 0/3); 14 `PLANNED`; 0 completed. `stage-1` now describes a dropped step                        |
+| `execution.lease`  | absent from `.agent-sdlc/config.yaml` ⇒ `off`                                                                                                              |
+| Stage-1 code       | none: the working tree has no inheritance code. `go build`, `go vet` and the `internal/cli` and `internal/executionlease` tests pass                       |
+| Security baseline  | unchanged; the `internal/cli/mcp_start_work.go` entry holds `semgrep:1c1fe971…86180` (line 721), and `exec.Command(exe, args...)` is at line 721 again     |
+| Security scan      | re-run 2026-11-21 after stage 1 was dropped (`sop security scan --required --scope workspace`, run id `scan-stage1-dropped`): verdict PASS, coverage COMPLETE; the `exec.Command` finding at line 721 is suppressed by the existing baseline entry (`semgrep:1c1fe971…`) |
+| Plan digest        | the plan and mapping were edited after compilation, so `plan.meta.json` `source_sha256` (`6e9922ed…`) is expected to mismatch; not yet checked by SOP     |
 
 ## Decision 1 — authorize the plan
 
 **Requested:** approve `PLAN-ACP-EXECUTION-LEASE-WIRING.md` as the implementation
-authority for stages 1–16, with the nine design decisions in the design record.
+authority for stages 2–16 (stage 1 is dropped), with the design decisions in the design
+record (D1 child-as-acquirer, D2 resolved by D1).
 
 What approval would mean:
 
@@ -37,7 +45,7 @@ What approval would mean:
   date. Prose status is documentation only; SOP does not parse it (see below).
 - The design record's recommendations become the accepted scope.
 - Approval does **not** authorize a security-baseline change (Decision 2), a plan
-  revision (Decision 3), or a merge (Decision 4).
+  reconcile (Decision 3), or a merge (Decision 4).
 
 Why operator input is required: SOP has no plan-level approval gate. The only
 approval mechanisms are task-level `NEEDS_HUMAN` (`internal/domain/approval.go:45-55`)
@@ -46,98 +54,91 @@ and `human.approval_before_commit` (`internal/cli/commit.go:31`,
 (`internal/planflow/planflow.go:320-331`); nothing reads a plan's prose status.
 An existing run is therefore not evidence of authorization.
 
-## Decision 2 — reconcile the security-baseline fingerprint
+## Decision 2 — security baseline (deferred; no change needed today)
 
-**Finding (verified independently).**
+**Status.** The blocker is resolved by dropping stage 1, not by a baseline edit.
+Stage 1 added an import and a five-line constant above `launchWorkProcess` in
+`mcp_start_work.go`, which moved the existing `exec.Command(exe, args...)` from line
+721 to 727. The baseline suppression identity includes line and column
+(`internal/security/baseline.go:147-148`), so the entry no longer matched. With the
+change removed the call is at line 721 again. The required scan was re-run and
+confirms it: verdict PASS, no unsuppressed blocking findings (18 unsuppressed MEDIUM
+findings elsewhere are non-blocking).
 
-| Fact                | Value                                                                                                                                                                                                 |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Rule                | `dangerous-exec-command` (`internal/security/.../audit/dangerous-exec-command.yaml`, severity ERROR, CWE-94, confidence LOW)                                                                          |
-| Path / column       | `internal/cli/mcp_start_work.go`, column 9                                                                                                                                                            |
-| Baseline entry      | `semgrep:1c1fe971…86180`, line 721                                                                                                                                                                    |
-| Current finding     | `semgrep:bba96ea0…c8873`, line 727                                                                                                                                                                    |
-| Matched code        | `cmd := exec.Command(exe, args...)` — unchanged since 2026-10-27 (`git blame`)                                                                                                                        |
-| Diff above the call | +6 lines: one import and the five-line `InheritEnv` constant (stage-1)                                                                                                                                |
-| Semgrep version     | 1.183.0 in both the 2026-11-08 and 2026-11-21 scans                                                                                                                                                   |
-| Fingerprint source  | semgrep OSS returns `"requires login"`; SOP computes `StableFingerprint(provider, ruleID, path, line, column)` (`internal/security/normalize.go:116`, used at `internal/security/semgrep.go:361-363`) |
+| Fact               | Value                                                                                                                                                                                                 |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rule               | `dangerous-exec-command` (`internal/security/.../audit/dangerous-exec-command.yaml`, severity ERROR, CWE-94, confidence LOW)                                                                          |
+| Path / column      | `internal/cli/mcp_start_work.go`, column 9                                                                                                                                                            |
+| Baseline entry     | `semgrep:1c1fe971…86180`, line 721                                                                                                                                                                    |
+| Shifted finding    | `semgrep:bba96ea0…c8873`, line 727 (seen only while stage 1 was present)                                                                                                                              |
+| Matched code       | `cmd := exec.Command(exe, args...)` — unchanged since 2026-10-27 (`git blame`)                                                                                                                        |
+| Fingerprint source | semgrep OSS returns `"requires login"`; SOP computes `StableFingerprint(provider, ruleID, path, line, column)` (`internal/security/normalize.go:116`, used at `internal/security/semgrep.go:361-363`) |
 
 Reproduction: `("semgrep","dangerous-exec-command","internal/cli/mcp_start_work.go",721,9)`
 hashes to `1c1fe971…`; the same tuple with `727` hashes to `bba96ea0…`. Only the line
-changed. `internal/security/baseline.go:147-148` documents exactly this: the
-suppression identity includes line and column.
+changed.
 
-**Security implication:** none. `argv` is an array, not a shell string; `exe` is
-`os.Executable()`; the arguments are a fixed `prompt --capability <validated> --file
-<path inside the job dir>` or `run <confined plan path>`; no shell is invoked and no
-untrusted text reaches `argv`. The existing baseline reason remains true.
+**Security implication of the finding:** none. `argv` is an array, not a shell string;
+`exe` is `os.Executable()`; the arguments are a fixed `prompt --capability <validated>
+--file <path inside the job dir>` or `run <confined plan path>`; no shell is invoked
+and no untrusted text reaches `argv`. The existing baseline reason remains true.
 
-**Recurrence risk.** The finding moves again whenever lines are added above the call.
-Stages 3, 4 and 5 edit `startWork`, which sits above `launchWorkProcess`, so the
-baseline would need refreshing repeatedly if the launcher stays in place.
+**Recurrence risk (the real decision, due when stage 3 lands).** Stages 3, 4 and 5
+edit `startWork`, which sits above `launchWorkProcess`, so the line moves again and
+the same drift recurs. Decide how to handle it before stage 3 merges:
 
-**Options.**
-
-- **Option A — refresh the existing entry (recommended, one-time per layout
-  change).** Replace only the `fingerprint` value in the existing entry and append a
-  dated note to `reason`. Keep `rule_id`, `path`, `owner` and `expires_at`. Expect a
-  second refresh after stages 3–5 land.
-- **Option B — move the launcher to its own file.** Relocate `launchWorkProcess` to
-  `internal/cli/launch.go` in the same change, then replace the entry with one whose
-  `path` is the new file. Future edits to `startWork` no longer move the match. Cost:
-  a larger baseline change (path plus fingerprint) and a code move; the rule still
-  fires, so this is not a suppression.
-- **Option C — no change.** Keep the run blocked.
-
-**Exact change under Option A** (not applied):
-
-```json
-{
-  "fingerprint": "semgrep:bba96ea0…c8873",
-  "rule_id": "dangerous-exec-command",
-  "path": "internal/cli/mcp_start_work.go",
-  "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03; fingerprint refreshed 2026-11-21 after unrelated lines above the unchanged exec.Command call shifted the match from line 721 to 727 (same rule, path, column and matched code).",
-  "owner": "imhttran",
-  "expires_at": "2027-06-30T00:00:00Z"
-}
-```
+- **Option A — refresh the existing entry after each layout change.** Replace only the
+  `fingerprint` value and append a dated note to `reason`; keep `rule_id`, `path`,
+  `owner` and `expires_at`. Expect a refresh after stages 3–5.
+- **Option B — move the launcher to its own file (recommended if stages 3–5 proceed).**
+  Relocate `launchWorkProcess` to `internal/cli/launch.go` in a change of its own,
+  then replace the entry with one whose `path` is the new file. Later edits to
+  `startWork` no longer move the match. Cost: a code move and a baseline path change;
+  the rule still fires, so this is not a suppression.
+- **Option C — no change.** Accept that the required scan blocks stages 3–5.
 
 Not requested: any new suppression, any severity or `fail_on` change, any exclusion,
-or any edit to `.agent-sdlc/security-rules/`. The full fingerprint value must be
-taken from the operator's own re-run, not from this document's elision.
+or any edit to `.agent-sdlc/security-rules/`. The full fingerprint value must come
+from the operator's own re-run, not from this document's elision.
 
-## Decision 3 — integrate the acceptance mapping
+## Decision 3 — reconcile the edited plan
 
-The mapping document is merged and matches all 16 task IDs. Verification found one
-inconsistency: its section titles are the **compiled task titles** shown by
-`sop status`, while the plan numbers the same stages with different `### N.` headings.
-IDs are authoritative; the titles differ for all 16 stages.
+Two separate questions.
 
-**Why a plan edit is not a no-op.** The plan is not written in the deterministic
-rendered shape (`## <stage-id> — <title>` with `### …` sub-sections). `Compile`
-therefore falls back to the model (`internal/planner/markdown.go:351-391`),
-`parseTaskSection` only accepts `## Tasks`-style sections (`markdown.go:474-478`),
-and the plan uses `## Steps`. Consequence: any plan edit forces a model-based
-recompile, which is not guaranteed byte-stable. The current "unchanged" preview is a
-deterministic no-op (`internal/planflow/planflow.go:823-846`) and proves nothing
-about a changed plan.
+**3a. Acceptance mapping.** The mapping document is merged and matches all 16 task
+IDs; its section titles are the **compiled task titles** shown by `sop status`, which
+differ from the plan's `### N.` headings. IDs are authoritative.
 
-**Options.**
-
-- **Option A — keep the mapping separate (recommended, zero risk).** Record in the
-  approval that `ACCEPTANCE-MAPPING-ACP-EXECUTION-LEASE-WIRING.md` is the
-  authoritative acceptance reference for stages 1–16. No plan edit, no recompile, no
-  digest change, no risk to executed task definitions.
-- **Option B — append the mapping to the plan.** Edit the plan, then preview with
-  `sop reconcile docs/plans/PLAN-ACP-EXECUTION-LEASE-WIRING.md --list-changed` and
-  only apply if no executed task changes; if stages 1 or 10 change, apply with
-  `--accept-changed stage-1 --accept-changed stage-10`. Risk: the model may
-  re-derive titles or definitions; a removed executed stage stops reconciliation.
+- **Option A — keep the mapping separate (recommended).** Record that
+  `ACCEPTANCE-MAPPING-ACP-EXECUTION-LEASE-WIRING.md` is the authoritative acceptance
+  reference for stages 2–16. No plan edit for it, no digest change.
+- **Option B — append the mapping to the plan.** Edit the plan and reconcile (3b).
 - **Option C — canonicalize the plan.** Rewrite every stage into the rendered shape
-  so compilation becomes deterministic and `### Acceptance Mapping` feeds
-  `Stage.AcceptanceMapping`. Highest one-time review cost; largest definition churn.
+  (`## <stage-id> — <title>`) so compilation becomes deterministic and
+  `### Acceptance Mapping` feeds `Stage.AcceptanceMapping`. Highest review cost.
 
-**Not requested:** manual edits to `.agent-sdlc/plan.meta.json` or `.agent-sdlc/plan.json`.
-If Option B is chosen, the digest is rewritten only by `sop reconcile`.
+**3b. The plan has already changed.** Dropping stage 1 edited the plan (step 1 is now a
+"Dropped" stub; steps 2 and 4 and the open questions changed). The plan is not written
+in the deterministic rendered shape, so `Compile` falls back to the model
+(`internal/planner/markdown.go:351-391`); any plan edit therefore forces a model-based
+recompile that is not guaranteed byte-stable. The "unchanged" preview is a
+deterministic no-op (`internal/planflow/planflow.go:823-846`) and proves nothing about
+a changed plan. Decide how to reconcile:
+
+- **Option A — preview, then reconcile (recommended).** Run
+  `sop reconcile docs/plans/PLAN-ACP-EXECUTION-LEASE-WIRING.md --list-changed` and read
+  the result. If only `stage-1` changed, apply with `--accept-changed stage-1`. If any
+  other executed task changes, stop and review. Never edit `plan.meta.json` or
+  `plan.json` by hand.
+- **Option B — revert the plan edits and record the drop only in the design record.**
+  Restores the digest but leaves a `stage-1` task that SOP would try to run, so it
+  needs a separate instruction to skip it. Not recommended.
+- **Option C — start a new plan.** Save the revised plan under a new name and let SOP
+  create a fresh plan; the persisted stage-1 and stage-10 evidence stays under
+  `.agent-sdlc/runs/`. Cleanest history, but a larger change.
+
+The reconcile preview may call the configured model (cloud, per project config), so
+confirm that is acceptable before running it.
 
 ## Decision 4 — merge authorization
 
@@ -147,14 +148,16 @@ only and changes no production behaviour.
 ## Post-approval sequence (for reference; not executed)
 
 1. Record Decisions 1–3 in a decision record (template below).
-2. Apply the authorized baseline change and re-run the required scan.
-3. Preserve the blocked evidence:
+2. Preserve the blocked evidence:
    `cp -R .agent-sdlc/runs/stage-1 .agent-sdlc/runs/stage-10 .agent-sdlc/recovery-20261121/`.
-4. If Decision 3 chose B or C: `sop reconcile <plan> --list-changed`, review, then
-   `sop reconcile <plan>` with `--accept-changed` only for tasks that legitimately
-   changed.
-5. `sop retry stage-1`, then `sop retry stage-10` — individually, never `--all`.
-6. Continue with `sop run` under the normal lifecycle.
+3. Reconcile the edited plan per Decision 3b, with `--accept-changed` only for tasks
+   that legitimately changed (`stage-1`).
+4. Re-run the required security scan after each stage that edits `mcp_start_work.go`
+   (the baseline matched on 2026-11-21 with stage 1 dropped). Apply a baseline change
+   only if the operator authorized one.
+5. `sop retry stage-10` (it was blocked by the same scan finding). Do not retry
+   `stage-1`: it is dropped. Never use `sop retry --all`.
+6. Continue with `sop run` under the normal lifecycle, from stage 2.
 
 ## Approval record template
 
@@ -164,33 +167,32 @@ only and changes no production behaviour.
 **Status:** <APPROVED | REJECTED | DEFERRED> — decided by <name> on <YYYY-MM-DD>.
 
 - **Decision 1 — plan:** <approved | rejected>. Scope: PLAN-ACP-EXECUTION-LEASE-WIRING
-  stages <1-16 | subset>. Design decisions D1–D9: <accepted | accepted with changes:
+  stages <2-16 | subset>. Design decisions D1–D9: <accepted | accepted with changes:
   …>.
-- **Decision 2 — security baseline:** <authorized: Option A | Option B | not
-  authorized>. Entry: rule `dangerous-exec-command`, path `internal/cli/mcp_start_work.go`,
-  fingerprint <old> → <new>. Conditions: <…>.
-- **Decision 3 — acceptance mapping:** <Option A | B | C>.
+- **Decision 2 — security baseline:** <no change needed (scan re-run clean) | authorized:
+  Option A | Option B | not authorized>. Entry: rule `dangerous-exec-command`, path
+  `internal/cli/mcp_start_work.go`. Conditions: <…>.
+- **Decision 3 — plan reconcile:** mapping <Option A | B | C>; reconcile <Option A | B
+  | C>. `--list-changed` output reviewed: <yes | no>.
 - **Decision 4 — merge:** <authorized per PR | not authorized>.
 - **Expiry / review date:** <…>.
 - **Evidence:** this packet, the design record, the gap record, run artifacts under
-  `.agent-sdlc/runs/stage-1` and `.agent-sdlc/runs/stage-10`.
+  `.agent-sdlc/runs/stage-1` (the dropped attempt) and `.agent-sdlc/runs/stage-10`.
 ```
 
 ## Evidence index
 
 - `internal/executionlease/lease.go` — `Acquire`, `Held.Release`, `WatchHeartbeat`,
   `State.Stale`, `ReleaseStale`, `HeartbeatEvery`/`HeartbeatLimit`/`Grace`.
-- `internal/executionlease/inherit.go` (uncommitted) — `InheritEnv`, `InheritedOwner`.
-- `internal/cli/execution_lease.go` — `executionLease` (main), `leaseAcquireOrInherit`
-  (uncommitted, no caller).
-- `internal/cli/mcp_start_work.go` — `startWork`, `acquireWorkLock`, `launchWorkProcess`,
-  the new `InheritEnv` constant.
+- `internal/cli/execution_lease.go` — `executionLease`.
+- `internal/cli/mcp_start_work.go` — `startWork`, `acquireWorkLock`, `launchWorkProcess`.
 - `internal/cli/acp.go` — `acpSubmission`, the 250 ms `projectlock` probe.
 - `internal/cli/resume.go` — `reportStaleExecutionLease`.
 - `internal/security/normalize.go`, `internal/security/semgrep.go`,
   `internal/security/baseline.go` — fingerprint computation and drift behaviour.
 - `.agent-sdlc/runs/stage-1`, `.agent-sdlc/runs/stage-10` — `gate.json`,
-  `classification.json`, `security/scan.json` (the single blocking finding).
+  `classification.json`, `security/scan.json` (the single blocking finding while stage
+  1 was present).
 
 ## Not requested
 

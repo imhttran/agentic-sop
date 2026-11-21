@@ -5,12 +5,10 @@ entries resolve the plan's "Known conflict" and "Open questions" so the plan can
 approved or amended with an explicit record instead of being inferred from an
 existing SOP run.
 
-Line numbers for `internal/cli/mcp_start_work.go` refer to the working tree that
-carries stage-1's uncommitted change (6 lines above `launchWorkProcess`); on
-committed `main` subtract 6. The stage-1 files (`internal/executionlease/inherit.go`,
-`leaseAcquireOrInherit` in `internal/cli/execution_lease.go`,
-`internal/cli/execution_lease_inherit_test.go`) are **uncommitted** and are not part
-of `main`.
+Stage 1 (the inheritance helper) was built by an earlier SOP run, reviewed, and
+**dropped** before any commit (see D1 and D2). Line numbers for
+`internal/cli/mcp_start_work.go` refer to committed `main`; the stage-1 change that
+shifted them is gone.
 
 ## D1. Lease ownership and inheritance
 
@@ -20,15 +18,13 @@ of `main`.
 (`internal/cli/run.go:199`, `internal/cli/drive.go:83`). ACP/MCP parents acquire
 nothing; `startWork` only takes the start lock (`mcp_start_work.go:269,696`). The
 children started by `startWork` (`sop prompt …`, `sop run PLAN`) do not acquire the
-lease yet. Stage-1 adds `InheritEnv` and `InheritedOwner`
-(`internal/executionlease/inherit.go:20,75`) plus `leaseAcquireOrInherit`
-(`internal/cli/execution_lease.go:66`), with no caller.
+lease yet.
 
 **Proposed resolution.** Child-as-acquirer. The ACP/MCP parent only *checks* the
-lease and launches; the child acquires as its first lifecycle act. The inheritance
-marker is set only when the parent already holds a lease — which the ACP/MCP flow
-never does today — so inheritance remains a valid but unused path for future nested
-execution. `startWork` must not set the marker.
+lease and launches; the child acquires as its first lifecycle act, through the
+existing `executionLease` helper. No inheritance marker, `InheritedOwner` or
+`leaseAcquireOrInherit` is built: with child-as-acquirer no parent ever holds a lease
+for a child, so nothing would set the marker and the helper would be dead code.
 
 **Alternatives and trade-offs.**
 - *Parent-as-acquirer* (proposal §1's "parent writes the owner record before
@@ -40,39 +36,28 @@ execution. `startWork` must not set the marker.
   on-disk check): two writers, and a forged/stale marker silently permits a second
   owner. Rejected.
 
-**Tests and acceptance criteria.** `TestExecutionLeaseInheritMatchesLiveParent`,
-`TestExecutionLeaseInheritRejectsMismatch`,
-`TestExecutionLeaseInheritRejectsUnparsableRecord`
-(`internal/executionlease/inherit_test.go`, uncommitted) and
-`TestExecutionLeaseInheritIsInertUnderOff` (`internal/cli/execution_lease_inherit_test.go`,
-uncommitted). Stage 6 adds the end-to-end CLI-vs-ACP case.
+- *Inheritance helper* (stage 1: a marker env var plus an on-disk record check,
+  child holds an inert handle): reviewed and dropped. It has no caller under
+  child-as-acquirer; its liveness check cannot tell a reused pid from the parent;
+  and adding its constant to `mcp_start_work.go` shifted the pre-existing
+  `exec.Command` line and broke the reviewed security-baseline fingerprint.
 
-**Risks.** A future parent that holds the lease but forgets the marker makes the
-child contend and fail closed (busy), which is safe but surprising; document it.
+**Tests and acceptance criteria.** Stage 2 adds the `sop prompt` acquisition test;
+stage 6 adds the end-to-end CLI-vs-ACP case. No inheritance tests exist.
 
-**Recommendation.** Adopt child-as-acquirer and keep the marker for future nesting.
+**Risks.** If a later change makes a parent hold the lease for a child, it must
+decide the heartbeat and release ownership then; that is a new decision, not
+provided by this plan.
+
+**Recommendation.** Adopt child-as-acquirer. Do not build inheritance.
 
 ## D2. Acquisition versus inherited ownership
 
-**Current behaviour.** On a matched inheritance, `leaseAcquireOrInherit` returns a
-nil `*Held`, and `Held.Release` on nil is a no-op (`lease.go:333-336`). The parent
-keeps the file open, heartbeats it (`WatchHeartbeat`, `lease.go:269`), and releases
-it.
-
-**Proposed resolution.** The inherited handle is read-only: no heartbeat, no
-release, no path-inode check. Document it as an observation of another process's
-ownership, not a second lease.
-
-**Alternatives and trade-offs.** Sharing the file descriptor across `exec` is not
-possible; re-acquiring in the child creates two writers and a spurious `BusyError`.
-
-**Tests and acceptance criteria.** A test asserting that when the child inherits,
-the parent's record is byte-identical before and after the child's run and the file
-still exists (extend the stage-1 inherit tests).
-
-**Risks.** If the parent stops heartbeating while still alive (for example a
-suspended process) and the lease is cross-host, staleness can be misreported. On the
-same host, pid liveness protects it.
+**Resolved by D1.** With child-as-acquirer there is no inherited handle: the child
+holds, heartbeats and releases its own lease through `executionLease`, exactly as
+`sop run` does. The heartbeat-failure risk in the plan's open questions is
+unchanged: on the same host pid liveness protects a live run; across hosts a stalled
+heartbeat longer than `HeartbeatLimit` can be reported stale.
 
 **Recommendation.** Keep the inert handle.
 

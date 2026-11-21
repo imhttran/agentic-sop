@@ -27,7 +27,7 @@ Rules used here:
 
 | Dimension                        | Stage(s)  | Evidence today                                                                                                                                                                                                                                                                                                             |
 | -------------------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit-level lease correctness     | 1, 12, 14 | exists: `internal/executionlease/lease_test.go` (Acquire, heartbeat, staleness, `ReleaseStale`, recovery claim), `internal/cli/execution_lease_test.go` (off, required, advisory, unknown mode); `internal/executionlease/inherit_test.go` and `internal/cli/execution_lease_inherit_test.go` are uncommitted stage-1 work |
+| Unit-level lease correctness     | 12, 14    | exists: `internal/executionlease/lease_test.go` (Acquire, heartbeat, staleness, `ReleaseStale`, recovery claim), `internal/cli/execution_lease_test.go` (off, required, advisory, unknown mode) |
 | ACP-vs-ACP start exclusion       | 8 (base)  | exists: `TestACPPromptConcurrentStartsCreateOneWorkItem` (`internal/cli/acp_test.go`)                                                                                                                                                                                                                                      |
 | CLI-vs-ACP execution exclusion   | 6         | missing                                                                                                                                                                                                                                                                                                                    |
 | MCP-vs-ACP start exclusion       | 8         | exists at the start-lock layer: `internal/cli/start_exclusion_test.go` (three tests); lease layer missing                                                                                                                                                                                                                  |
@@ -40,27 +40,13 @@ Rules used here:
 
 ---
 
-## stage-1 — Resolve lease ownership conflict and add inheritance and acquire-or-inherit helpers
+## stage-1 — Dropped (inheritance helper)
 
 ### Acceptance Mapping
 
-- criterion 1 (ownership conflict settled in favour of marker-plus-inert-handle):
-  manual: `internal/executionlease/inherit.go` and `leaseAcquireOrInherit` in
-  `internal/cli/execution_lease.go`; the plan's open question must be closed in the
-  plan text at the next revision.
-- criterion 2 (marker identity is checked, not trusted):
-  `TestExecutionLeaseInheritMatchesLiveParent`,
-  `TestExecutionLeaseInheritRejectsMismatch`,
-  `TestExecutionLeaseInheritRejectsUnparsableRecord`
-  (`internal/executionlease/inherit_test.go`, uncommitted).
-- criterion 3 (off is inert): `TestExecutionLeaseInheritIsInertUnderOff` plus the
-  marker-present off case in `internal/cli/execution_lease_inherit_test.go`
-  (uncommitted).
-- criterion 4 (`executionLease`, `run.go` and `drive.go` unchanged):
-  `git diff --stat` on those three paths shows no change from `executionLease`'s
-  existing behaviour; the new code is an unused sibling.
-- status: **blocked** — the change is present in the working tree but the required
-  security scan failed on fingerprint drift (see the run report).
+- status: **dropped**. The inheritance helper was built, reviewed and removed before
+  any commit; child-as-acquirer needs no inheritance (see
+  `PLAN-ACP-EXECUTION-LEASE-WIRING-DESIGN-DECISIONS.md` D1). No criteria apply.
 
 ## stage-2 — Wire the execution lease into `sop prompt`
 
