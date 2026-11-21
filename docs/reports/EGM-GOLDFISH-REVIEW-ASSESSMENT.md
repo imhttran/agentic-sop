@@ -76,9 +76,10 @@ wi.Content, OutputRequirements}` with `OutputRequirements` fixed to "Return conc
   therefore record the selected model while a different model name is sent to the
   provider. The experiment MUST unset the override variables and cross-check the model
   key in `tokens` against `routing.model` (§5.1, §6.1); the pilot confirms the check
-  works but does not defer the requirement. `models.stages.review` pins only `sop
-  review` and the `sop run` plan stage (`stageAgent` in `internal/cli/review.go` and
-  `internal/cli/run.go`); `sop prompt` does not use it.
+  works but does not defer the requirement. `models.stages.review` pins the review
+  stage of `sop review` and `sop run` (`reviewProvider` calls `stageAgent` in
+  `internal/cli/review.go`) and the plan stage of `sop run` (`internal/cli/run.go`);
+  `sop prompt` never calls `stageAgent`, so the pin does not apply to it.
 - Observability: `metadata.json` carries `routing` (class, provider, model) and
   `tokens` by model (`prompt.go:775-788`). The `tokens` key is the model name the
   client put in its own request (`chatRequest.Model`, recorded through
@@ -109,9 +110,9 @@ wi.Content, OutputRequirements}` with `OutputRequirements` fixed to "Return conc
   `.agent-sdlc/config.yaml`, which at `64101f9e` sets harness `tool`, provider `ollama`
   and a `:cloud` model. A scratch clone at a historical parent commit therefore
   inherits the configuration of that commit, which can differ across plans and can send
-  plan text to a cloud model. The project `.env` is also applied at startup unless a
-  variable is already exported (`loadDotEnv` in `internal/cli/cli.go`; whether the
-  `sop prompt` path reaches it was not traced).
+  plan text to a cloud model. The project `.env` is also applied at startup for every
+  command, including `sop prompt`, unless a variable is already exported (`loadDotEnv`
+  in `internal/cli/cli.go`), so a `.env` in the project can inject an override.
 - Concurrent invocations in one project can collide. `promptRunID`
   (`internal/cli/prompt.go`) checks that a run directory does not exist and
   `runpkg.New` (`internal/run/run.go`) creates it later with `MkdirAll`, which does not
