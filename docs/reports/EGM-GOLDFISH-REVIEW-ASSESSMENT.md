@@ -378,7 +378,11 @@ Fixed and written down before the first run:
   defect or are adjudicated valid and not on the list; invalid, immaterial and duplicate
   occurrences are excluded. Both confirmed classes count in the reproducibility
   numerator and denominator. Reproducibility is computed per plan; the PASS gate uses the
-  median across plans, and the pooled share is reported separately.
+  median across plans, and the pooled share is reported separately. A plan with zero
+  confirmed findings has no defined per-plan share: it is excluded from the median and
+  reported separately with the count of such plans. The gate is computed over plans with
+  at least one confirmed finding; if fewer than 15 plans contribute, the reproducibility
+  gate is INCONCLUSIVE.
 - A failed call (timeout, transport error, unparseable result) is recorded as a failed
   run and counted, not dropped, and is not retried beyond what SOP itself does
   (`REVIEW.md` §6.4: a failure to review is not a finding).
@@ -499,8 +503,8 @@ recall rules would otherwise pass.
    than 10 points above A, or above 50% absolute; token cost above 1.5× A (B) or 3.5×
    A (C); median latency above 1.5× A (B) or 2× A (C).
 2. **PASS.** Recall gain at least 25% relative and at least 3 more confirmed known
-   defects than the comparator, the lower bound of the 90% interval above zero, and
-   reproducibility of at least 70%.
+   defects than the comparator, the lower bound of the 90% interval above zero, and a
+   median-across-plans reproducibility of at least 70%.
 3. **FAIL (no useful effect).** The upper bound of the 90% interval on the recall gain
    is below 10% relative.
 4. **INCONCLUSIVE.** Everything else, including a positive point estimate whose interval
@@ -565,7 +569,7 @@ higher false-positive rate; the B×3 control's own rate is reported.
 The planned call budget is the corpus size × arms × repetitions, plus the pilot and
 any optional Arm D. The target corpus is 26–29 plans (12–15 historical, about 8
 seeded, about 6 no-known-defect); the minimum is 15 plans with known defects and 15
-known defects. Three repetitions are run per plan per arm.
+determinable known defects. Three repetitions are run per plan per arm.
 
 | Configuration                                      | Calls per plan per repetition | 15 plans × 3 | 26 plans × 3 | 29 plans × 3 |
 | -------------------------------------------------- | ----------------------------- | ------------ | ------------ | ------------ |
