@@ -34,6 +34,7 @@ func TestDecisionABSkillContract(t *testing.T) {
 		"sop status",
 		"do not substitute another model",
 		"do not change a model default",
+		"Run from the SOP checkout",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("decision-ab contract missing %q", want)
@@ -53,6 +54,9 @@ func TestDecisionABCommandsAreTheBenchmark(t *testing.T) {
 	body := read(t, filepath.Join(skillsRoot, "decision-ab", "SKILL.md"))
 	var bench, sopLines int
 	for _, line := range bashCommandLines(body) {
+		if strings.HasPrefix(line, "go run ./cmd/deceleval-ab ") && !strings.Contains(line, "-endpoint <endpoint>") {
+			t.Errorf("benchmark command must carry the discovered endpoint: %q", line)
+		}
 		switch {
 		case strings.HasPrefix(line, "go run ./cmd/deceleval-ab "):
 			bench++
