@@ -13,6 +13,13 @@ model through the native agent (§7). They are separate evidence sets.
 the conditional contract is
 [PRD-SOP-INDEPENDENT-DESIGN-REVIEW.md](../requirements/PRD-SOP-INDEPENDENT-DESIGN-REVIEW.md).
 
+**Chronology:** the feasibility report
+[INDEPENDENT-DESIGN-REVIEW-EXPERIMENT-FEASIBILITY.md](INDEPENDENT-DESIGN-REVIEW-EXPERIMENT-FEASIBILITY.md)
+is an earlier assessment. This report is later, point-in-time pilot evidence: it records
+what the pilots observed and does not rewrite any historical count or classification in
+that report. Where the pilots change a corpus classification, the change is recorded as a
+separate addendum there (§2.5, §10).
+
 ## 1. Scope and authorization
 
 - Each pilot follows the assessment's §6.4 shape: arms A and B once on two plans, four
@@ -54,9 +61,11 @@ The operator chose these two plans for the pilot. Neither is a clean corpus entr
 - **ACP-ZED** (`docs/plans/PLAN-SOP-ACP-ZED.md`): the plan and its gap report
   (`docs/plans/ACP-EXECUTION-EXCLUSION-GAP.md`) were added in the same commit,
   `79acbfc1`, so no earlier revision of the plan exists in git. The plan text does not
-  state the gap. The feasibility report's classification of this candidate as the one
-  strict determinable defect relies on later evidence that is not later in git history,
-  and should be rechecked (§10).
+  state the gap, and at the creation commit the plan cannot be separated from the
+  evidence that names the defect. ACP-ZED is therefore **not** a strict determinable
+  historical defect. Its classification is **pending corpus-owner review**, and the
+  feasibility report's historical "strict determinable" count is superseded by the
+  post-pilot addendum there (§2.5, §10).
 - **LLM04** (`docs/plans/PLAN-04-SOP-LLM04-Supply-Chain.md`): the plan has one revision
   and its own status line states the gap (outcomes remain PARTIAL until re-execution
   under the newly recorded acceptance mapping), so a reviewer reads the defect in the
@@ -152,12 +161,33 @@ cloud model.
   and unused, or not active in this path, is unverified. This qualifies the assessment's
   statement (§1.2) that the Ollama harness performs a bounded read-only inspection
   before synthesis.
-- The two ACP outputs contain none of the gap-report terms searched for (a keyword
-  check, not an analysis).
+- A keyword check of the two ACP outputs found none of the gap-report terms searched
+  for. This is a keyword check, not an analysis, and it does not establish that the model
+  never accessed the gap report; see §7.1.
 - The durations come from the one-process timer and are valid for this setup. They reflect
   a remote service and are not comparable with Pilot A's file-time estimates.
 - The outputs were not adjudicated. Pilot A and Pilot B use different models and
   harnesses, so nothing here compares them.
+
+### 7.1 Contamination boundary
+
+Pilot B's clone for each ACP-ZED run contained
+`docs/plans/ACP-EXECUTION-EXCLUSION-GAP.md`, and that document identifies the defect
+under review. The native agent has access to the clone's project directory (§7), so the
+reviewer could have read the answer before or during synthesis. Keyword absence in the
+output is not evidence that it did not.
+
+- The Pilot B ACP-A and ACP-B runs are **contaminated for defect detection** and are
+  excluded from any detection, false-positive, or recall evidence.
+- They remain valid only for the plumbing checks they actually exercised: routing and
+  source attribution, the `tokens` key against `routing.model`, `unreported_calls`,
+  per-run directory isolation, wall-clock timing, and model-list stability. Those results
+  are retained in §7.
+- The LLM04 clone does not contain the ACP gap report, so the LLM04 runs are not
+  contaminated by it. They are still not clean detection evidence, because the LLM04
+  plan's own status line states its gap (§3).
+
+Nothing in this section changes the protocol, its thresholds, or its outcomes.
 
 ## 8. Not tested
 
@@ -181,8 +211,10 @@ These are proposals only; nothing was changed.
 
 1. Use the one-process timer for latency in any later run, and record it in the manifest.
    Pilot B used it and recorded plausible durations.
-2. Recheck the ACP-ZED classification and the strict-determinable count in the
-   feasibility report, given that the plan and its gap report share a commit.
+2. The ACP-ZED strict classification is **superseded pending corpus-owner review**: the
+   plan and its gap report share `79acbfc1`, and no uncontaminated pre-defect revision
+   exists in git. The feasibility report carries the corresponding post-pilot addendum
+   (§2.5, §10); its historical count is preserved, not rewritten.
 3. Establish whether the native Ollama agent's repository tools are active in the
    `sop prompt` review path; each Pilot B run made a single model call.
 4. If these two plans are reused in the corpus, the corpus owner should rule on the

@@ -62,7 +62,7 @@ as unable to adjudicate them; see §3.2 for the limits of that proxy.
 
 | Document (last-modified)                                                                                                             | Later evidence                                                                                                                                      | Defect or gap                                                                                                                                                                                                       | Proposed determinability                                                                                                                                     | Corpus status                                                                           |
 | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| [PLAN-SOP-ACP-ZED.md](../plans/PLAN-SOP-ACP-ZED.md) (`e462deed`)                                                                     | [ACP-EXECUTION-EXCLUSION-GAP.md](../plans/ACP-EXECUTION-EXCLUSION-GAP.md)                                                                           | The acceptance matrix claims the project lock protects CLI, MCP, and ACP equally; the gap report shows the lock is metadata-only and is not held for execution, so CLI-first and ACP-first exclusion is unresolved. | **Determinable with referenced code**: the plan names the lock; the referenced source shows the execution lifetime is not covered.                           | Verified defect-bearing; proposed determinable.                                         |
+| [PLAN-SOP-ACP-ZED.md](../plans/PLAN-SOP-ACP-ZED.md) (`e462deed`)                                                                     | [ACP-EXECUTION-EXCLUSION-GAP.md](../plans/ACP-EXECUTION-EXCLUSION-GAP.md)                                                                           | The acceptance matrix claims the project lock protects CLI, MCP, and ACP equally; the gap report shows the lock is metadata-only and is not held for execution, so CLI-first and ACP-first exclusion is unresolved. | **Historically proposed determinable with referenced code**: superseded; strict classification pending corpus-owner review (§2.5, §10).                      | Verified defect-bearing; strict classification superseded pending review.               |
 | [PLAN-Code-Retrieval-Context-Seam.md](../plans/PLAN-Code-Retrieval-Context-Seam.md) (`03a7d7d9`)                                     | The plan's own post-merge status line. No independent later report was found.                                                                       | Retrieval was wired to IMPLEMENT but not FIX, despite the original implement/fix scope; step 5 also awaits model-budget approval.                                                                                   | **Proposed, not strict**: the status line is part of the document, so this is self-referential evidence; a reviewer at the parent revision would not see it. | Verified defect-bearing; self-referential evidence, not counted as strict determinable. |
 | [PLAN-SOP-RUN-ACCEPT-001.md](../plans/PLAN-SOP-RUN-ACCEPT-001.md) (`56ff82ac`)                                                       | [PLAN-STATUS-AUDIT-2026-11-04.md](PLAN-STATUS-AUDIT-2026-11-04.md)                                                                                  | Six operator acceptance checks fail because the fixtures predate the later `### Acceptance Mapping` contract; the plan remains ACTIVE.                                                                              | **Partially determinable**: the failure is visible only after the later contract; the original plan's own checks passed at its revision.                     | Verified gap; proposed partially determinable.                                          |
 | [PLAN-04-SOP-LLM04-Supply-Chain.md](../plans/PLAN-04-SOP-LLM04-Supply-Chain.md) (`e55527f4`)                                         | The plan's status and the LLM04 evidence report.                                                                                                    | Historical outcomes remain PARTIAL until re-execution under the newly recorded acceptance mapping.                                                                                                                  | **Partially determinable**: the acceptance-mapping requirement is a later contract.                                                                          | Verified gap; proposed partially determinable.                                          |
@@ -118,6 +118,8 @@ partially determinable or self-referential candidates count toward neither.
 | Assessment floor for plans with known defects              | 15           |
 | Plan-count shortfall (even if all 8 count)                 | 7            |
 | Determinable-defect shortfall (strict)                     | 14           |
+| Effective strict count pending review (§10)                | 0            |
+| Effective strict shortfall pending review (§10)            | 15           |
 | Seeded-defect cases constructed                            | 0 of about 8 |
 | No-known-defect cases constructed                          | 0 of about 6 |
 
@@ -129,6 +131,16 @@ determinable candidates toward neither floor as the conservative reading. The
 assessment's wording ("plans with known defects" and "determinable known defects") does
 not settle which floor such a plan counts toward, so the freeze rule must decide it
 (§8, item 2).
+
+> **Post-pilot update (2026-11-21).** Two separately authorized four-call pilots were
+> run after this report was written. Their observed results are in
+> [INDEPENDENT-DESIGN-REVIEW-PILOT-RESULTS.md](INDEPENDENT-DESIGN-REVIEW-PILOT-RESULTS.md);
+> they are plumbing evidence only and carry no H1 or H2 outcome. The pilots found that the
+> ACP-ZED plan and its gap report were added in the same commit, `79acbfc1`, with no
+> earlier plan revision in git. ACP-ZED is therefore not a strict determinable historical
+> defect; its classification is **pending corpus-owner review**. The effective strict count
+> is **0 pending review**, not 1, and the strict shortfall is 15. The historical count above
+> is preserved as the pre-pilot record; see §10.
 
 ## 3. Human adjudication feasibility
 
@@ -343,9 +355,11 @@ Arm D.
 **NOT YET READY.**
 
 - **Not READY:** the historical corpus has 1 proposed determinable defect against a
-  floor of 15, and 8 evidence-verified candidate plans against a floor of 15; the seeded
-  and no-known-defect corpus is not constructed; no two independent human adjudicators
-  are identified; Workstream B is pending; and the four-call pilot is unauthorized.
+  floor of 15 (the pre-pilot count; the post-pilot effective strict count is 0 pending
+  corpus-owner review — §10), and 8 evidence-verified candidate plans against a floor of
+  15; the seeded and no-known-defect corpus is not constructed; no two independent human
+  adjudicators are identified; Workstream B is pending; and the four-call pilot is
+  unauthorized.
 - **Not BLOCKED:** the missing work is actionable. The repository contains evidence
   pointers for corpus assembly, and the operator can designate adjudicators and authorize
   a pilot.
@@ -354,3 +368,31 @@ Arm D.
 
 The next step is corpus assembly and operator designation of two independent human
 adjudicators, followed by the Linux evidence intake and the four-call pilot.
+
+See §10 for the later pilot addendum: two four-call pilots were run after this verdict and
+did not change it.
+
+## 10. Post-feasibility pilot addendum
+
+This section is later than the report above. It records pilot evidence without rewriting
+the historical findings or counts.
+
+- **Pilots.** Two separately authorized four-call pilots were executed on 2026-11-21:
+  Pilot A on a local oMLX model and Pilot B on an Ollama cloud model through the native
+  agent. Each ran arms A and B once on two plans, four calls in all. Observed results are
+  in [INDEPENDENT-DESIGN-REVIEW-PILOT-RESULTS.md](INDEPENDENT-DESIGN-REVIEW-PILOT-RESULTS.md).
+- **Status of the evidence.** Both are plumbing pilots, excluded from the experiment
+  dataset. Nothing was adjudicated. There is no H1 or H2 outcome, no PASS, FAIL, or
+  INCONCLUSIVE result, and no implementation authorization.
+- **Contamination.** Pilot B's ACP-ZED clones contained the gap report that names the
+  defect, and the native agent has project-directory access. Those runs are not valid
+  evidence of independent defect detection; see the pilot report's §7.1.
+- **ACP-ZED classification.** The plan and its gap report share commit `79acbfc1`, and no
+  earlier plan revision exists in git. ACP-ZED is not a strict determinable historical
+  defect. Its classification is **pending corpus-owner review**; the effective strict
+  count is **0**, not the 1 recorded in §2.2 and §2.5, and the strict shortfall is 15
+  unless the corpus owner rules otherwise.
+- **Verdict unchanged.** The full experiment remains **NOT YET READY**: the corpus is not
+  frozen, the seeded and no-known-defect cases are not constructed, no two independent
+  human adjudicators are named, thresholds are not approved, and the concurrent-run and
+  parallel-latency checks remain.
