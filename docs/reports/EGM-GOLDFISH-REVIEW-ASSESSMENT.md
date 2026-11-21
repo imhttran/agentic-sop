@@ -377,12 +377,15 @@ Fixed and written down before the first run:
   never enter any per-run metric. Confirmed findings are findings that match a known
   defect or are adjudicated valid and not on the list; invalid, immaterial and duplicate
   occurrences are excluded. Both confirmed classes count in the reproducibility
-  numerator and denominator. Reproducibility is computed per plan; the PASS gate uses the
-  median across plans, and the pooled share is reported separately. A plan with zero
-  confirmed findings has no defined per-plan share: it is excluded from the median and
-  reported separately with the count of such plans. The gate is computed over plans with
-  at least one confirmed finding; if fewer than 15 plans contribute, the reproducibility
-  gate is INCONCLUSIVE.
+  numerator and denominator. Reproducibility is computed per plan and per arm; the PASS
+  gate uses the median across plans for each arm, and the pooled share is reported
+  separately. A plan with zero confirmed findings for an arm has no defined per-plan
+  share for that arm: it is excluded from that arm's median and reported separately with
+  the count of such plans. The gate is computed per arm over plans with at least one
+  confirmed finding for that arm; if fewer than 15 plans contribute for an arm, that
+  arm's reproducibility gate is INCONCLUSIVE. At the 15-plan floor, one empty plan for an
+  arm therefore makes that arm's gate INCONCLUSIVE; size the target corpus above the
+  floor or accept that consequence.
 - A failed call (timeout, transport error, unparseable result) is recorded as a failed
   run and counted, not dropped, and is not retried beyond what SOP itself does
   (`REVIEW.md` §6.4: a failure to review is not a finding).
@@ -463,8 +466,8 @@ run manifest (§5.8), which also records the approved threshold text and its sha
 This note also records the pre-run clarifications made in the same revision: the
 model-mismatch rerun rule (§5.1), the 20-finding kappa floor (§5.4, §6.2), the H1
 designated-run rule (§4), the run-manifest definition (§5.8), the minimum staffing rule
-(§5.4), the within-run deduplication scope (§5.4–§5.6), and the cost/latency precedence
-rule (§6.2).
+(§5.4), the within-run deduplication scope (§5.4–§5.6), the 15-contributing-plan
+reproducibility floor (§5.5, §6.2), and the cost/latency precedence rule (§6.2).
 
 ### 6.1 Validity conditions (checked first)
 
