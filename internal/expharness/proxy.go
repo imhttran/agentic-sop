@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -133,7 +135,18 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // forward sends the request upstream and reads the whole response; a failed read is an
 // error, never a silently truncated body.
 func (p *Proxy) forward(r *http.Request, body []byte) (*http.Response, []byte, error) {
-	out, err := http.NewRequestWithContext(r.Context(), r.Method, p.upstream+r.URL.RequestURI(), bytes.NewReader(body))
+	// Only the path and query are taken from the caller; scheme and host always come
+	// from the configured upstream, so a crafted request target cannot redirect it.
+	u, err := url.Parse(p.upstream)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !strings.HasPrefix(r.URL.Path, "/") || r.URL.Opaque != "" {
+		return nil, nil, fmt.Errorf("refusing request target %q", r.URL.String())
+	}
+	u.Path = strings.TrimRight(u.Path, "/") + r.URL.Path
+	u.RawQuery = r.URL.RawQuery
+	out, err := http.NewRequestWithContext(r.Context(), r.Method, u.String(), bytes.NewReader(body))
 	if err != nil {
 		return nil, nil, err
 	}

@@ -232,3 +232,24 @@ func TestScansFindLeakage(t *testing.T) {
 		t.Errorf("CheckRefs found %d problems: %v", len(bad), bad)
 	}
 }
+
+// A crafted request target never changes the upstream host.
+func TestProxyKeepsUpstreamHost(t *testing.T) {
+	var host atomic.Value
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host.Store(r.Host + r.URL.Path)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer up.Close()
+	px := NewProxy(up.URL, 5, 100)
+	for _, target := range []string{"/a/b?x=1", "//evil.example/c", "/@evil.example/"} {
+		req := httptest.NewRequest("POST", "http://proxy"+target, strings.NewReader(`{}`))
+		req.URL.Path = target[:strings.IndexAny(target+"?", "?")]
+		rec := httptest.NewRecorder()
+		px.ServeHTTP(rec, req)
+		got, _ := host.Load().(string)
+		if rec.Code != 200 || !strings.HasPrefix(got, strings.TrimPrefix(up.URL, "http://")) {
+			t.Errorf("target %q reached %q (code %d)", target, got, rec.Code)
+		}
+	}
+}
