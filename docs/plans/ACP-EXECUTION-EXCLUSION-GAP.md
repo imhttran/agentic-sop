@@ -4,9 +4,10 @@ Status: **OPEN — unresolved acceptance gap.** This document records a requirem
 that the current change set does **not** satisfy. It is not evidence of
 completion, and it must not be read as one.
 
-Partially mitigated: the execution lease is wired for `sop run` and `sop drive`
-behind `execution.lease` (default off). It is not wired for `sop prompt`, MCP or
-ACP. Do not declare release acceptance on the ACP/MCP start-lock test alone.
+Partially mitigated: the execution lease is wired for `sop run` (single-task and
+graph mode) behind `execution.lease` (default off). It is not wired for
+`sop prompt`, MCP or ACP. Do not declare release acceptance on the ACP start-lock
+test alone.
 
 Plan: [`PLAN-SOP-ACP-ZED.md`](PLAN-SOP-ACP-ZED.md), stage ACP-003 and the
 acceptance-matrix row *“Concurrent starts — existing project lock protects CLI,
@@ -22,21 +23,24 @@ interface:
 
 ## What is proven
 
-ACP and MCP **starts** are mutually exclusive, and this is covered by a
-deterministic test:
+ACP and MCP **starts** share one start lock, and concurrent ACP starts are covered
+by a deterministic test:
 
 - `startWork` takes a cross-process start lock, `.agent-sdlc/runs/mcp-work/.start.lock`,
-  created with `O_EXCL` (`internal/cli/mcp_start_work.go`, `acquireWorkLock`).
+  created with `O_EXCL` (`internal/cli/mcp_start_work.go`, `acquireWorkLock`). It
+  is released when `startWork` returns, after the child is launched.
 - While holding it, `startWork` re-reads the persisted started-work records and
   refuses a duplicate fingerprint (`already_running` / `already_ran`) or a
   competing running job (`busy`).
 - It also refuses when a `sop run` is mid-task, detected from the persisted task
   states (`midRunTasks`).
 - `TestACPPromptConcurrentStartsCreateOneWorkItem`
-  (`internal/cli/acp_test.go`) races two submissions through the real bridge and
-  the real start lock and asserts exactly one governed launch.
+  (`internal/cli/acp_test.go`) races two ACP submissions through the bridge's
+  `Starter` and the real start lock and asserts exactly one governed launch.
 
-This proves **ACP-vs-MCP** and **ACP-vs-ACP** start exclusion only.
+This proves **ACP-vs-ACP** start exclusion only. MCP `sop_start_work` and ACP
+`session/prompt` share the same `startWork` start lock by inspection, but no test
+races an MCP start against an ACP start.
 
 ## What is not proven
 
@@ -47,16 +51,18 @@ The project metadata lock (`.agent-sdlc/state.lock`, `internal/projectlock`) is 
 | --- | --- | --- | --- |
 | ACP `session/prompt` | probe only, released immediately | via `startWork` | `acpSubmission` in `internal/cli/acp.go`; the metadata lock is tried and released at once |
 | MCP `sop_start_work` | none | via `startWork` | |
-| CLI `sop run` | only inside `planflow.Prepare`/reconcile | execution lease, when `execution.lease` is not off; does not check started-work jobs | |
-| CLI `sop drive` | not examined | execution lease, same helper as `sop run` | |
+| CLI `sop run` (single-task and graph mode) | only inside `planflow.Prepare`/reconcile | execution lease, when `execution.lease` is not off (`executionLease` at `run.go:199` and `drive.go:83`); does not check started-work jobs | graph mode is `runGraph`/`driveGraph` inside `sop run` |
 | CLI `sop prompt` | none | **none** | |
 | Child `sop prompt` (started by ACP/MCP) | none | released at launch | the start lock is released once the child is launched |
 
 Consequences:
 
-1. **CLI-first, ACP-second** — a `sop run` that is already executing does not
-   hold a start lock, so an ACP start is excluded only if it happens to observe a
-   mid-run task state. Between task transitions it can start a second execution.
+1. **CLI-first, ACP-second** — a `sop run` takes no start lock, and the local
+   lifecycle persists only `READY` (at selection) and the terminal status (at
+   completion). `midRunTasks` sees a run only when a task row is already parked in
+   one of its eight mid-run statuses (for example an interrupted task or one
+   resumed from such a status). For a fresh task it never sees the run, so an ACP
+   start can begin a second execution at any point during task execution.
 2. **ACP-first, CLI-second** — a `sop run` takes no execution lock and does not
    consult the started-work records, so it can begin while an ACP/MCP-started
    `sop prompt` child is still running.
@@ -67,7 +73,22 @@ Consequences:
 Neither ordering has a deterministic test. Both follow from the code paths in the
 table above and correspond to proposal tests 1 and 2.
 
-The ACP/MCP concurrency test therefore does **not** establish the cross-interface
+What a double execution damages today (from a code reading, not reproduced):
+
+- **Task rows** in `.agent-sdlc/state.db`: each run loads the whole graph and
+  saves full rows, so the last writer wins and an attempt counter or a `BLOCKED`
+  status can be lost.
+- **Run artifacts** in `.agent-sdlc/runs/<run-id>/`: the run id is the task id, so
+  two runs of one task share a directory, and `runpkg.New` deletes `attempts/`.
+  One run erases the other's evidence.
+- **Plan metadata**: a second `sop run` can archive the plan and clear tasks while
+  the first run is mid-task, leaving orphan task rows.
+- **The working tree**: both agents edit the same checkout, so validation sees the
+  other run's changes and evidence is attributed to the wrong run.
+- **Not affected**: commits (a run does not commit) and worktrees (`AddWorktree`
+  has no caller in the run path).
+
+The ACP concurrency test therefore does **not** establish the cross-interface
 exclusion requirement. That requirement remains **UNRESOLVED**, and overall
 release acceptance must not be declared on the strength of that test.
 
@@ -93,10 +114,9 @@ defaults to `off`.
 
 | Interface | Acquires lease | Checks for a held lease | Limits |
 | --- | --- | --- | --- |
-| `sop run` | when `execution.lease` is `required`; contention recorded under `advisory` | n/a | heartbeat refreshes about every `HeartbeatLimit/5`, so a healthy run longer than the limit is not mistaken for stale where pid liveness cannot be checked (Windows) or the holder is on another host; a heartbeat failure is reported on stderr and the run continues |
-| `sop drive` | same helper as `sop run` | n/a | same as `sop run` |
+| `sop run` (single-task and graph mode) | when `execution.lease` is `required`; under `advisory` a busy lease is logged to stderr and the run proceeds | n/a | heartbeat refreshes every `HeartbeatEvery` (1 minute; `HeartbeatLimit` is 5 minutes), so a healthy run longer than the limit is not mistaken for stale where pid liveness cannot be checked (Windows) or the holder is on another host; a heartbeat failure is reported on stderr and the run continues |
 | `sop prompt` | no | no | |
-| MCP `sop_start_work` | no | no | start lock only |
+| MCP `sop_start_work` | no | no | start lock only; a start with `plan_path` launches `sop run`, whose child takes the lease when the mode is not `off`, after `startWork` has already answered `started` |
 | ACP `session/prompt` | no | no | start lock only |
 | `sop resume` | no | reports a held lease; releases a stale one in every mode, never a live one | crash/stale case: kill the owner, the lease is not stolen automatically, `sop resume` reports and releases it, the next start succeeds |
 
@@ -105,7 +125,15 @@ running `sop run`, and a `sop run` cannot see an ACP-started child.
 
 Closed when proposal section 6 tests 1 and 2 pass with `execution.lease` set to
 `required` across `sop run`, `sop prompt`, MCP and ACP, and test 5 (crash/stale)
-passes. This document does not record the status of the proposal's tests.
+passes.
+
+Status of the proposal's section 6 tests, from a code reading:
+
+| Test | Status |
+| --- | --- |
+| 5 crash/stale lease | exists: `TestRunResumeReleasesStaleExecutionLease`, `TestRunResumeLeavesLiveExecutionLease` (`internal/cli/resume_lease_test.go`) |
+| 9 rollback (`off` changes nothing) | unit level only: `TestExecutionLeaseOffByDefault` |
+| 1, 2, 3, 4, 6, 7, 8 | none; `TestRunRefusesWhileAnotherExecutionHoldsTheProject` takes the lease directly in the test, not through an ACP-started child, so it is not test 2 |
 
 ## Evidence to cite
 
@@ -114,8 +142,8 @@ passes. This document does not record the status of the proposal's tests.
 - `internal/cli/acp.go` — `acpSubmission` (`LockTaker`, `StateReader`, `Starter`).
 - `internal/projectlock/lock.go` — the project metadata lock.
 - `internal/executionlease/lease.go` — the lease (`state.exec.lock`).
-- `internal/cli/execution_lease.go`, `internal/cli/run.go`,
-  `internal/cli/drive.go` — lease acquisition.
+- `internal/cli/execution_lease.go`, `internal/cli/run.go:199`,
+  `internal/cli/drive.go:83` (`runGraph`) — lease acquisition.
 - `internal/cli/resume.go` — report and release of a stale lease.
-- `TestACPPromptConcurrentStartsCreateOneWorkItem` — the ACP/MCP start exclusion
-  that is covered.
+- `TestACPPromptConcurrentStartsCreateOneWorkItem` — the ACP-vs-ACP start
+  exclusion that is covered.
