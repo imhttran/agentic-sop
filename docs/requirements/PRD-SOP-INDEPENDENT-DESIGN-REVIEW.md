@@ -368,6 +368,10 @@ shape OD-1 and OD-2 select; they do not require a particular one.
 - **AC-10** Implementation is not authorized by this PRD alone. Authorization requires
   a PASS on the relevant hypothesis and a separate operator governance decision
   recorded under the existing approval convention; no new approval system is created.
+- **AC-11** The assessment sections referenced by this PRD (§5.4 minimum staffing and
+  role separation; §5.8 run manifest) exist and define those minimums in the merged
+  assessment. The check records the assessment file's sha256; the PRD does not restate
+  them.
 
 ## 12. Evaluation reference and authorization boundary
 
@@ -385,9 +389,11 @@ What this PRD requires:
   (specialized reviewers) is evidence for a separate multi-reviewer decision only.
   FAIL and INCONCLUSIVE leave SOP unchanged and the PRD unimplemented.
 - **Human adjudication.** Findings are adjudicated by a human who did not author the
-  document, blind to arm and repetition. A second human adjudicates a sample. A model
-  is never the sole adjudicator. A single-adjudicator limitation makes the result
-  suggestive and never PASS. No approval or evidence is invented.
+  document, blind to arm and repetition. A second human adjudicates the sample defined
+  by the assessment. A model is never the sole adjudicator. A single-adjudicator
+  limitation is INCONCLUSIVE and never PASS. The assessment's §5.4 defines the minimum
+  staffing and role separation, and §5.8 defines the run manifest; this PRD does not
+  restate them. No approval or evidence is invented.
 - **Authorization boundary.** A successful rubric experiment does not authorize
   structured findings, a disposition API, evidence persistence, or new orchestration.
   Each requires a separate governance decision recorded under the existing approval

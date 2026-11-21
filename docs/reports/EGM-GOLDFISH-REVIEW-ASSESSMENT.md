@@ -188,8 +188,10 @@ defects, matching C's union of three scoped reviewers. The mean of the three
 individual B runs is reported separately as a diagnostic; across repetitions, recall
 is the mean per §5.5. The H1 B run MAY serve as one of the three control runs (7 calls
 per plan per repetition) or be separate (8 calls). H1 uses the single designated B run;
-it does not use the best of the three control runs. The designation is recorded in the
-manifest before the run. This is a design clarification, not a threshold change;
+it does not use the best of the three control runs. The designation is fixed in the
+manifest before the run by a random or pre-agreed rule, not selected from the three
+control runs after the results are seen. Post-hoc selection makes the H1 comparison
+INCONCLUSIVE. This is a design clarification, not a threshold change;
 nothing has been run.
 
 **Rubric provenance.** Rubrics are written for this experiment from the published
@@ -202,7 +204,24 @@ vendored. If their text is quoted, it is credited (Apache-2.0).
 
 - Every arm receives byte-identical plan content (sha256 recorded). Request files
   differ only in the instruction block, which is delimited from the plan.
-- Plan text is untrusted data passed as the request; the rubric is the operator's.
+- Plan text is untrusted data passed as the request; the rubric is the operator's. The
+  request file separates the instruction block from the plan with a fixed delimiter, and
+  the rubric instructs the reviewer to treat the plan as data. SOP does not enforce an
+  instruction/data boundary on the ad-hoc path: the whole request is passed as
+  `agent.Request.Task`, and the agent wrapper adds its own prompt block. This is a
+  prompt-engineering control, not enforced isolation. The pilot tests the delimiter; a
+  suspected prompt injection invalidates the run rather than being adjudicated as a
+  finding.
+- **Harness.** One harness is used for the whole experiment and recorded in the
+  manifest. Its repository-access behavior is named: a text-only harness has no
+  repository access; the Ollama REVIEW harness performs a bounded read-only inspection
+  before synthesis. The same harness is used across arms so the comparison is fair, and
+  the access difference from a text-only harness is recorded as a limitation.
+- **Latency timing.** The A timer starts immediately before the single invocation and
+  stops at process exit. The C timer starts immediately before the three parallel
+  invocations and stops when all three exit. Request-file reads, agent construction and
+  provider setup are inside the measured interval for both arms; the C interval includes
+  concurrent setup, not a sequential sum. The timing method is recorded in the manifest.
 - Controlled and recorded per run: SOP binary commit; harness; provider, model and
   endpoint; `--model-class` (set explicitly in every call); provider-reported
   parameters where available. SOP's prompt metadata exposes `routing` and `tokens`, not
@@ -222,13 +241,17 @@ vendored. If their text is quoted, it is credited (Apache-2.0).
   provided the replacement is recorded and the choice is not based on findings. If the
   replacement also mismatches, the comparison is INCONCLUSIVE. If `tokens` is absent,
   the served-model check and the cost criterion are INCONCLUSIVE; the run is not counted
-  as a confirmed model match. A provider that reports no usage may be run, but H1 and H2
-  are INCONCLUSIVE for it; it is admissible only for H3 (exploratory) or a labelled
-  feasibility run.
+  as a confirmed model match, and the rerun rule does not apply. A provider that reports
+  no usage may be run, but H1 and H2 are INCONCLUSIVE for it; it is admissible only for
+  H3 (exploratory) or a labelled feasibility run. A run replaced under this rule is
+  excluded from the dataset and does not count as a failed run; only the replacement
+  counts.
 - One model per arm for the whole experiment. A provider or model change
   mid-experiment invalidates the affected runs.
 - **Concurrency.** The pilot records whether the provider executes parallel requests
-  concurrently. If it serializes them, the latency cap uses the sequential sum for C.
+  concurrently. The latency cap uses the measured parallel-batch wall-clock for C, which
+  already reflects any provider-side serialization; the sequential sum is diagnostic
+  only.
 - Run order is randomized and interleaved across arms and repetitions so provider drift
   is not confounded with arm. The full-run order is generated and recorded in the run
   manifest before the first full-run call. The pilot is excluded from the dataset. A
@@ -258,10 +281,12 @@ Fixed and written down before the first run:
   `docs/reports/PLAN-STATUS-AUDIT-2026-11-04.md`,
   `docs/reports/CONV-001-convergence-baseline.md`. These three paths resolved in the
   baseline tree at `ad8a9c6c`; existence is not evidence of the defect. The final corpus
-  frozen only after each path, parent revision and evidence pointer is checked; an
+  is frozen only after each path, parent revision and evidence pointer is checked; an
   unresolved path is replaced, not shipped. A later correction does not by itself show
-  that a review could have found the defect; the adjudicator records whether the defect
-  was determinable from the document and its parent revision.
+  that a review could have found the defect. At corpus freeze, the corpus owner records
+  whether each defect was determinable from the document and its parent revision, with a
+  one-line basis, in the defect record. The adjudicator applies the pre-registered record
+  and does not change the recall denominator.
 - **Seeded set (about 8):** one defect each: unstated assumption, nonexistent symbol,
   missing failure mode, unverifiable acceptance criterion, scope violation, plus three
   more of the same classes. Seeded by someone other than the adjudicator, recorded in a
@@ -271,15 +296,19 @@ Fixed and written down before the first run:
   here are adjudicated, not assumed invalid.
 - **Defect record:** id, plan path and sha256, parent commit, location, description,
   class, severity (blocks implementation / changes approach / minor), evidence pointer,
-  source (historical or seeded). Minimum to run: 15 known defects across at least 15
-  plans with known defects; the no-known-defect set is additional and does not count
-  toward this floor. Below the floor, every recall comparison is INCONCLUSIVE.
-- **Corpus ownership.** The operator (or a designated corpus owner) verifies each
-  path, parent revision and evidence pointer, records the frozen corpus, and confirms
-  it before the first run. The adjudicator does not verify or select the corpus.
-- **Role separation.** The roles are the operator/corpus owner, the seeder, the
-  adjudicator and the analyst. The seeder is neither the adjudicator nor the corpus
-  owner. The analyst holds the key and does not adjudicate.
+  source (historical or seeded), and a determinable judgment (yes/no, one-line basis)
+  recorded at freeze. The recall denominator is the pre-registered determinable set; it
+  is fixed at freeze and is not changed by adjudication. Minimum to run: 15 known
+  defects across at least 15 plans with known defects; the no-known-defect set is
+  additional and does not count toward this floor. Below the floor, every recall
+  comparison is INCONCLUSIVE.
+- **Per-plan count.** The manifest records the number of known defects per plan; no hard
+  cap is imposed, but the per-plan counts are reported with the recall results.
+- **Corpus ownership.** The corpus owner records the frozen corpus before the first run;
+  the adjudicator does not verify or select it. The corpus-owner duties are defined in
+  §5.4.
+- **Role separation.** The roles, their separation and their duties are defined in
+  §5.4. The corpus owner records the frozen corpus; the adjudicator does not select it.
 
 ### 5.4 Blinded adjudication, deduplication, false positives
 
@@ -289,56 +318,79 @@ Fixed and written down before the first run:
   and not on the list (needs a one-line justification from the document); invalid or
   immaterial; duplicate of finding `<n>`. Judgment is against the document and the
   pre-registered defect list, never the reviewer's stated confidence.
-- Deduplication is done by the adjudicator and is the only merge step. The adjudicator
-  does not see arm labels; duplicate labels reference finding IDs. A separate analyst
-  holds the key and applies the within-arm deduplication after adjudication: a duplicate
-  is removed only when its original is in the same arm. The analyst's within-arm merge
-  is a deterministic post-step performed before metrics; it may only remove duplicate
-  occurrences and cannot add or remove non-duplicate findings. Identical findings in
-  different arms remain distinct, because each arm is evaluated separately. Duplicate
-  occurrences are removed from both the numerator and the denominator of every
-  finding-based metric, so a repeated invalid finding cannot change the false-positive
-  rate through repetition or shuffle order. No merge tooling is built.
+- Duplicate labeling is done by the adjudicator; the within-run merge is the only merge
+  step and is applied by the analyst. The adjudicator does not see arm labels; duplicate
+  labels reference finding IDs. A separate analyst holds the key and applies
+  deduplication within one run (arm × plan × repetition): a duplicate is removed only
+  when its original is in the same run. The analyst's merge is a deterministic post-step
+  performed before metrics; it may only remove duplicate occurrences and cannot add or
+  remove non-duplicate findings. Identical findings in different runs remain distinct for
+  per-run metrics. Duplicate occurrences are removed from both the numerator and the
+  denominator of the per-run recall and false-positive rate, so a repeated invalid
+  finding cannot change those metrics through repetition or shuffle order. Cross-
+  repetition duplicate links are defined and used only in §5.5. No merge tooling is
+  built.
 - The adjudicator is not the author of the plan or the seeder of its defect.
 - **Independence.** A human adjudicates. A second person independently adjudicates the
   larger of 20 findings or a random 20% sample, and agreement is reported (Cohen's
   kappa). If fewer than 20 findings exist in total, kappa is reported but the outcome
   cannot PASS. A model may serve only as a third check, never as the sole adjudicator.
-  If only one human is available, that limitation is recorded and the outcome is
-  INCONCLUSIVE; it may be described as suggestive, but it is never PASS.
+- **Minimum staffing.** A PASS requires five distinct people: corpus owner, seeder,
+  analyst, adjudicator and second adjudicator. All five are distinct; in particular, the
+  seeder, analyst and adjudicator are not the corpus owner, and the adjudicator and
+  second adjudicator are not the seeder or each other. If two independent human
+  adjudicators are not available, the best attainable outcome is INCONCLUSIVE.
+- **Role duties.** The corpus owner selects and freezes the corpus, records each
+  determinability judgment, and is not the author of any plan in the corpus; the seeder
+  creates the seeded defects and the sealed manifest; the analyst holds the unblinding
+  key and applies the within-run merge; the adjudicator labels findings; the second
+  adjudicator independently re-adjudicates the sample. The operator MAY be the corpus
+  owner. The operator MUST NOT be the seeder, the adjudicator or the second adjudicator.
+  The operator MAY be the analyst only when a different person is the corpus owner;
+  otherwise the operator is the corpus owner and a different analyst is required.
 - **Adjudication is evidence work, not an approval.** It creates no SOP approval
   record and changes no lifecycle state. The protocol records findings and judgments;
   it does not record an operator decision to implement.
 - **False-positive rate** is invalid plus immaterial distinct findings divided by all
-  distinct findings, per arm and separately on the no-known-defect set. Duplicates are
+  distinct findings, per run and separately on the no-known-defect set. Duplicates are
   removed before this computation and are not counted again. "Valid and not on the list"
   counts as a true positive but is reported separately and is not used in the recall
   numerator.
 
 ### 5.5 Repetition
 
-- Three repetitions per plan per arm, random order. Recall for a plan is the mean
-  across repetitions; the union across repetitions is reported separately.
-- Reproducibility is the share of confirmed distinct findings that recur in at least
-  two of three repetitions.
+- Three repetitions per plan per arm, random order. Deduplication is within one run
+  (arm × plan × repetition). Per-repetition recall and false-positive rate use that
+  run's deduplicated set; the plan-level value is the mean of the three repetitions. The
+  union across repetitions is reported separately and is not the recall estimator.
+- Reproducibility is the share of confirmed distinct findings that recur in at least two
+  of three repetitions. A recurrence is established by duplicate links across
+  repetitions of the same arm; those links are used only for this count and are then
+  discarded. The analyst computes cross-repetition duplicate links from the adjudicator's
+  duplicate labels after the within-run merge; they are reported as a separate count and
+  never enter any per-run metric. Confirmed findings are findings that match a known
+  defect or are adjudicated valid and not on the list; invalid, immaterial and duplicate
+  occurrences are excluded. Both confirmed classes count in the reproducibility
+  numerator and denominator.
 - A failed call (timeout, transport error, unparseable result) is recorded as a failed
   run and counted, not dropped, and is not retried beyond what SOP itself does
   (`REVIEW.md` §6.4: a failure to review is not a finding).
 
 ### 5.6 Metrics
 
-The finding-based metrics (recall, precision, false-positive rate and
-reproducibility) use the within-arm deduplicated set defined in §5.4.
+The per-run recall, precision and false-positive rate use the run's deduplicated set
+defined in §5.4; the plan-level value is the mean across the three repetitions.
+Reproducibility uses the cross-repetition duplicate links described in §5.5.
 
-| Metric                 | Definition                                                                                                         |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Recall                 | known defects matched by distinct findings ÷ known defects, per arm                                                |
-| Precision              | confirmed distinct findings ÷ all distinct findings, per arm                                                       |
-| False-positive rate    | per §5.4                                                                                                           |
-| Token cost             | tokens from `metadata.json` per plan (all calls of the arm, summed); cost per confirmed distinct defect            |
-| Latency                | wall-clock around the command, timed outside SOP; for C, the parallel batch, with the sequential sum also reported |
-| Reproducibility        | per §5.5                                                                                                           |
-| Adjudication agreement | kappa on the double-adjudicated sample                                                                             |
+| Metric                 | Definition                                                                                                       |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Recall                 | known defects matched by distinct findings ÷ known defects, per run; plan value is the mean of three repetitions |
+| Precision              | confirmed distinct findings ÷ all distinct findings, per run; plan value is the mean of three repetitions        |
+| False-positive rate    | per §5.4, per run; plan value is the mean of three repetitions                                                   |
+| Token cost             | tokens from `metadata.json` per plan (all calls of the arm, summed); cost per confirmed distinct defect          |
+| Latency                | parallel-batch wall-clock for C; the sequential sum is diagnostic only                                           |
+| Reproducibility        | per §5.5                                                                                                         |
+| Adjudication agreement | kappa on the double-adjudicated sample                                                                           |
 
 If a provider does not report tokens, cost for that arm is recorded as unavailable and
 the cost criterion is INCONCLUSIVE. The hypothesis cannot return PASS without a
@@ -355,45 +407,85 @@ may be reported as a labelled proxy, not as cost.
   than the B×3 control. H3 (D) is exploratory and cannot by itself change a
   recommendation.
 
+### 5.8 Run manifest
+
+The run manifest is a single experiment record stored in the experiment directory outside
+the SOP checkout, at a path the operator records before the first call. It contains at
+least:
+
+- the corpus file hashes and the frozen defect records;
+- the rubric hashes;
+- the approved threshold text and its sha256;
+- the arm configuration, including the 7-call or 8-call choice and the designated H1 B
+  run;
+- the full-run order;
+- the environment state, including that the model override variables are unset and the
+  resolved provider and model for each arm;
+- the harness and its repository-access behavior;
+- the latency timing method and start/stop points;
+- the per-plan known-defect count;
+- the assessment file's sha256 (the frozen protocol text);
+- the named holder of each role (corpus owner, seeder, analyst, adjudicator, second
+  adjudicator).
+
+The manifest is an experiment record, not a SOP approval record. It does not create an
+approval, change a lifecycle state, or authorize implementation.
+
 ## 6. Acceptance thresholds and outcomes
 
 Thresholds are fixed before the first run. The values below are proposals to be
 approved before it.
 
-**Pre-run revision note (2026-11-21).** H2 now uses the same recall rule as H1
-(≥25% relative and ≥3 more confirmed known defects) against the B×3 control. This
-supersedes the earlier PRD draft's separate fan-out rule (≥15% over B1; that draft
-stated the absolute "2 more" requirement only for the rubric comparison). No run has
-started, so the change is made before the protocol is frozen; it is recorded here
-rather than applied silently. The revised thresholds remain unapproved until the
-operator approves them before the first run; the approval is recorded in the run
-manifest, which also records the approved threshold text and its sha256. This note also
-records the pre-run clarifications made in the same revision:
-the model-mismatch rerun rule (§5.1), the 20-finding kappa floor (§5.4, §6.1), the H1
-designated-run rule (§4), and the cost/latency precedence rule (§6.2).
+**Pre-run revision note (2026-11-21).** Relative to the earlier PRD draft merged in
+#563:
+
+- H1 keeps ≥25% relative recall but raises the absolute floor from 2 to 3 confirmed
+  known defects, and its cost cap falls from 2× A to 1.5× A.
+- H2 uses the same recall rule as H1 (≥25% relative and ≥3 more confirmed known
+  defects) against the B×3 control, replacing the earlier ≥15%-over-B1 fan-out rule;
+  its cost cap is 3.5× A.
+
+No run has started, so the changes are made before the protocol is frozen; they are
+recorded here rather than applied silently. The revised thresholds remain unapproved
+until the operator approves them before the first run; the approval is recorded in the
+run manifest (§5.8), which also records the approved threshold text and its sha256.
+This note also records the pre-run clarifications made in the same revision: the
+model-mismatch rerun rule (§5.1), the 20-finding kappa floor (§5.4, §6.2), the H1
+designated-run rule (§4), the run-manifest definition (§5.8), the minimum staffing rule
+(§5.4), the within-run deduplication scope (§5.4–§5.6), and the cost/latency precedence
+rule (§6.2).
 
 ### 6.1 Validity conditions (checked first)
 
 The experiment is **INCONCLUSIVE** for the affected comparison if any of these holds:
 
 - fewer than 15 known defects, or fewer than 15 plans with known defects;
-- kappa below 0.6 on the double-adjudicated sample, fewer than 20 double-adjudicated
-  findings when the claim would be PASS, or no second adjudicator and the claim would
-  be PASS;
+- kappa below 0.6 on the double-adjudicated sample, or no second adjudicator and the
+  claim would be PASS;
 - more than 10% of runs failed, or arms have unequal failure rates by more than 5
   points;
 - `metadata.json` routing differs from the intended provider, model or class;
   `SOP_AGENT_MODEL` or the provider-specific model variable was set; or the served
   model key in `tokens` does not match `routing.model`, in a run that was not replaced
   under the §5.1 rerun rule, for any run in the comparison;
-- token counts unavailable (the hypothesis is INCONCLUSIVE; recall may be reported
-  separately but cannot yield PASS);
+- token counts unavailable, including a provider that reports no token usage: the
+  served-model check cannot pass and the hypothesis is INCONCLUSIVE; recall may be
+  reported separately but cannot yield PASS;
 - a provider-reported sampling parameter changed within an arm; where the provider
   reports no parameters, the drift is recorded as a limitation and reproducibility is
   the only guard;
 - the order, corpus, rubric or thresholds changed after the first run.
 
+Between-arm parameter differences are recorded as a limitation and are not, by
+themselves, a validity failure; run order is randomized.
+
 ### 6.2 Outcome rules, applied in this order
+
+The validity conditions in §6.1 are checked first, in the order listed, before the
+outcome rules below. A failed validity condition makes the affected comparison
+INCONCLUSIVE; the recall rules are not applied. A PASS additionally requires at least
+20 double-adjudicated findings; below that, the outcome is INCONCLUSIVE even if the
+recall rules would otherwise pass.
 
 1. **FAIL (hard cap).** Any of these at the point estimate: false-positive rate more
    than 10 points above A, or above 50% absolute; token cost above 1.5× A (B) or 3.5×
@@ -451,6 +543,8 @@ scoped decision; neither outcome authorizes the other hypothesis.
 - The two-plan pilot cannot exercise the 20-finding double-adjudication floor or kappa;
   it validates metadata, model attribution and token plumbing only. The kappa and
   finding-count validity conditions are evaluated in the full run.
+- The pilot does not measure a C parallel batch; C latency is first measured in the full
+  run. A missing or invalid C timing makes H2 INCONCLUSIVE for the latency criterion.
 - Confirm Arm D is feasible without configuration changes to SOP.
 - Pilot results are not part of the dataset.
 
@@ -487,8 +581,12 @@ Combined totals including the 4-call pilot:
 The pilot adds 4 calls: arms A and B once on two plans. Pilot results are excluded from
 the dataset, and the combined table above includes those 4 calls. The optional-D rows
 are increments to the base configuration; the pilot is already included and is not
-added again. The total range is 499–1,309 calls. State the exact configuration in the
-run manifest before the first call.
+added again. The total range without Arm D is 319–700 calls; with Arm D it is 499–1,309
+calls. For example, the default 7-call design at 15 plans is 315 calls; D (B+C) adds
+180; the 4-call pilot makes 499. The equal 634 / 1,096 / 1,222 rows are not a copy
+error: the default 7-call design plus D (B_H1+B×3+C) and the disjoint 8-call design plus
+D (B×3+C) both use 14 calls per plan per repetition. State the exact configuration in
+the run manifest (§5.8) before the first call.
 
 These are call counts, not token costs. Token cost is measured from `metadata.json`
 per plan; if the provider does not report tokens, the cost criterion is INCONCLUSIVE
