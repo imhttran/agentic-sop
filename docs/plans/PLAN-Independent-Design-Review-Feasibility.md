@@ -2,9 +2,10 @@
 
 **Status:** DRAFT — coordination record. Workstream A reviewed; Workstream B pending;
 not activated; no experiment or pilot inference authorized.
-**Baseline:** `origin/main` @ `1b61db64`.
-**Baseline note:** advances from `64101f9e` to `1b61db64` to include PRs #567 and #568;
-the plan content is otherwise unchanged.
+**Baseline:** `origin/main` @ `ade6864a`.
+**Baseline note:** advances from `64101f9e` through `1b61db64` to `ade6864a` to include
+PRs #567–#571 and the readiness package. Candidate revisions remain pinned to the
+commits recorded in `candidates.json`.
 **Authoritative protocol:**
 [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](../reports/EGM-GOLDFISH-REVIEW-ASSESSMENT.md).
 **Conditional contract:**
