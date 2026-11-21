@@ -10,7 +10,8 @@ nothing about corpus or experiment readiness. The coordination plan is
 (task FEAS-B1); the readiness assessment is
 [INDEPENDENT-DESIGN-REVIEW-EXPERIMENT-FEASIBILITY.md](INDEPENDENT-DESIGN-REVIEW-EXPERIMENT-FEASIBILITY.md).
 
-**Baseline:** `origin/main` @ `ade6864a`. The code paths read are unchanged from the
+**Baseline:** code read at `origin/main` @ `ade6864a`; documents at `57244208` (merged into this
+branch). The code paths read are unchanged from the
 `1e8cb005` baseline the assessment used (no change under `internal/`, `cmd/` or `skills/`
 across those commits).
 
@@ -28,14 +29,13 @@ readiness, or experiment readiness, and it does not equal PASS, FAIL or INCONCLU
 ## 2. Preflight findings
 
 - PR #569 (corpus candidates) is merged into `main` (`0673da3b`).
-- **PR #570 shows MERGED, but its content is not on `main`.** Its base branch was
-  `docs/independent-design-review-corpus` (stacked on #569); it merged into that branch
-  (`a522f908`) after #569 had already merged to `main`. `main` has neither the pilot results
-  report nor the later feasibility-report edits. A local, unpushed commit in another
-  worktree (`c59818fd`, "restore the merged pilot evidence…") would restore them; I did not
-  touch it. This report therefore refers to the pilot report by PR and commit, not by link.
-- The pilots were read from PR #570's head (`c0d6ada9`). Their results are preserved and not
-  rewritten here.
+- **PR #570 showed MERGED while its content was not on `main`** at `ade6864a`: its base branch was
+  `docs/independent-design-review-corpus` (stacked on #569), and it merged into that branch
+  (`a522f908`) after #569 had already merged to `main`. PR #572 (merge `57244208`) has since
+  restored the pilot results report, and this branch is merged with that `main`; the report is
+  [INDEPENDENT-DESIGN-REVIEW-PILOT-RESULTS.md](INDEPENDENT-DESIGN-REVIEW-PILOT-RESULTS.md).
+- I read the pilots from PR #570's head (`c0d6ada9`) before #572 landed. Their results are
+  preserved and not rewritten here.
 - Existing worktrees (`corpus`, `feasibility`, `readiness`), the primary checkout's branch
   and its untracked files, and ignored `.agent-sdlc/` lifecycle evidence were left alone. All
   work was done in a new worktree from `origin/main`.

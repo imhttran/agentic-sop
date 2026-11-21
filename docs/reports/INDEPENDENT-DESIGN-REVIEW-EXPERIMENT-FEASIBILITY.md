@@ -30,7 +30,8 @@ inference was executed.
   [PRD-SOP-INDEPENDENT-DESIGN-REVIEW.md](../requirements/PRD-SOP-INDEPENDENT-DESIGN-REVIEW.md).
   It is unapproved and does not authorize implementation.
 - The experiment has **not** run. No threshold was changed. No inference call was made
-  for the experiment or pilot.
+  for the experiment or pilot at this baseline. **§10** records two separately authorized
+  four-call pilots that ran later; they do not change the corpus findings or the verdict.
 - The §1.2/§5.1 corrections from PR #567 are merged into the assessment, and this
   report's requested-model wording matches it.
 - The feasibility verdict below is **not** the experiment's PASS/FAIL/INCONCLUSIVE
@@ -69,7 +70,7 @@ as unable to adjudicate them; see §3.2 for the limits of that proxy.
 
 | Document (last-modified)                                                                                                             | Later evidence                                                                                                                                      | Defect or gap                                                                                                                                                                                                       | Proposed determinability                                                                                                                                     | Corpus status                                                                           |
 | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| [PLAN-SOP-ACP-ZED.md](../plans/PLAN-SOP-ACP-ZED.md) (`e462deed`)                                                                     | [ACP-EXECUTION-EXCLUSION-GAP.md](../plans/ACP-EXECUTION-EXCLUSION-GAP.md)                                                                           | The acceptance matrix claims the project lock protects CLI, MCP, and ACP equally; the gap report shows the lock is metadata-only and is not held for execution, so CLI-first and ACP-first exclusion is unresolved. | **Historically proposed determinable with referenced code**: superseded; strict classification pending corpus-owner review (§2.5, §2.6).                     | Verified defect-bearing; strict classification superseded pending review.               |
+| [PLAN-SOP-ACP-ZED.md](../plans/PLAN-SOP-ACP-ZED.md) (`e462deed`)                                                                     | [ACP-EXECUTION-EXCLUSION-GAP.md](../plans/ACP-EXECUTION-EXCLUSION-GAP.md)                                                                           | The acceptance matrix claims the project lock protects CLI, MCP, and ACP equally; the gap report shows the lock is metadata-only and is not held for execution, so CLI-first and ACP-first exclusion is unresolved. | **Historically proposed determinable with referenced code**: superseded; strict classification pending corpus-owner review (§2.6, §10).                      | Verified defect-bearing; strict classification superseded pending review.               |
 | [PLAN-Code-Retrieval-Context-Seam.md](../plans/PLAN-Code-Retrieval-Context-Seam.md) (`03a7d7d9`)                                     | The plan's own post-merge status line. No independent later report was found.                                                                       | Retrieval was wired to IMPLEMENT but not FIX, despite the original implement/fix scope; step 5 also awaits model-budget approval.                                                                                   | **Proposed, not strict**: the status line is part of the document, so this is self-referential evidence; a reviewer at the parent revision would not see it. | Verified defect-bearing; self-referential evidence, not counted as strict determinable. |
 | [PLAN-SOP-RUN-ACCEPT-001.md](../plans/PLAN-SOP-RUN-ACCEPT-001.md) (`56ff82ac`)                                                       | [PLAN-STATUS-AUDIT-2026-11-04.md](PLAN-STATUS-AUDIT-2026-11-04.md)                                                                                  | Six operator acceptance checks fail because the fixtures predate the later `### Acceptance Mapping` contract; the plan remains ACTIVE.                                                                              | **Partially determinable**: the failure is visible only after the later contract; the original plan's own checks passed at its revision.                     | Verified gap; proposed partially determinable.                                          |
 | [PLAN-04-SOP-LLM04-Supply-Chain.md](../plans/PLAN-04-SOP-LLM04-Supply-Chain.md) (`e55527f4`)                                         | The plan's status and the LLM04 evidence report.                                                                                                    | Historical outcomes remain PARTIAL until re-execution under the newly recorded acceptance mapping.                                                                                                                  | **Partially determinable**: the acceptance-mapping requirement is a later contract.                                                                          | Verified gap; proposed partially determinable.                                          |
@@ -421,7 +422,8 @@ Arm D.
   is 15 plans and 15 determinable defects; if all 10 partial candidates are frozen
   determinable, the shortfall is still 5 and 5. The seeded and no-known-defect corpus is not
   constructed; no two independent human adjudicators are identified; Workstream B is
-  pending; and the four-call pilot is unauthorized.
+  pending; and the four-call pilot was unauthorized at this verdict (see §10 for the later
+  authorized pilots).
 - **Not BLOCKED:** the missing work is actionable. The repository contains evidence
   pointers for corpus assembly, and the operator can designate adjudicators and authorize
   a pilot.
@@ -429,4 +431,30 @@ Arm D.
   experiment was run, no inference was spent, and no threshold was changed.
 
 The next step is corpus assembly and operator designation of two independent human
-adjudicators, followed by the Linux evidence intake and the four-call pilot.
+adjudicators, followed by the Linux evidence intake. See §10 for the later pilot addendum.
+
+## 10. Post-feasibility pilot addendum
+
+This section is later than the corpus report above. It records pilot evidence without
+rewriting the corpus findings or counts.
+
+- **Pilots.** Two separately authorized four-call pilots were executed on 2026-11-21:
+  Pilot A on a local oMLX model and Pilot B on an Ollama cloud model through the native
+  agent. Each ran arms A and B once on two plans, four calls in all. Observed results are
+  in
+  [INDEPENDENT-DESIGN-REVIEW-PILOT-RESULTS.md](INDEPENDENT-DESIGN-REVIEW-PILOT-RESULTS.md).
+- **Status of the evidence.** Both are plumbing pilots, excluded from the experiment
+  dataset. Nothing was adjudicated. There is no H1 or H2 outcome, no PASS, FAIL, or
+  INCONCLUSIVE result, and no implementation authorization.
+- **Contamination.** Pilot B's ACP-ZED clones contained the gap report that names the
+  defect, and the native agent has project-directory access. Those runs are not valid
+  evidence of independent defect detection; see the pilot report's §7.1. Neither pilot
+  plan is a clean corpus entry: ACP-ZED has no pre-defect revision, and LLM04's own status
+  line states its gap.
+- **ACP-ZED classification.** ACP-ZED remains held pending corpus-owner review, as §2.6
+  records. The pilot evidence does not restore its strict classification.
+- **Verdict unchanged.** The full experiment remains **NOT YET READY**: the corpus is not
+  frozen, the seeded and no-known-defect cases are not constructed, no two independent
+  human adjudicators are named, thresholds are not approved, and the concurrent-run and
+  parallel-latency checks remain. The pilots exercised four calls and do not replace the
+  pending Linux provider/execution report.
