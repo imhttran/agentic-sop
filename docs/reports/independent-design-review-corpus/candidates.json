@@ -72,9 +72,10 @@
       "pre_fix_commit": "56ff82ac",
       "artifact_sha256": "a43ebdffe4ff74e9d577ca14fd967a3d6c7e7ad503508589c88a0d9f777280f3",
       "permitted_references": [
-        "internal/cli/acceptance_gotest.go",
         "internal/planner/markdown.go",
-        "internal/planflow/acceptance_checks_reconcile_test.go"
+        "internal/taskfile/taskfile.go",
+        "internal/planflow/planflow.go",
+        "internal/cli/outcome.go"
       ],
       "later_evidence": ["docs/reports/PLAN-STATUS-AUDIT-2026-11-04.md"],
       "defect_classification": "acceptance-mapping",
@@ -83,6 +84,7 @@
       "proposed_inclusion": "include-with-review",
       "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
       "outstanding_decision": "Corpus owner must decide whether a defect created by a later contract is admissible and fix the pre-fix revision.",
+      "discoverability_note": "The plan and the acceptance-mapping code paths exist at 56ff82ac. The six-check failure is visible only under the later `### Acceptance Mapping` contract; the later status audit is evidence-only. The previously recorded acceptance test paths do not exist at this revision and were removed.",
       "evidence_state": "VERIFIED"
     },
     {
@@ -131,8 +133,11 @@
       "pre_fix_commit": "1b611711",
       "artifact_sha256": "2cd3a2e753b020ea224cc0e97b83ccc0651ae7309226129a1282c1705f37774d",
       "permitted_references": [
-        "docs/reports/SECURITY-SCANNER-RESIDUAL-FINDINGS.md",
-        "docs/reports/SECURITY-DEPENDENCY-COVERAGE.md"
+        "internal/security/policy.go",
+        "internal/security/normalize.go",
+        "internal/security/report.go",
+        "scripts/checks/security-integration.sh",
+        "docs/specs/SECURITY-SCANNER-ADDON.md"
       ],
       "later_evidence": [
         "docs/reports/SECURITY-SCANNER-RESIDUAL-FINDINGS.md",
@@ -144,6 +149,7 @@
       "proposed_inclusion": "include-with-review",
       "last_commit_identity": "Tom Tran <trantom512@gmail.com>",
       "outstanding_decision": "Corpus owner must confirm which residual findings were knowable at the pre-fix plan revision.",
+      "discoverability_note": "The later residual-findings and dependency-coverage reports are evidence-only and are not reviewer input. A reviewer sees the pre-fix plan, scanner policy and normalization code, the report writer, and the integration script; the specific residual findings and coverage gaps are not stated there.",
       "evidence_state": "VERIFIED"
     },
     {
@@ -152,9 +158,7 @@
       "original_artifact": "docs/plans/PLAN-08B-SOP-LLM08-Hidden-Context-Closure.md",
       "pre_fix_commit": "aa3e1d36",
       "artifact_sha256": "40d7bc46e64c0235501338bb299adea1b665b6b34c03f5d96df3f13c8916e488",
-      "permitted_references": [
-        "docs/reports/owasp-llm/llm08-hidden-context.md"
-      ],
+      "permitted_references": [],
       "later_evidence": ["docs/reports/owasp-llm/llm08-hidden-context.md"],
       "defect_classification": "hidden-context",
       "defect_summary": "This is a follow-up to the historicalized Plan 08 and records confirmed hidden-context defects. Using it as the corpus document would leak the answer.",
@@ -163,7 +167,7 @@
       "last_commit_identity": "Tom Tran <imhttran@gmail.com>",
       "outstanding_decision": "Corpus owner must locate the pre-fix Plan 08 artifact and revision.",
       "evidence_state": "EXCLUDED",
-      "exclusion_reason": "Remediation/follow-up plan contains the answer; parent Plan 08 artifact is required."
+      "exclusion_reason": "Remediation/follow-up plan contains the answer; parent Plan 08 artifact is required. The later report was removed from permitted references because it is the answer."
     },
     {
       "id": "IDR-H-008",
@@ -171,7 +175,7 @@
       "original_artifact": "docs/plans/PLAN-09-SOP-LLM09-Vector-and-Embedding-Weaknesses.md",
       "pre_fix_commit": "05685308",
       "artifact_sha256": "e3c4b2018a610ad6b9ea5ef2855fec46d6766bb702c2f551d5492599c96af2e4",
-      "permitted_references": ["docs/reports/owasp-llm/llm09-retrieval.md"],
+      "permitted_references": [],
       "later_evidence": [
         "docs/reports/owasp-llm/llm09-retrieval.md",
         "docs/history/plans/PLAN-09B-SOP-LLM09-Retrieval-Followup.md"
@@ -183,7 +187,7 @@
       "last_commit_identity": "Tom Tran <imhttran@gmail.com>",
       "outstanding_decision": "Corpus owner must locate the pre-fix Plan 09 artifact and revision.",
       "evidence_state": "EXCLUDED",
-      "exclusion_reason": "Remediation/follow-up plan contains the answer; parent Plan 09 artifact is required."
+      "exclusion_reason": "Remediation/follow-up plan contains the answer; parent Plan 09 artifact is required. The later retrieval report was removed from permitted references because it is the answer."
     },
     {
       "id": "IDR-E-001",
