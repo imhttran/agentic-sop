@@ -19,11 +19,13 @@ quality. PASS, FAIL and INCONCLUSIVE are distinct outcomes; only PASS can suppor
 scoped implementation decision, and PASS alone does not authorize structured
 findings, disposition APIs, or new orchestration.
 
-**Basis:** SOP `origin/main` @ `ad8a9c6c`. The code paths are unchanged since the
+**Basis:** SOP `origin/main` @ `ad8a9c6c`, re-read at `64101f9e` for the
+feasibility notes in §1.2 and §5.1. The code paths are unchanged since the
 `1e8cb005` baseline; `git log 1e8cb005..ad8a9c6c` lists only two documentation merges
-and their two documentation commits. References were read as shallow clones outside
-the checkout: EGM `34ff1179`, Superpowers `22f0b46`, OpenSpec `0c737dc`. Nothing was
-installed.
+and their two documentation commits, and `git diff 1e8cb005..64101f9e -- internal cmd
+skills` is empty. References were read as shallow clones outside the checkout: EGM
+`34ff1179`, Superpowers `22f0b46`, OpenSpec `0c737dc`. Nothing was installed. The
+feasibility notes are static reading of the code; no model call or pilot has been run.
 
 ## 1. Verified architecture
 
@@ -71,20 +73,52 @@ wi.Content, OutputRequirements}` with `OutputRequirements` fixed to "Return conc
   configured model, and the `modelEnvOverride` guard in `applyStageModels` checks only
   pinned stages and the sensitive model; it does not check the prompt's routed `sel`
   (`internal/cli/prompt.go`, `internal/cli/stage_models.go`). `routing.model` can
-  therefore record the selected model while another is served. The experiment MUST unset
-  the override variables and cross-check the served model key in `tokens` (§5.1, §6.1);
-  the pilot confirms the check works but does not defer the requirement.
+  therefore record the selected model while a different model name is sent to the
+  provider. The experiment MUST unset the override variables and cross-check the model
+  key in `tokens` against `routing.model` (§5.1, §6.1); the pilot confirms the check
+  works but does not defer the requirement. `models.stages.review` pins only `sop
+  review` and the `sop run` plan stage (`stageAgent` in `internal/cli/review.go` and
+  `internal/cli/run.go`); `sop prompt` does not use it.
 - Observability: `metadata.json` carries `routing` (class, provider, model) and
-  `tokens` by model "as the servers reported it", omitted when no call reported usage
-  (`prompt.go:775-788`). No duration field was found; latency has to be timed outside
-  SOP.
+  `tokens` by model (`prompt.go:775-788`). The `tokens` key is the model name the
+  client put in its own request (`chatRequest.Model`, recorded through
+  `perf.AddUsageWithReport` in `internal/agent/openai.go`, `internal/agent/ollama.go`,
+  `internal/ollamaagent/ollama.go` and `internal/ollamaagent/omlxclient.go`). SOP
+  does not record a server-returned model name, so the key is evidence of the name SOP
+  sent, not of the model the server executed. The counts come from the server's own
+  report. `tokens` is omitted only when no call was recorded at all, as with the
+  `command` provider, which records no usage and is the default provider when none is
+  configured (`EffectiveProvider`). When a server omits usage, the model key is still
+  present with zero tokens and `unreported_calls` greater than zero
+  (`internal/perf/usage.go`; `TestUnreportedUsageIsNotZero`). No duration field was
+  found; latency has to be timed outside SOP.
+- The stored `result.md`, `metadata.json` and stdout carry the model reply after
+  `redact.ModelInput`, so they are the redacted reply, not the raw one. The experiment
+  hashes `result.md` as the output of record.
 - Sampling controls: a search of `internal/agent` and `internal/ollamaagent` for
   temperature, seed and top_p found none. Sampling is whatever the provider defaults
   to, so reproducibility must be measured, not assumed.
-- With the Ollama harness, REVIEW runs a bounded read-only inspection of the
-  repository before synthesis, and the harness adds its own system prompt
-  (`internal/ollamaagent/review.go`, `orchestrate.go:61`). A text-only provider has no
-  repository access.
+- Repository access is decided by the (harness, provider) pair. Harness `tool` with
+  provider `ollama` is the native in-process loop: REVIEW runs a bounded read-only
+  inspection of the project directory before synthesis, and the harness adds its own
+  system prompt (`internal/cli/cli.go` agent factory, `internal/ollamaagent/review.go`,
+  `orchestrate.go:61`). Text-only providers have no repository access. The default
+  harness is `tool` and the default provider is `command`
+  (`EffectiveHarness`, `EffectiveProvider`).
+- The project configuration is part of the cloned repository. The repository tracks
+  `.agent-sdlc/config.yaml`, which at `64101f9e` sets harness `tool`, provider `ollama`
+  and a `:cloud` model. A scratch clone at a historical parent commit therefore
+  inherits the configuration of that commit, which can differ across plans and can send
+  plan text to a cloud model. The project `.env` is also applied at startup unless a
+  variable is already exported (`loadDotEnv` in `internal/cli/cli.go`; whether the
+  `sop prompt` path reaches it was not traced).
+- Concurrent invocations in one project can collide. `promptRunID`
+  (`internal/cli/prompt.go`) checks that a run directory does not exist and
+  `runpkg.New` (`internal/run/run.go`) creates it later with `MkdirAll`, which does not
+  fail on an existing directory. `sop prompt` takes no project lock, and no test covers
+  concurrent same-second prompts. Two parallel calls in one project can therefore share
+  a run directory and overwrite each other's `prompt.md`, `result.md` and
+  `metadata.json`. This is a static finding; it has not been reproduced.
 
 ### 1.3 Planning and approval
 
@@ -220,42 +254,64 @@ vendored. If their text is quoted, it is credited (Apache-2.0).
   repository access; the Ollama REVIEW harness performs a bounded read-only inspection
   before synthesis. The same harness is used across arms so the comparison is fair, and
   the access difference from a text-only harness is recorded as a limitation.
+- **Project isolation.** Each run, and in particular each concurrent call, uses its own
+  project directory: a clone at the plan's parent commit (§5.2) that contains only that
+  run's request file. `--file` must resolve inside the project, and a repository-tool
+  harness can read everything in it, so the manifest, defect records, answer key, other
+  arms' request files and other runs' outputs live outside the project. After checkout a
+  fixed `.agent-sdlc/config.yaml` replaces the committed one, its sha256 is recorded in
+  the manifest, and no `.env` is present, so provider, harness and model configuration
+  are identical across plans. Where the provider is a cloud service, the operator
+  records that decision before the first run.
 - **Latency timing.** The A timer starts immediately before the single invocation and
   stops at process exit. The C timer starts immediately before the three parallel
   invocations and stops when all three exit. Request-file reads, agent construction and
   provider setup are inside the measured interval for both arms; the C interval includes
-  concurrent setup, not a sequential sum. The timing method is recorded in the manifest.
+  concurrent setup, not a sequential sum. Project preparation (clone, checkout and
+  config overlay, see Project isolation) happens before the timer and is excluded for
+  every arm. The timing method is recorded in the manifest.
 - Controlled and recorded per run: SOP binary commit; harness; provider, model and
   endpoint; `--model-class` (set explicitly in every call); provider-reported
   parameters where available. SOP's prompt metadata exposes `routing` and `tokens`, not
   sampling parameters; read sampling parameters from provider-side logs when available,
   otherwise record them as unavailable and rely on reproducibility. Because SOP exposes
   no sampling controls, repetition (§5.5) carries the variance measurement.
-- **Model override variables.** Before every run, unset `SOP_AGENT_MODEL` and the
-  provider-specific override (`SOP_OLLAMA_MODEL`, `SOP_LLAMACPP_MODEL`, `SOP_MLX_MODEL`,
-  or `SOP_OPENAI_COMPATIBLE_MODEL`). The prompt path builds the agent with the selected
-  model, but `FromConfig` lets these variables override it, and the `modelEnvOverride`
-  guard does not check the prompt's routed `sel`. Record the unset state in the run
-  manifest.
-- **Served-model check.** For every run, compare `routing.model` in `metadata.json`
-  with the model key(s) in `tokens`. A mismatch, or more than one served model,
-  invalidates the run for model attribution. A run with a detected mismatch is
-  invalidated before unblinding and MAY be rerun once with the environment corrected,
-  provided the replacement is recorded and the choice is not based on findings. If the
-  replacement also mismatches, the comparison is INCONCLUSIVE. If `tokens` is absent,
-  the served-model check and the cost criterion are INCONCLUSIVE; the run is not counted
-  as a confirmed model match, and the rerun rule does not apply. A provider that reports
-  no usage may be run, but H1 and H2 are INCONCLUSIVE for it; it is admissible only for
-  H3 (exploratory) or a labelled feasibility run. A run replaced under this rule is
-  excluded from the dataset and does not count as a failed run; only the replacement
-  counts.
+- **Environment.** Run every call in a cleared environment (`env -i` plus a recorded
+  allowlist), or at minimum unset `SOP_AGENT_MODEL`, the provider-specific model
+  override (`SOP_OLLAMA_MODEL`, `SOP_LLAMACPP_MODEL`, `SOP_MLX_MODEL`, or
+  `SOP_OPENAI_COMPATIBLE_MODEL`), `SOP_AGENT_PROVIDER`, `SOP_AGENT_HARNESS` and the
+  `SOP_MODEL_*` variables. The prompt path builds the agent with the selected model,
+  but `FromConfig` lets the model variables override it, `EffectiveProvider` and
+  `EffectiveHarness` read their variables first, and the `modelEnvOverride` guard does
+  not check the prompt's routed `sel`. Record the allowlist or the unset state in the
+  run manifest.
+- **Requested-model check.** For every run, compare `routing.model` in `metadata.json`
+  with the model key(s) in `tokens`. The key is the model name SOP sent to the provider
+  (§1.2); the check therefore detects an override on the SOP side and is not evidence of
+  the model the server executed. A mismatch, or more than one key, invalidates the run
+  for model attribution. A run with a detected mismatch is invalidated before unblinding
+  and MAY be rerun once with the environment corrected, provided the replacement is
+  recorded and the choice is not based on findings. If the replacement also mismatches,
+  the comparison is INCONCLUSIVE. Where the provider exposes a model identity, such as a
+  digest from its model listing, the operator records it in the manifest before the
+  first run and after the last; where it does not, the manifest records the attribution
+  as client-side only. If `tokens` is absent, or any call in the run has
+  `unreported_calls` greater than zero, the model check and the cost criterion are
+  INCONCLUSIVE; the run is not counted as a confirmed model match, and the rerun rule
+  does not apply. A provider that reports no usage may be run, but H1 and H2 are
+  INCONCLUSIVE for it; it is admissible only for H3 (exploratory) or a labelled
+  feasibility run. A run replaced under this rule is excluded from the dataset and does
+  not count as a failed run; only the replacement counts.
 - One model per arm for the whole experiment. A provider or model change
   mid-experiment invalidates the affected runs.
 - **Concurrency.** The full run records whether the provider executes parallel requests
   concurrently. The latency cap uses the measured parallel-batch wall-clock for C, which
   already reflects any provider-side serialization; the sequential sum is diagnostic
   only. C latency is first measured in the full run; a missing or invalid C timing makes
-  H2 INCONCLUSIVE.
+  H2 INCONCLUSIVE. Each concurrent call runs in its own project directory (see Project
+  isolation). After every parallel batch the manifest records the `work_item_id` and
+  run directory of each call; a duplicate id or directory invalidates the affected runs
+  before unblinding, and the same rerun rule as a model mismatch applies.
 - Run order is randomized and interleaved across arms and repetitions so provider drift
   is not confounded with arm. The full-run order is generated and recorded in the run
   manifest before the first full-run call. The pilot is excluded from the dataset. A
@@ -433,8 +489,10 @@ least:
 - the arm configuration, including the 7-call or 8-call choice and the designated H1 B
   run;
 - the full-run order;
-- the environment state, including that the model override variables are unset and the
-  resolved provider and model for each arm;
+- the environment state (the cleared-environment allowlist or the unset variables), the
+  resolved provider and model for each arm, the sha256 of the config overlay, and the
+  provider-side model identity or the statement that attribution is client-side only;
+- the `work_item_id` and run directory of every concurrent call;
 - the harness and its repository-access behavior;
 - the latency timing method and start/stop points;
 - the per-plan known-defect count;
@@ -469,6 +527,13 @@ designated-run rule (§4), the run-manifest definition (§5.8), the minimum staf
 (§5.4), the within-run deduplication scope (§5.4–§5.6), the 15-contributing-plan
 reproducibility floor (§5.5, §6.2), and the cost/latency precedence rule (§6.2).
 
+A second round of clarifications, made on 2026-11-21 after the merge of #565 and before
+any run, comes from a static feasibility read of the code at `64101f9e`: the
+requested-model check and the unreported-usage rule (§1.2, §5.1, §6.1), the environment
+and project-isolation rules (§5.1), and the work-item-id check for parallel batches
+(§5.1). They state how the existing validity conditions are measured. No threshold or
+outcome rule changed.
+
 ### 6.1 Validity conditions (checked first)
 
 The experiment is **INCONCLUSIVE** for the affected comparison if any of these holds:
@@ -479,13 +544,14 @@ The experiment is **INCONCLUSIVE** for the affected comparison if any of these h
   claim would be PASS;
 - more than 10% of runs failed, or arms have unequal failure rates by more than 5
   points;
-- `metadata.json` routing differs from the intended provider, model or class;
-  `SOP_AGENT_MODEL` or the provider-specific model variable was set; or the served
+- `metadata.json` routing differs from the intended provider, model or class; a model,
+  provider, harness or routing override variable was set (§5.1 Environment); or the
   model key in `tokens` does not match `routing.model`, in a run that was not replaced
   under the §5.1 rerun rule, for any run in the comparison;
-- token counts unavailable, including a provider that reports no token usage: the
-  served-model check cannot pass and the hypothesis is INCONCLUSIVE; recall may be
-  reported separately but cannot yield PASS;
+- token counts unavailable, including a provider that reports no token usage or any
+  call with `unreported_calls` greater than zero: the requested-model check cannot pass
+  and the hypothesis is INCONCLUSIVE; recall may be reported separately but cannot
+  yield PASS;
 - a provider-reported sampling parameter changed within an arm; where the provider
   reports no parameters, the drift is recorded as a limitation and reproducibility is
   the only guard;
@@ -555,10 +621,14 @@ higher false-positive rate; the B×3 control's own rate is reported.
 - Run arms A and B once on two plans.
 - Confirm in `metadata.json` that provider, model and class match intent for each run.
 - Confirm the token fields are populated for the chosen provider.
-- Confirm the pre-run requirement: `SOP_AGENT_MODEL` and the provider-specific model
-  variable are unset, `routing.model` matches the intended model, and the `tokens` key
-  matches `routing.model`. The pilot validates the check; the requirement applies to
-  every run.
+- Confirm the pre-run requirements of §5.1: the environment is cleared or the override
+  variables are unset, `routing.model` matches the intended model, the `tokens` key
+  matches `routing.model`, and `unreported_calls` is zero for every call. The pilot
+  validates the checks; the requirements apply to every run.
+- Confirm the project-isolation setup: the config overlay and its sha256, no `.env`, a
+  project containing only its own request file, the manifest and answer material outside
+  the project, and the `result.md` hash. Record the provider-side model identity, or
+  record the attribution as client-side only.
 - The two-plan pilot cannot exercise the 20-finding double-adjudication floor or kappa;
   it validates metadata, model attribution and token plumbing only. The kappa and
   finding-count validity conditions are evaluated in the full run.
@@ -644,7 +714,7 @@ double-adjudicated sample are recorded.
   unapproved and unimplemented; structured findings, disposition APIs, evidence
   persistence, and orchestration each require a separate governance decision. A PASS
   on H2 would support a separate decision on multiple reviewers; it does not authorize
-  merge or de-duplication tooling. The conditional PRD's served-model and
+  merge or de-duplication tooling. The conditional PRD's requested-model and
   missing-evidence requirements are protocol alignment; they remain subject to the same
   authorization boundary.
 - **FAIL and INCONCLUSIVE are distinct** and neither authorizes implementation. FAIL
