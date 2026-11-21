@@ -1,0 +1,281 @@
+{
+  "version": 1,
+  "description": "Machine-readable extraction of the six historical leads in CORPUS-PREPARATION-PLAN.md §2.2. Non-normative. These entries are NOT part of the 23-entry candidate manifest and are NOT eligible, counted, frozen, or adjudicated. The corpus owner records the classification before any entry can enter a floor.",
+  "baseline": "5a94dfe1",
+  "protocol": "docs/reports/EGM-GOLDFISH-REVIEW-ASSESSMENT.md",
+  "manifest": "docs/reports/independent-design-review-corpus/candidates.json",
+  "readiness": "docs/reports/independent-design-review-corpus/READINESS.md",
+  "investigation": "docs/reports/independent-design-review-corpus/HISTORICAL-LEAD-INVESTIGATION.md",
+  "freeze_status": "NOT_FROZEN",
+  "counting_rule": "Zero of these leads is counted toward any floor. proposed_determinability is a proposal; the corpus owner records the final judgment and no independent adjudicator has confirmed any classification.",
+  "leads": [
+    {
+      "id": "IDR-L-001",
+      "artifact": "docs/plans/PLAN-Code-Retrieval-Context-Seam.md",
+      "commit": "21564b27bd9f88c288a47ba71b492b77e9468db3",
+      "artifact_sha256": "75513c8629d8ad592acc4747e76f3d45250e082c184281e46d729fed4eb1677b",
+      "pre_defect_status": "earliest",
+      "rejected_later_revisions": [
+        {
+          "commit": "03a7d7d97912f22b708622791568240242a7e76d",
+          "reason": "Edits only the status line and adds the sentence that names the gap; it contains the disclosure."
+        }
+      ],
+      "later_evidence": ["03a7d7d97912f22b708622791568240242a7e76d"],
+      "later_evidence_independent": false,
+      "later_evidence_note": "The only later record is the same artifact's own post-merge status line. CORPUS-PREPARATION-PLAN.md §2.3 rejects a document whose only defect evidence is its own later status line.",
+      "permitted_references": [
+        {
+          "path": "internal/cli/run.go",
+          "blob_sha256": "b9e3b3aa17d96d055ca4e03f8d360c6aa8c766358dd3893ff2b7876af2ade308"
+        },
+        {
+          "path": "internal/cli/retrieve.go",
+          "blob_sha256": "9efa4aac43ef15c0fad570cd79aa8de15b252a1d2ee9fad7e375c57328a30197"
+        }
+      ],
+      "defect_class": "incomplete-acceptance-criterion",
+      "defect_summary": "The plan states an implement/fix scope, but its step-2 acceptance criterion is only a build/test/vet check and the retrieval seam is wired into implementContext only; the fix path uses fixContext and never reads Retrieved.",
+      "design_or_implementation": "design",
+      "proposed_determinability": "strict-from-artifact",
+      "evidence_state": "EVIDENCE_BLOCKED",
+      "proposed_inclusion": "hold",
+      "disposition": "Hold pending corpus-owner decision on whether a self-recorded post-merge limitation counts as a recorded gap. Not counted.",
+      "authorship": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "decisions 2 and 3"
+    },
+    {
+      "id": "IDR-L-002",
+      "artifact": "docs/plans/PLAN-08-SOP-LLM08-Hidden-Context-Exposure.md",
+      "commit": "e84eb4aa43c3aa70b1203a6160d84ba997f13670",
+      "artifact_sha256": "befb303c4068de400d69e4c692156738ad3685beb34ad8d67abc9b0ee3ae5125",
+      "pre_defect_status": "last-pre-defect-not-earliest",
+      "pre_defect_note": "4fb3b8a3 and 462ed9bb are earlier and also pre-defect; e84eb4aa is the last pre-follow-up revision and the one the 08B plan cites as the Plan 08 campaign baseline.",
+      "rejected_later_revisions": [
+        {
+          "commit": "87e7fad886c800f8551049d95d70e109030427b8",
+          "reason": "Rename to docs/history/plans with no content change; not a distinct revision."
+        }
+      ],
+      "later_evidence": ["aa3e1d364d4bf6a6a5d575291a4739e35b956f00"],
+      "later_evidence_independent": true,
+      "permitted_references": [
+        {
+          "path": "docs/reports/owasp-llm/llm08-hidden-context.md",
+          "blob_sha256": "ff1e4ac2f5928f26c64bb7f28f67aa5c424766bd11c1c3660aea82f71c8916e9"
+        },
+        {
+          "path": "internal/notify/event.go",
+          "blob_sha256": "0217fd4e783b3f886b195b67e28eae0783b2270725940bb246fbf4e983f9bc81"
+        },
+        {
+          "path": "internal/toolharness/harness.go",
+          "blob_sha256": "010a2165021d91c6a0924df2c6ff8dfc022fc1c0a956c4ac7282fc607b613f48"
+        }
+      ],
+      "defect_class": "implementation-only-and-open-residual-gap",
+      "defect_summary": "The verified fixed defect is a missing redact.Shapes call in internal/notify/event.go, an outbound notification channel outside the plan's model-visible-context scope. The tool-output .env canary is a recorded GAP that the follow-up deliberately did not fix.",
+      "design_or_implementation": "implementation-only",
+      "proposed_determinability": "not-a-design-defect",
+      "evidence_state": "EXCLUDED",
+      "proposed_inclusion": "exclude",
+      "disposition": "Excluded as a design-corpus input. The verified defect evidence is preserved; IDR-H-007 remains excluded and its permitted references remain cleared.",
+      "authorship": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "decisions 2 and 3"
+    },
+    {
+      "id": "IDR-L-003",
+      "artifact": "docs/plans/PLAN-09-SOP-LLM09-Vector-and-Embedding-Weaknesses.md",
+      "commit": "4fb3b8a3bff7e86e56eb7287fb6df800f6c2d737",
+      "artifact_sha256": "085a190a3430d5cbd43f1cb2074a58f3fbd0f6f1cf123c019e33494d28eff259",
+      "pre_defect_status": "earliest",
+      "rejected_later_revisions": [
+        {
+          "commit": "536057ab",
+          "reason": "Execution revision; the LLM09 report exists and discusses retrieval scope."
+        },
+        {
+          "commit": "ca4c800e",
+          "reason": "Execution revision that records RETRIEVE-003 rebuild evidence."
+        },
+        {
+          "commit": "63a8c400",
+          "reason": "Introduces the rebuild-import/query-scope separation and records the corrected claim in the report and the follow-up; the plan criterion itself is unchanged."
+        },
+        {
+          "commit": "05685308",
+          "reason": "Archives the 09B follow-up, which states the corrected claim."
+        }
+      ],
+      "later_evidence": [
+        "056853086c7b79336a5463fde211eb0403c7d2f4",
+        "e90ecf9761c65222d15464319e1d25f5e6a42453"
+      ],
+      "later_evidence_independent": true,
+      "permitted_references": [
+        {
+          "path": "internal/memindex/rebuild.go",
+          "blob_sha256": "d26492245ef0f87485cd3bfb9a1639daefd8ca46bcbd78444c9e3c68c2970ea7"
+        },
+        {
+          "path": "internal/memindex/index.go",
+          "blob_sha256": "7ad1f0735f150dc8ad8a8e05266435af9d9919066289308903415c85d786ca57"
+        },
+        {
+          "path": "internal/outcomefile/outcomefile.go",
+          "blob_sha256": "9db4a0b74099d010c532f7df2d3e939ff0f545e47059c54e5057a5bfaab35084"
+        },
+        {
+          "path": "internal/retrievalboundary/boundary.go",
+          "blob_sha256": "aa3a4af450232735961d8aee5eb50790683546ffe21aa08daee14f703a001561"
+        }
+      ],
+      "excluded_references": [
+        {
+          "path": "docs/reports/owasp-llm/llm09-retrieval.md",
+          "reason": "Deliverable created after 4fb3b8a3; does not exist at the pinned revision and carries the corrected claim."
+        }
+      ],
+      "defect_class": "unverifiable-acceptance-criterion",
+      "defect_summary": "RETRIEVE-003 requires that a rebuild 'preserves scope and does not silently import another workspace', but RebuildFromDir indexes every eligible record in the given directory with no repository filter and Index.Search enforces the trusted repository only at query time.",
+      "design_or_implementation": "design",
+      "proposed_determinability": "strict",
+      "determinability_ambiguity": "The plan criterion is unchanged in every later revision; the correction lands in the evidence report and the 09B follow-up. A corpus owner who reads the criterion as claiming something only about a workspace-local directory would record it as partial. This record proposes strict and states the basis.",
+      "evidence_state": "EXTRACTED",
+      "proposed_inclusion": "hold",
+      "disposition": "Extracted; proposed strict determinability. Not eligible and not counted until the corpus owner records it.",
+      "authorship": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "decisions 2 and 3"
+    },
+    {
+      "id": "IDR-L-004",
+      "artifact": "docs/specs/REVIEW.md",
+      "commit": "5fce2b6adcb0783ad87875550a91654a264ffcbf",
+      "artifact_sha256": "356d83a467dc45b57305a61f297f46949d907850f44ba754a34fa2002d57de84",
+      "pre_defect_status": "earliest",
+      "rejected_later_revisions": [
+        {
+          "commit": "4223e10bab25adab914c963fb6e52f44a8f4583f",
+          "reason": "RSH-002 adds §4 Invocation-Scoped Review Input; contains the disclosure for defect (a)."
+        },
+        {
+          "commit": "ba7736d4c2cbaa2c64df6007428fcb4800adf978",
+          "reason": "RSH-003..005 adds §6 Malformed Review Output; contains the disclosure for defect (b). This is the revision IDR-E-005 currently points at."
+        }
+      ],
+      "later_evidence": [
+        "docs/reports/review-hardening/RSH-001-review-seam-baseline.md",
+        "docs/reports/review-hardening/RSH-005-verification.md",
+        "docs/history/plans/PLAN-Review-Scope-And-Output-Hardening.md",
+        "4223e10bab25adab914c963fb6e52f44a8f4583f",
+        "ba7736d4c2cbaa2c64df6007428fcb4800adf978"
+      ],
+      "later_evidence_independent": true,
+      "permitted_references": [
+        {
+          "path": "docs/specs/QUALITY.md",
+          "blob_sha256": "0fa56459fecee8cefcfdd740a82ab26b6168c746e45f02f618382ea114095d07"
+        },
+        {
+          "path": "docs/specs/EXECUTION.md",
+          "blob_sha256": "d4651b68a05cb9d798b7a3d4d1b2e348d79b0a8e794ba1d88af446c67c639912"
+        },
+        {
+          "path": "docs/specs/VALIDATION.md",
+          "blob_sha256": "ec4e38835ad36c6caf33df5a3d3cc664abd7c761f24d5a8952bd391aaaebc1da"
+        },
+        {
+          "path": "internal/review/provider.go",
+          "blob_sha256": "6ebd729e3c49c7cbf17919a30367c912431f3e34bd36511d9312c51953c3fe36"
+        },
+        {
+          "path": "internal/cli/cli.go",
+          "blob_sha256": "ca052c773bf194d73cd87d99095dad3a4abeb4cbe94d61abfaff7f3fdf8670d3"
+        },
+        {
+          "path": "internal/cli/run.go",
+          "blob_sha256": "73827daf71cb8c283c65e36d24ee70616cd350572c4c3dec7ff90e7dbe1544be"
+        },
+        {
+          "path": "internal/git/git.go",
+          "blob_sha256": "7e1f815a9a598b67f8b2428ed8f6ec1283074c09a61379bd7a4a683ed702e7eb"
+        }
+      ],
+      "defects": [
+        {
+          "defect_class": "scope-violation",
+          "defect_summary": "§4 ties review input to the working tree and defines no task attribution, so unrelated pre-existing uncommitted files enter review; readDiff resolves to DiffAll at the same revision.",
+          "design_or_implementation": "design",
+          "proposed_determinability": "strict",
+          "corrected_by": "4223e10bab25adab914c963fb6e52f44a8f4583f"
+        },
+        {
+          "defect_class": "missing-failure-mode",
+          "defect_summary": "The spec defines structured findings and the blocking rule but no boundary for unparseable output; parseReport aborts the whole report on one invalid severity, discarding valid findings.",
+          "design_or_implementation": "design",
+          "proposed_determinability": "strict",
+          "corrected_by": "ba7736d4c2cbaa2c64df6007428fcb4800adf978"
+        }
+      ],
+      "evidence_state": "EXTRACTED",
+      "proposed_inclusion": "hold",
+      "disposition": "Extracted; proposed strict determinability for two defects. Not eligible and not counted until the corpus owner records it. IDR-E-005 remains excluded as recorded; this lead supplies the correct pre-defect revision without rewriting that exclusion.",
+      "authorship": "Tom Tran <trantom512@gmail.com>",
+      "outstanding_decision": "decisions 2 and 3"
+    },
+    {
+      "id": "IDR-L-005",
+      "artifact": "docs/history/plans/PLAN-Post-Wave3-Production-Readiness.md",
+      "commit": null,
+      "artifact_sha256": null,
+      "pre_defect_status": "no-artifact",
+      "later_evidence": [],
+      "later_evidence_independent": false,
+      "permitted_references": [],
+      "defect_class": "implementation-or-integration-gap",
+      "defect_summary": "The plan is a backlog of production-readiness tasks. Each gap is defined by the plan itself; no earlier design document specified the wrong behavior and was later corrected.",
+      "design_or_implementation": "implementation-only",
+      "proposed_determinability": "not-determinable-as-single-artifact",
+      "evidence_state": "NO_ARTIFACT",
+      "proposed_inclusion": "exclude",
+      "disposition": "Bounded negative. IDR-E-011 remains excluded; this record confirms the reason.",
+      "authorship": "Tom Tran",
+      "outstanding_decision": "decision 2"
+    },
+    {
+      "id": "IDR-L-006",
+      "artifact": "docs/history/plans/PLAN-SOP-End-to-End-Reliability.md",
+      "commit": null,
+      "artifact_sha256": null,
+      "pre_defect_status": "no-artifact",
+      "later_evidence": [],
+      "later_evidence_independent": false,
+      "permitted_references": [],
+      "defect_class": "integration-gap",
+      "defect_summary": "The plan is an end-to-end assessment and prioritized backlog. Its recorded gaps are integration availability and missing live evidence, not a defect in a prior specification.",
+      "design_or_implementation": "implementation-only",
+      "proposed_determinability": "not-determinable-as-single-artifact",
+      "evidence_state": "NO_ARTIFACT",
+      "proposed_inclusion": "exclude",
+      "disposition": "Bounded negative. IDR-E-012 remains unverified; this record confirms the state.",
+      "authorship": "Tom Tran",
+      "outstanding_decision": "decision 2"
+    }
+  ],
+  "counts_after_extraction": {
+    "leads_investigated": 6,
+    "pre_defect_artifacts_extracted": 4,
+    "proposed_strict_plans": 2,
+    "proposed_strict_defects": 3,
+    "evidence_blocked_leads": 1,
+    "implementation_only_exclusions": 1,
+    "no_artifact_leads": 2,
+    "manifest_entries_unchanged": 23,
+    "strict_proposed_determinable_recorded": 0,
+    "partial_proposed_determinable_recorded": 10,
+    "verified_defect_holds": 2,
+    "unverified_holds": 3,
+    "excluded_recorded": 8,
+    "independently_adjudicated": 0
+  }
+}

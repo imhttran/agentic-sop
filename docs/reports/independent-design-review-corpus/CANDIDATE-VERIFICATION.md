@@ -9,6 +9,8 @@ the restored pilot evidence commit. Candidate revisions are the commits recorded
 **Manifest:** [candidates.json](candidates.json).
 **Protocol:** [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](../EGM-GOLDFISH-REVIEW-ASSESSMENT.md).
 **Readiness summary:** [READINESS.md](READINESS.md).
+**Later addendum:** §5 records a Workstream A correction to one recorded revision. It does
+not change any candidate row, count, or disposition.
 
 ## 1. Method
 
@@ -96,3 +98,26 @@ Not established:
   the proposed eligibility amendment is not approved.
 - The verification does not show that a reviewer would find the defect in a run. That is
   the experiment's question, not this record's.
+
+## 5. Later addendum (Workstream A)
+
+This addendum is later than the verification above. It corrects one recorded revision and
+resolves the six leads from the preparation plan. It changes no row, count, or disposition in
+§3, and it promotes no candidate.
+
+- **`IDR-E-005` revision.** The row records `docs/specs/REVIEW.md` @ `ba7736d4` and
+  explains the exclusion by saying the pre-fix spec already required invocation-scoped input
+  and a deterministic malformed-output boundary. That is true of `ba7736d4` because
+  `ba7736d4` **added** the malformed-output boundary (its commit body says so), and
+  `4223e10b` added the invocation-scoped requirement. The exclusion stands as recorded: the
+  row points at a post-fix revision and must not be used as a corpus input. The repository's
+  earliest revision `5fce2b6a` contains neither requirement; it is the basis for the new
+  lead `IDR-L-004`, not for a change to `IDR-E-005`.
+- **Six leads resolved.** The extraction, hashes, permitted references, and dispositions are
+  in [HISTORICAL-LEAD-INVESTIGATION.md](HISTORICAL-LEAD-INVESTIGATION.md) and
+  [lead-extraction.json](lead-extraction.json). Two plans carry three proposed-strict design
+  defects; one lead is evidence-blocked; one is implementation-only; two have no single
+  artifact.
+- **Counts unchanged.** 23 manifest entries; 5 `VERIFIED`, 7 `PROPOSED`, 3 `UNVERIFIED`, 8
+  `EXCLUDED`; 0 recorded strict, 10 partial, 2 verified-defect holds, 3 unverified holds, 8
+  excluded; 0 independently adjudicated.

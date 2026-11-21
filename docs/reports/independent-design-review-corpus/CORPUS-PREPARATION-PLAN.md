@@ -46,6 +46,13 @@ For each lead:
 These are evidence-backed leads, not accepted candidates. Each requires extraction and a
 corpus-owner decision before it can appear as an eligible input.
 
+**Resolution (later).** All six leads were extracted and resolved against git history in
+[HISTORICAL-LEAD-INVESTIGATION.md](HISTORICAL-LEAD-INVESTIGATION.md); the machine-readable
+record is [lead-extraction.json](lead-extraction.json). The table below is preserved as the
+original backlog. The extraction promotes no lead: two plans carry three proposed-strict
+design defects, one lead is evidence-blocked, one is implementation-only, and two have no
+single pre-defect design artifact.
+
 | Lead | Artifact to examine | Revision or evidence | What is missing |
 | --- | --- | --- | --- |
 | `IDR-L-001` | `docs/plans/PLAN-Code-Retrieval-Context-Seam.md` | Plan at `21564b27`, before the post-merge status line at `03a7d7d9` | Confirm that the implement/fix wiring gap is visible from the plan and the referenced `internal/cli/run.go`, `internal/cli/retrieve.go` at `21564b27`. The existing `IDR-H-002` revision is self-referential and does not count. |
