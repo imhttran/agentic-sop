@@ -4,18 +4,20 @@
 //
 // Three locks in SOP answer three different questions:
 //
-//	projectlock state.lock      may I write project metadata?
-//	started-work work/.lock     may I decide to launch a job?
-//	executionlease state.exec.lock   is an execution already running?
+//	projectlock state.lock                    may I write project metadata?
+//	started-work runs/mcp-work/.start.lock    may I decide to launch a job?
+//	executionlease state.exec.lock            is an execution already running?
 //
 // This package owns the third. It is a file holding an owner record: the lease is
 // created exclusively, so exactly one execution holds it, and it stays held for the
 // lifetime of that execution rather than for the lifetime of the request that
 // started it.
 //
-// Nothing calls this package yet. It is landed behind the "off" configuration
-// (rollout step 1 of the proposal) so the wiring in the CLI, MCP and ACP interfaces
-// can be reviewed on its own.
+// Callers today: `sop run` (single-task and graph mode) acquires the lease behind
+// the execution.lease setting (default off), and `sop resume` reports and releases
+// a stale one. `sop prompt`, MCP and ACP starts neither acquire nor check it yet, so
+// the cross-interface guarantee is not met; see
+// docs/plans/ACP-EXECUTION-EXCLUSION-GAP.md.
 package executionlease
 
 import (

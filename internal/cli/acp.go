@@ -89,7 +89,7 @@ const acpWorkOutcomeNotInitialized = "not_initialized"
 //     first, so the adapter reconciles before any new submission.
 //
 //   - Starter performs exactly one governed start through startWork. startWork
-//     owns the cross-process start lock (`.agent-sdlc/runs/work/.lock`, created
+//     owns the cross-process start lock (`.agent-sdlc/runs/mcp-work/.start.lock`, created
 //     O_EXCL): every ACP and MCP start serializes on it, re-reads the persisted
 //     jobs while holding it, and refuses a duplicate or a competing running job.
 //     It also refuses while a `sop run` is mid-task, detected from the persisted
@@ -109,7 +109,7 @@ func acpSubmission(env workEnv) *acp.PromptSubmission {
 				return nil, err
 			}
 			// Release at once: this was a probe, not the start lock. startWork takes
-			// `.agent-sdlc/runs/work/.lock` (O_EXCL) for the authoritative
+			// `.agent-sdlc/runs/mcp-work/.start.lock` (O_EXCL) for the authoritative
 			// duplicate/competing-job check, and that lock is what serializes starts.
 			lock.Release()
 			return func() {}, nil
