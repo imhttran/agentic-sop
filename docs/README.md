@@ -226,6 +226,7 @@ Point-in-time evidence reports produced by a task. They record what was measured
 decided at a moment in time and are non-normative: the current behavior they concern
 is owned by the documents they link.
 
+- [reports/INDEPENDENT-DESIGN-REVIEW-EXPERIMENT-FEASIBILITY.md](reports/INDEPENDENT-DESIGN-REVIEW-EXPERIMENT-FEASIBILITY.md) — the feasibility assessment for the independent design-review experiment: corpus and determinability inventory, human-adjudication availability, pending Linux provider/execution evidence, cost and INCONCLUSIVE risks, and a **NOT YET READY** verdict. No experiment was run.
 - [reports/PERFORMANCE-BASELINE.md](reports/PERFORMANCE-BASELINE.md) — the pre-performance baseline (CLOSE-010): the measured numbers future performance work is compared against. The measurement model is [reference/PERFORMANCE.md](reference/PERFORMANCE.md).
 - [reports/PHASE-9-MULTI-AGENT-ADOPTION.md](reports/PHASE-9-MULTI-AGENT-ADOPTION.md) — the Phase 9 adoption decision (ORCH-012): multi-agent orchestration is verified, and the deterministic gate keeps it **opt-in** — default execution stays single-agent.
 - [reports/pre-performance-closure/](reports/pre-performance-closure/) — the CLOSE-001–CLOSE-011 closure evidence (baselines, telemetry inventory, readiness); the verdict is [CLOSE-011-readiness.md](reports/pre-performance-closure/CLOSE-011-readiness.md).
