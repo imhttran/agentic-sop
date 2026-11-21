@@ -310,9 +310,14 @@ vendored. If their text is quoted, it is credited (Apache-2.0).
   already reflects any provider-side serialization; the sequential sum is diagnostic
   only. C latency is first measured in the full run; a missing or invalid C timing makes
   H2 INCONCLUSIVE. Each concurrent call runs in its own project directory (see Project
-  isolation). After every parallel batch the manifest records the `work_item_id` and
-  run directory of each call; a duplicate id or directory invalidates the affected runs
-  before unblinding, and the same rerun rule as a model mismatch applies.
+  isolation). After every parallel batch the manifest records the absolute run directory
+  and `work_item_id` of each call. `work_item_id` is `prompt-YYYYMMDD-HHMMSS` and is
+  unique only within one project's run root, so identical ids in different project
+  directories are expected and are not a failure. The batch is checked on the absolute
+  run directory: two calls that report the same absolute run directory, or a run
+  directory whose `metadata.json` carries a different `work_item_id` than its directory
+  name, invalidate the affected runs before unblinding, and the same rerun rule as a
+  model mismatch applies.
 - Run order is randomized and interleaved across arms and repetitions so provider drift
   is not confounded with arm. The full-run order is generated and recorded in the run
   manifest before the first full-run call. The pilot is excluded from the dataset. A
@@ -493,7 +498,7 @@ least:
 - the environment state (the cleared-environment allowlist or the unset variables), the
   resolved provider and model for each arm, the sha256 of the config overlay, and the
   provider-side model identity or the statement that attribution is client-side only;
-- the `work_item_id` and run directory of every concurrent call;
+- the absolute run directory and `work_item_id` of every concurrent call;
 - the harness and its repository-access behavior;
 - the latency timing method and start/stop points;
 - the per-plan known-defect count;
@@ -531,7 +536,7 @@ reproducibility floor (§5.5, §6.2), and the cost/latency precedence rule (§6.
 A second round of clarifications, made on 2026-11-21 after the merge of #565 and before
 any run, comes from a static feasibility read of the code at `64101f9e`: the
 requested-model check and the unreported-usage rule (§1.2, §5.1, §6.1), the environment
-and project-isolation rules (§5.1), and the work-item-id check for parallel batches
+and project-isolation rules (§5.1), and the run-directory check for parallel batches
 (§5.1). They state how the existing validity conditions are measured. No threshold or
 outcome rule changed.
 
