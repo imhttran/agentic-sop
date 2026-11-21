@@ -54,6 +54,13 @@ A remediation plan is not used as the corpus document when its own text states t
 That would leak the answer. Such plans are recorded as **evidence pointers** until the
 pre-fix parent document and revision are extracted.
 
+A candidate manifest now records the extraction: 23 entries, 5 `VERIFIED`, 7 `PROPOSED`,
+3 `UNVERIFIED`, and 8 `EXCLUDED`. Nine pre-fix artifacts were extracted from the twelve
+evidence-only remediation plans; three plans still lack a single pre-fix artifact. The
+manifest is [candidates.json](independent-design-review-corpus/candidates.json), and the
+readiness summary is [READINESS.md](independent-design-review-corpus/READINESS.md). It is
+not frozen.
+
 All candidate documents were last modified under the git identity Tom Tran. This report
 uses the git identity as a conservative proxy for authorship, so the operator is treated
 as unable to adjudicate them; see §3.2 for the limits of that proxy.
@@ -92,6 +99,31 @@ documents; using them would leak the defect.
 | [PLAN-Post-Wave3-Production-Readiness.md](../history/plans/PLAN-Post-Wave3-Production-Readiness.md)         | Post-Wave-3 production-readiness gaps.                                                                                                                                                                      | Evidence pointer.                                                                              |
 | [PLAN-SOP-End-to-End-Reliability.md](../history/plans/PLAN-SOP-End-to-End-Reliability.md)                   | End-to-end reliability gaps.                                                                                                                                                                                | Evidence pointer.                                                                              |
 
+### 2.3.1 Extracted pre-fix candidates
+
+The manifest records the following parent artifacts. These are proposed, not frozen, and
+the corpus owner must confirm each revision and determinability judgment.
+
+| ID          | Pre-fix artifact                  | Commit     | Later evidence                               | State                             |
+| ----------- | --------------------------------- | ---------- | -------------------------------------------- | --------------------------------- |
+| `IDR-E-001` | `docs/specs/EXECUTION.md`         | `3be4a90`  | Acceptance-Verification Hardening; `9604bec` | PROPOSED, partial                 |
+| `IDR-E-002` | `docs/specs/HUMAN-APPROVAL.md`    | `94cace0c` | Stale Approval Invalidation; PR #141         | PROPOSED, partial                 |
+| `IDR-E-003` | `docs/specs/VALIDATION.md`        | `8980826`  | Validation Evidence Reuse                    | PROPOSED, partial                 |
+| `IDR-E-004` | `docs/specs/RECOVERY.md`          | `a64e06cd` | Phase 5 Execution Recovery                   | PROPOSED, partial                 |
+| `IDR-E-005` | `docs/specs/REVIEW.md`            | `ba7736d4` | Review Scope Hardening; RSH-001              | EXCLUDED: spec already correct    |
+| `IDR-E-006` | —                                 | —          | RSH Follow-Up                                | UNVERIFIED: parent not identified |
+| `IDR-E-007` | `docs/specs/WORKFLOW.md`          | `d0d89d03` | Lifecycle Consistency Hardening              | PROPOSED, partial                 |
+| `IDR-E-008` | `docs/specs/AGENT-PROVIDER.md`    | `6c839f2e` | Implementation Convergence                   | PROPOSED, partial                 |
+| `IDR-E-009` | `docs/architecture/COMPONENTS.md` | `6c839f2e` | Run Metrics and Observability                | PROPOSED, partial                 |
+| `IDR-E-010` | `docs/architecture/OVERVIEW.md`   | `7de7c68a` | EV Context Run Evaluation                    | UNVERIFIED: artifact too broad    |
+| `IDR-E-011` | —                                 | —          | Post-Wave-3 Readiness                        | EXCLUDED: no single artifact      |
+| `IDR-E-012` | —                                 | —          | SOP End-to-End Reliability                   | UNVERIFIED: parent not identified |
+
+The review-scope plan is the clearest exclusion: the pre-fix `REVIEW.md` already required
+invocation-scoped input and a deterministic malformed-output boundary, so the recorded
+defect was in code, not in the design document. This is a material limit on the
+historical design corpus.
+
 ### 2.4 Not corpus entries
 
 | Document                                                                                | Why it is not a corpus entry                                                                                                                                                          |
@@ -106,29 +138,39 @@ Two separate floors apply: **15 plans with known defects** and **15 determinable
 defects**. A plan can count toward the first without counting toward the second;
 partially determinable or self-referential candidates count toward neither.
 
-| Measure                                                    | Count        |
-| ---------------------------------------------------------- | ------------ |
-| Candidate documents reviewed (8 + 12 + 3, §2.2–§2.4)      | 23           |
-| Evidence-verified defect-bearing or gap-bearing candidates | 8            |
-| Proposed determinable with independent evidence (strict)   | 1            |
-| Proposed partially determinable or self-referential        | 7            |
-| Independently adjudicator-confirmed determinable           | 0            |
-| Assessment floor for determinable known defects            | 15           |
-| Evidence-verified candidate plans available                | 8            |
-| Assessment floor for plans with known defects              | 15           |
-| Plan-count shortfall (even if all 8 count)                 | 7            |
-| Determinable-defect shortfall (strict)                     | 14           |
-| Seeded-defect cases constructed                            | 0 of about 8 |
-| No-known-defect cases constructed                          | 0 of about 6 |
+| Measure                                                              | Count        |
+| -------------------------------------------------------------------- | ------------ |
+| Candidate manifest entries                                           | 23           |
+| Evidence state `VERIFIED`                                            | 5            |
+| Evidence state `PROPOSED`                                            | 7            |
+| Evidence state `UNVERIFIED`                                          | 3            |
+| Evidence state `EXCLUDED`                                            | 8            |
+| Proposed determinable with independent evidence (strict)             | 1            |
+| Proposed partially determinable                                      | 11           |
+| Unverified determinability                                           | 3            |
+| Not determinable or not a defect                                     | 8            |
+| Independently adjudicator-confirmed determinable                     | 0            |
+| Proposed eligible plans                                              | 12           |
+| Assessment floor for plans with known defects                        | 15           |
+| Plan-count shortfall (strict)                                        | 14           |
+| Plan-count shortfall (if all 11 partial plans are frozen)            | 3            |
+| Assessment floor for determinable known defects                      | 15           |
+| Determinable-defect shortfall (strict)                               | 14           |
+| Determinable-defect shortfall (if all 11 partial defects are frozen) | 3            |
+| Contributing plans per arm (strict / partial)                        | 1 / 12       |
+| Seeded-defect cases constructed                                      | 0 of about 8 |
+| No-known-defect cases constructed                                    | 0 of about 6 |
 
-The repository has enough **evidence of defects** to support corpus assembly, but the
-corpus itself is not assembled. The dominant missing work is extracting the pre-fix
-parent document and parent revision for the evidence-only plans in §2.3, then having a
-corpus owner freeze the determinability judgments. This report counts partially
-determinable candidates toward neither floor as the conservative reading. The
-assessment's wording ("plans with known defects" and "determinable known defects") does
-not settle which floor such a plan counts toward, so the freeze rule must decide it
-(§8, item 2).
+The manifest reclassifies three of the eight evidence-verified inventory candidates as
+excluded corpus inputs because they are self-referential or contain the answer. Nine
+pre-fix artifacts have been extracted from the twelve evidence-only remediation plans;
+three still lack a single pre-fix artifact. This report counts partially determinable
+candidates toward neither floor as the conservative reading. The assessment's wording
+("plans with known defects" and "determinable known defects") does not settle which floor
+such a plan counts toward. The proposed amendment would tighten the plan floor to plans
+with at least one determinable known defect; it is not applied and the operator must
+approve or reject it. See
+[PROPOSED-PROTOCOL-AMENDMENT.md](independent-design-review-corpus/PROPOSED-PROTOCOL-AMENDMENT.md).
 
 ## 3. Human adjudication feasibility
 
@@ -152,8 +194,9 @@ approving a plan does not make someone its author.
 - Every candidate document in §2.2 was last modified under the git identity Tom Tran.
   The protocol defines an author as a human who wrote or directly edited the plan text,
   and a git identity does not show that: commits made by an agent under the operator's
-  identity would be counted as the operator's under this proxy, and co-author trailers
-  were not examined. The report therefore takes the conservative reading, that the
+  identity would be counted as the operator's under this proxy. Co-author trailers were
+  examined: they name Tom Tran and several Claude identities, and no other human
+  co-author appears. The report therefore takes the conservative reading, that the
   operator cannot adjudicate the candidates. That reading is a proposal until the
   commits are checked or the corpus owner rules otherwise.
 - No approval record for the experiment exists. The primary checkout's
@@ -321,11 +364,11 @@ Arm D.
 
 ## 8. Required operator decisions
 
-1. **Corpus:** approve the target size, designate the corpus owner, and authorize
-   extraction of the pre-fix parent documents for the §2.3 evidence-only plans.
-2. **Determinability:** approve the freeze rule, including which floor a partially
-   determinable plan counts toward, and the proposed classifications; do not treat them
-   as verified until frozen.
+1. **Corpus:** approve the target size, designate the corpus owner, and confirm the nine
+   extracted pre-fix artifacts and revisions plus the three missing parents.
+2. **Determinability:** approve, reject, or revise the proposed classification amendment,
+   and authorize the corpus owner to freeze the eligible set. Do not treat the eleven
+   partial candidates as determinable until frozen.
 3. **Adjudication:** designate a seeder and two independent human adjudicators who did not
    author or directly edit the corpus plans. The operator may be corpus owner, seeder, or
    analyst, but not an adjudicator.
@@ -337,15 +380,19 @@ Arm D.
    protocol revision and invalidates the affected comparison.
 7. **Workstream B:** decide whether to wait for the Linux report or proceed with
    Workstream B explicitly pending.
+8. **Freeze:** authorize the corpus owner to record `FROZEN`, or keep the manifest
+   `NOT FROZEN`. The current manifest is not frozen.
 
 ## 9. Final feasibility verdict
 
 **NOT YET READY.**
 
-- **Not READY:** the historical corpus has 1 proposed determinable defect against a
-  floor of 15, and 8 evidence-verified candidate plans against a floor of 15; the seeded
-  and no-known-defect corpus is not constructed; no two independent human adjudicators
-  are identified; Workstream B is pending; and the four-call pilot is unauthorized.
+- **Not READY:** the manifest has 1 strict proposed determinable defect and 11 partial
+  candidates, for 12 proposed eligible plans. The strict shortfall is 14 plans and 14
+  determinable defects; if all 11 partial candidates are frozen determinable, the shortfall
+  is still 3 and 3. The seeded and no-known-defect corpus is not constructed; no two
+  independent human adjudicators are identified; Workstream B is pending; and the four-call
+  pilot is unauthorized.
 - **Not BLOCKED:** the missing work is actionable. The repository contains evidence
   pointers for corpus assembly, and the operator can designate adjudicators and authorize
   a pilot.
