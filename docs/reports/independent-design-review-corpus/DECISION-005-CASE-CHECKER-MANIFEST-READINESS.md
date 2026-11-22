@@ -6,6 +6,13 @@ key or secret, constructs no case, and authorizes nothing.
 **Baseline:** `origin/main` @ `868ef0b2a54ac7978706f8e94fba1b46d781c460`, 2026-11-21 (analysis
 prepared at `7f8cb062`; reconciled after Decision 7).
 **Decision-ready wording:** [DECISION-005-OPERATOR-APPROVAL-PROPOSAL.md](DECISION-005-OPERATOR-APPROVAL-PROPOSAL.md).
+**Authoritative current status:** [DECISION-005-FINAL-CLOSEOUT.md](DECISION-005-FINAL-CLOSEOUT.md).
+
+**Current status (added after PR #633; the findings below are kept as written).** G1–G7 are
+implemented and verified in `internal/egmmanifest`, and F1 (the sealer) is closed. The sealed
+manifest format is **JSON**, so the `.yaml` file naming in §4.3 is superseded. Nothing is
+approved: D5-A, D5-B1–B4, and D5-C remain pending, and `case_construction_authorized` is
+`false`.
 **Protocol:** [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](../EGM-GOLDFISH-REVIEW-ASSESSMENT.md)
 (SHA-256 `abba919e…2305c`, re-computed on this baseline and unchanged).
 **Records read:** [DECISION-RECORD-005-SEEDER.md](DECISION-RECORD-005-SEEDER.md),
