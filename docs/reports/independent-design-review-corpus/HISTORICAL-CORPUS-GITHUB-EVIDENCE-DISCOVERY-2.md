@@ -272,6 +272,12 @@ Reading the table:
 - Reaching 15/15 would also require the corpus owner to accept bot-surfaced, model-verified evidence as the discovery link for a majority of the corpus, which is a
   governance judgement this report does not make.
 
+**Count class (added after PRs #626 and #627).** Every row above is a **layer increment**, not
+a publishable total. The recorded baseline is **C0 = 3 / 4**; this pass contributes **+6 / +7**
+by artifact and **+4 / +7** by subject cluster. Stacked with #613 and #627, the conditional
+artifact-counted total (**C2**) is **13 / 15**; the conservative total (**C1**) is **4 / 5**.
+See [CORPUS-COUNT-CONVENTION.md](CORPUS-COUNT-CONVENTION.md).
+
 ## 10. Unresolved evidence gaps
 
 - No human review evidence exists anywhere in the repository history.
