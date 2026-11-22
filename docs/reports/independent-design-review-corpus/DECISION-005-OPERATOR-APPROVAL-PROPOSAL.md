@@ -207,11 +207,13 @@ Run at `868ef0b2` in an isolated worktree, synthetic fixtures only:
 **What exists:** `ScanRequest`, `ScanTree`, `CheckRefs` flag forbidden terms, unscanned files,
 oversized files, and symlinks; the preflight and render tests pass.
 
-**Gaps (unchanged; operator decision):** G1 no sealed-case schema validation; G2 no
-canonicalization rule; G3 no manifest integrity verifier; G4 the leakage scan echoes the answer
-term; G5 no access-separation check; G6 no missing/corrupt-manifest test; G7 export
-reproducibility not yet tested. No new production code was written; no approved plan authorizes
-it.
+**Follow-up (experiment-local tooling):** `internal/egmmanifest` and `cmd/egmmanifest` now
+implement the schema (G1), canonicalization (G2), integrity verifier (G3), a term-safe leakage
+interface (G4), Unix access checks (G5), corrupt-manifest handling (G6), and export/tree hashing
+(G7) against synthetic fixtures. See
+[DECISION-005-MANIFEST-TECHNICAL-VERIFICATION.md](DECISION-005-MANIFEST-TECHNICAL-VERIFICATION.md).
+The tooling is not wired into SOP and is **not operator-approved**; the canonicalization rule
+and the manifest location remain operator decisions.
 
 ## 6. Remaining operator choices
 
