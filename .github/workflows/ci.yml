@@ -13,6 +13,35 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Classifies the change. A pull request whose every file is a doc that no check reads
+  # (scripts/checks/docs-only.sh) skips the Go test, sandbox, acceptance, distribution
+  # and Windows jobs; GitHub counts a skipped required check as passed. The check job
+  # (formatting, doc links) and the security jobs (secret scanning) always run, and a
+  # push to main always runs everything. Any doubt, or an error, means code=true.
+  changes:
+    name: classify the change
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The pull_request checkout is the merge commit; its first parent is the base.
+          fetch-depth: 2
+      - name: docs-only self-check
+        run: bash scripts/checks/test-docs-only.sh
+      - id: classify
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          code=true
+          if [ "$EVENT" = pull_request ] &&
+             [ "$(git diff --no-renames --name-only HEAD^1 HEAD | bash scripts/checks/docs-only.sh)" = true ]; then
+            code=false
+          fi
+          echo "code=$code" | tee -a "$GITHUB_OUTPUT"
+
   # Formatting, static analysis, the build, and the documentation link check. The
   # full test suite runs once, under -race, in the race-shard jobs below; a second
   # plain run here repeated it. The job keeps its name because it is a required check.
@@ -88,6 +117,8 @@ jobs:
   sandbox-linux:
     name: sandbox-backed execution boundary (Linux)
     runs-on: ubuntu-22.04
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -107,7 +138,8 @@ jobs:
   stage2-gate-e2e:
     name: required-mode gate end to end (W8 Stage 2 readiness)
     runs-on: ubuntu-latest
-    needs: security-integration
+    needs: [security-integration, changes]
+    if: needs.changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -200,6 +232,8 @@ jobs:
   race-shard:
     name: race detector shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -224,15 +258,22 @@ jobs:
             ./scripts/checks/test-fast.sh -- -race
 
   # Keeps the required status check named "race detector" while the work runs in shards.
+  # It also guards the docs-only skip: it fails unless the classifier succeeded, so a
+  # broken classifier cannot pass CI by skipping every gated job, and it accepts skipped
+  # shards only when the classifier said the change is docs only.
   race:
     name: race detector
-    needs: race-shard
+    needs: [changes, race-shard]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - env:
+          CHANGES: ${{ needs.changes.result }}
+          CODE: ${{ needs.changes.outputs.code }}
           RESULT: ${{ needs.race-shard.result }}
-        run: test "$RESULT" = success
+        run: |
+          test "$CHANGES" = success
+          test "$RESULT" = success || { test "$CODE" = false && test "$RESULT" = skipped; }
 
   # The tagged JEV evidence acceptance checks. They are build-tagged out of the ordinary
   # suite (so `go test ./...` stays green before an evidence artifact exists); this job runs
@@ -241,6 +282,8 @@ jobs:
   acceptance-evidence:
     name: tagged JEV evidence acceptance checks
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -261,6 +304,8 @@ jobs:
   operator-acceptance:
     name: tagged operator acceptance checks
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -279,6 +324,8 @@ jobs:
   distribution:
     name: installer + plugin packaging
     runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -308,6 +355,8 @@ jobs:
   windows:
     name: windows (install.ps1)
     runs-on: windows-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
