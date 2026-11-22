@@ -6,6 +6,8 @@ manifest or key, constructs no case, and authorizes nothing.
 **Status:** **PROPOSED — PENDING OPERATOR APPROVAL.**
 **Baseline:** `origin/main` @ `868ef0b2` (merge of PR #619).
 **Analysis (not duplicated here):** [DECISION-005-CASE-CHECKER-MANIFEST-READINESS.md](DECISION-005-CASE-CHECKER-MANIFEST-READINESS.md).
+**Authoritative current status:** [DECISION-005-FINAL-CLOSEOUT.md](DECISION-005-FINAL-CLOSEOUT.md).
+**D5-B detail:** [DECISION-005-B-OPERATOR-APPROVAL-PACKAGE.md](DECISION-005-B-OPERATOR-APPROVAL-PACKAGE.md).
 **Decision 5 record:** [DECISION-RECORD-005-SEEDER.md](DECISION-RECORD-005-SEEDER.md).
 **Case construction:** [CASE-CONSTRUCTION-SPECIFICATION.md](CASE-CONSTRUCTION-SPECIFICATION.md).
 **Freeze procedure:** [FREEZE-PROCEDURE.md](FREEZE-PROCEDURE.md).
@@ -25,7 +27,7 @@ FROZEN** and the experiment is **NOT YET READY**.
 | D5-A Case checker | **PENDING** — this proposal | **Construction** |
 | D5-B Sealed-manifest location | **PENDING** — this proposal | **Construction** |
 | D5-C Construction authorization | **PENDING** — this proposal; stays `false` | **Construction** |
-| Canonicalization and integrity method | **PENDING** (G2/G3) | Before the first case is sealed |
+| Canonicalization and integrity method | **IMPLEMENTED** (G2/G3, PRs #623–#633); **approval PENDING** (D5-B1) | Before the first case is sealed |
 | Analyst | Not designated | Before the unblinding key exists (freeze/execution) |
 | Two adjudicators (Decision 6) | **PENDING** | **Freeze** |
 | Thresholds and call ceiling (Decision 7) | **APPROVED 2026-11-21** | — |
@@ -74,6 +76,9 @@ names the corpus owner, seeder, analyst, and adjudicators.
    counts.
 
 ### 2.4 Exact proposed operator wording
+
+The block below is a template for the operator to complete. The word "APPROVED" in it is the
+operator's to write; it is not a recorded approval.
 
 > Decision 5A — APPROVED: independent case checker
 >
@@ -124,10 +129,15 @@ Nothing in it is approved, and it selects no location.
   files, an append-only ledger, and encrypted copies for handoff and backup.
 - No new service or dependency is required; `shasum -a 256` / `sha256sum` / Go `crypto/sha256`
   cover integrity on macOS and Linux.
-- Gaps G1–G3 (schema validation, canonicalization, integrity verifier) remain; they must be
-  resolved before the first case is sealed.
+- Gaps G1–G3 (schema validation, canonicalization, integrity verifier) are **implemented** in
+  `internal/egmmanifest` and verified; what remains is the **approval** of the rule, which must
+  be recorded before the first case is sealed. See
+  [DECISION-005-FINAL-CLOSEOUT.md](DECISION-005-FINAL-CLOSEOUT.md) §2.
 
 ### 3.3 Exact proposed operator wording
+
+The block below is the same kind of template: unapproved until the operator records it, with
+the path, the vocabulary location, and the access list filled in.
 
 > Decision 5B — APPROVED: sealed-manifest storage
 >
@@ -154,9 +164,9 @@ Nothing in it is approved, and it selects no location.
 | Encrypted disk image | Strong at rest, platform-specific, mount-state risk |
 | Hosted secret manager | Real access control, but a new service, credential, and trust boundary — rejected |
 
-**Remaining operator choices:** the exact path, the canonicalization rule, the recovery-key
-holder, and whether to build a small offline verifier for G1–G3 or use a manual `shasum`
-checklist.
+**Remaining operator choices:** the exact path, the vocabulary location, the access list, the
+canonicalization rule, and the recovery-key holder. The offline verifier and sealer **now
+exist**; the remaining choice is whether to use them or a manual `shasum` checklist.
 
 ## 4. D5-C — Construction authorization
 

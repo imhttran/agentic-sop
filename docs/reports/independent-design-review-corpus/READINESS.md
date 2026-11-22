@@ -698,7 +698,14 @@ plans / 11 defects; no candidate is promoted and the adjudicated count is 0. The
 remains **NOT FROZEN**, the experiment **NOT YET READY**, and H1/H2 **NOT ESTABLISHED**.
 A decision-ready proposal for the checker, sealed manifest, and construction authorization is
 in [DECISION-005-OPERATOR-APPROVAL-PROPOSAL.md](DECISION-005-OPERATOR-APPROVAL-PROPOSAL.md); it is
-not approved. Decisions 6–9 remain open. Freeze preconditions 1–4 and 7 are met; precondition 5
+not approved.
+
+**Technical status (added after PR #633).** The sealed-manifest tooling is complete and
+verified: schema validation, canonicalization, integrity verification, a term-safe leakage
+interface, Unix access checks, corrupt-manifest handling, deterministic exports, and an offline
+sealer — see [DECISION-005-FINAL-CLOSEOUT.md](DECISION-005-FINAL-CLOSEOUT.md) §2. Technical
+completeness is **not** an approval: D5-A, D5-B1–B4, and D5-C remain pending, and
+`case_construction_authorized` is **false**. Decisions 6–9 remain open. Freeze preconditions 1–4 and 7 are met; precondition 5
 is partially met; precondition 6 remains open.
 
 ## 17. Decision 6 preparation (current)
