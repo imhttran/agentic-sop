@@ -25,7 +25,8 @@ while IFS= read -r path; do
   case "$path" in docs/*) ;; *) no "$path is outside docs/" ;; esac
   case "$path" in *.go|*/go.mod|*/go.sum) no "$path is Go source" ;; esac
   rc=0
-  hits="$(git grep -nF -- "${path##*/}" -- ':!docs/' ':!*.md')" || rc=$?
+  # The self-check names docs as test cases; it reads none of them.
+  hits="$(git grep -nF -- "${path##*/}" -- ':!docs/' ':!*.md' ':!scripts/checks/test-docs-only.sh')" || rc=$?
   [ "$rc" -le 1 ] || { echo "docs-only: git grep failed ($rc)" >&2; exit 2; }
   hit="$(printf '%s\n' "$hits" | awk -v p="$path" '
     $0 == "" { next }
