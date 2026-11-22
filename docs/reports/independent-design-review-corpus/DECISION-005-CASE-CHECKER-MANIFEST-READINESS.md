@@ -210,6 +210,12 @@ report does not write it.** No approved plan authorizes production code for this
 5 authorizes governance documentation only. Whether to build it, or to do these checks by hand
 with `shasum` and a checklist, is an operator decision (§9).
 
+**Follow-up (later):** the experiment-local verifier is now implemented in
+`internal/egmmanifest` and `cmd/egmmanifest`, with synthetic tests; see
+[DECISION-005-MANIFEST-TECHNICAL-VERIFICATION.md](DECISION-005-MANIFEST-TECHNICAL-VERIFICATION.md).
+It is not wired into SOP and is not operator-approved. G5 (access separation) remains partial
+on a single OS account, and the canonicalization rule is still an operator decision.
+
 ## 7. Readiness and authorization checklist
 
 ### 7.1 Already approved
