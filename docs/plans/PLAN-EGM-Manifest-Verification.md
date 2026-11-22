@@ -1,8 +1,10 @@
 # PLAN — EGM Sealed-Manifest Verification Tooling
 
-**Status:** DRAFT — implementation plan for experiment-local tooling. No production
-wiring, no governance decision, no experiment activity.
-**Baseline:** `origin/main` @ `965ddc29`.
+**Status:** **COMPLETE (technical) — governance pending.** MP-1–MP-10 are implemented and
+verified. No production wiring, no governance decision, and no experiment activity. See
+§Closure.
+**Baseline:** `origin/main` @ `965ddc29`; tasks completed through `f21cc0fc`.
+**Authoritative Decision 5 status:** [DECISION-005-FINAL-CLOSEOUT.md](../reports/independent-design-review-corpus/DECISION-005-FINAL-CLOSEOUT.md).
 **Protocol:** [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](../reports/EGM-GOLDFISH-REVIEW-ASSESSMENT.md).
 **Decision 5 package:** [DECISION-005-OPERATOR-APPROVAL-PROPOSAL.md](../reports/independent-design-review-corpus/DECISION-005-OPERATOR-APPROVAL-PROPOSAL.md).
 **Readiness assessment:** [DECISION-005-CASE-CHECKER-MANIFEST-READINESS.md](../reports/independent-design-review-corpus/DECISION-005-CASE-CHECKER-MANIFEST-READINESS.md).
@@ -115,6 +117,28 @@ results, and residual risks.
 - No real manifest, answer key, or case exists.
 - No governance decision is recorded.
 - The tooling is importable but not imported by SOP.
+
+## Closure
+
+Closed at `f21cc0fc` on 2026-11-22. Every acceptance criterion was checked against the
+repository, not against a prior report:
+
+| Criterion | Evidence |
+| --- | --- |
+| `go test ./internal/egmmanifest` covers positive, negative, corruption, determinism, leakage, export, and **sealer** cases | **PASS** — 54 test functions / 85 cases; `go test ./cmd/egmmanifest` 6 tests |
+| `go vet` and `go build ./...` clean | **clean** |
+| No real manifest, answer key, or case exists | Confirmed; every fixture is synthetic |
+| No governance decision is recorded | Confirmed; D5-A, D5-B1–B4, and D5-C remain pending |
+| The tooling is importable but not imported by SOP | Confirmed — only `cmd/egmmanifest` and the package's own tests import `internal/egmmanifest` |
+
+**Lifecycle note.** This plan was never imported into SOP's plan store, so no
+`planflow.Complete` step exists to run and none was fabricated. Per
+[README.md](README.md), a completed plan whose path is still referenced stays in `docs/plans/`
+with its status declared here: the technical verification report and the Decision 5 closeout
+reference this path, so it is **not** moved to `docs/history/plans/`.
+
+**Governance is outside this plan.** The tooling made sealing *possible*; case construction,
+storage selection, checker designation, and residual-risk acceptance remain operator decisions.
 
 ## Dependencies and status
 
