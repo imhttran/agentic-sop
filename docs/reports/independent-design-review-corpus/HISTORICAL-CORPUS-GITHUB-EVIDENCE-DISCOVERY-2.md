@@ -250,10 +250,10 @@ independently" (+2 / +3), without the partial D3. "#613 layer" is `GH-001`–`GH
 | --- | --- | --- | --- | --- |
 | A — baseline | 3 / 4 | 12 / 11 | 3 / 4 | 12 / 11 |
 | B — A + this pass (all six) | 9 / 11 | 6 / 4 | 7 / 11 | 8 / 4 |
-| C — B + #618 S3 | 11 / 14 | 4 / 1 | 9 / 14 | 6 / 1 |
-| D — C + #613 layer | 14 / 17 | 1 / 0 | 12 / 17 | 3 / 0 |
-| E — D + `GH-004` (2 verified defects) | 15 / 19 | 0 / 0 | 13 / 19 | 2 / 0 |
-| F — packets excluded (R-C-packet "no"): A + `GH-001`, `GH-002` + #618 S3 | 7 / 9 | 8 / 6 | 7 / 9 | 8 / 6 |
+| C — B + #618 (S3 by artifact; S4, +1 / +2, by cluster) | 11 / 14 | 4 / 1 | 8 / 13 | 7 / 2 |
+| D — C + #613 layer | 14 / 17 | 1 / 0 | 11 / 16 | 4 / 0 |
+| E — D + `GH-004` (2 verified defects; by cluster it shares `DISC-001`'s subject, so +0 plans / +2 defects) | 15 / 19 | 0 / 0 | 11 / 18 | 4 / 0 |
+| F — packets excluded (R-C-packet "no"): A + `GH-001`, `GH-002` + #618 (S3 / S4) | 7 / 9 | 8 / 6 | 6 / 8 | 9 / 7 |
 | G — only the strongest new lead (`GH-013`) added to A | 4 / 5 | 11 / 10 | 4 / 5 | 11 / 10 |
 
 Reading the table:
@@ -262,7 +262,7 @@ Reading the table:
   **only at E by artifact**, where every conditional ruling goes the favorable way (R-B yes, packets admitted, artifact counting, `DISC-001`/`H-001`
   admitted, `GH-004` admitted, and every proposed item surviving independent adjudication). One failed adjudication or one unfavorable ruling leaves it short.
 - The defect floor is closer than the plan floor in every row; **plans are the binding constraint** because most leads are one-defect plans.
-- Scenarios F and G are the conservative bounds: 8 / 6 and 11 / 10 short. These are the ones to plan on until rulings arrive.
+- Under subject-cluster counting `IDR-H-001` and `DISC-001` are one cluster, so #618's S4 (+1 / +2) replaces S3 in the cluster columns. Scenarios F and G are the conservative bounds: 8 / 6 and 11 / 10 short by artifact (9 / 7 for F by cluster). These are the ones to plan on until rulings arrive.
 - Reaching 15/15 would also require the corpus owner to accept bot-surfaced, model-verified evidence as the discovery link for a majority of the corpus, which is a
   governance judgement this report does not make.
 
