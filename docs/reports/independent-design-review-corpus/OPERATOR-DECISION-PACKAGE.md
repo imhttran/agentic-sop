@@ -271,7 +271,8 @@ check, the second-adjudication sampling rule, and the conflict-of-interest recor
 ## 7. Thresholds and cost limits
 
 **Current status.** Open. The thresholds are pre-registered by the assessment but not
-approved; no hard cost ceiling is approved.
+approved; no hard cost ceiling is approved. A readiness assessment is in
+[DECISION-007-THRESHOLD-COST-READINESS.md](DECISION-007-THRESHOLD-COST-READINESS.md).
 
 **Verified evidence.** The assessment owns the thresholds and the call budget. The current
 planning range is 319–700 calls without Arm D and 499–1,309 with Arm D across the 15–29 plan

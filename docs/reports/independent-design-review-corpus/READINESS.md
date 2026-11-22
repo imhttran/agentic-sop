@@ -711,3 +711,16 @@ operator-assisted plan are recorded in
 no verified candidate is identified from this environment, and no name is invented. The package cannot be mistaken for authorization: the corpus remains
 **NOT FROZEN**, the experiment **NOT YET READY**, and H1/H2 **NOT ESTABLISHED**. Decision 6
 stays open, and Decisions 7–9 remain open.
+
+## 18. Decision 7 readiness (current)
+
+**Decision 7 remains PENDING.** Threshold and cost readiness is assessed in
+[DECISION-007-THRESHOLD-COST-READINESS.md](DECISION-007-THRESHOLD-COST-READINESS.md). The
+registered thresholds, the 319–700 (no Arm D) and 499–1,309 (with Arm D) call ranges, the
+arm/repetition model, and the implementation gaps are recorded there.
+
+The cost-accounting and ceiling primitives pass their offline tests. The EGM
+threshold/stopping-rule, kappa, cluster-bootstrap, reproducibility, and run-manifest
+evaluators are **not implemented**; the analysis is manual and must be pre-registered. No
+threshold or ceiling is approved, no run is authorized, and the corpus remains **NOT FROZEN**,
+the experiment **NOT YET READY**, and H1/H2 **NOT ESTABLISHED**. Decisions 8–9 remain open.
