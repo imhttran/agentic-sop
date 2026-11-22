@@ -51,10 +51,12 @@ func SealBytes(data []byte) (*Manifest, []byte, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("egmmanifest: canonicalize sealed manifest: %w", err)
 	}
-	out := make([]byte, 0, len(canonical)+1)
-	out = append(out, canonical...)
-	out = append(out, '\n')
-	return m, out, nil
+	// One trailing newline, appended without sizing arithmetic: CodeQL flags
+	// len(x)+n as a potential allocation-size overflow (go/allocation-size-overflow).
+	var out bytes.Buffer
+	out.Write(canonical)
+	out.WriteByte('\n')
+	return m, out.Bytes(), nil
 }
 
 var errSealedMismatch = errors.New("sealed_sha256 does not match the record; refusing to reseal a modified record")
