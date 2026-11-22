@@ -753,13 +753,13 @@ the experiment **NOT YET READY**, and H1/H2 **NOT ESTABLISHED**. Decisions 8–9
 **Eligibility rulings — APPROVED 2026-11-21.** The operator approved the five conservative
 rulings — R-B Option A, R-C-packet Option A, R-C Option A, counting unit Option A, and R-D
 (rejecting self-recorded, still-open limitations). They are operative in
-[DECISION-003-ELIGIBILITY-RULINGS-APPROVAL.md](DECISION-003-ELIGIBILITY-RULINGS-APPROVAL.md)
+[DECISION-RECORD-008-HISTORICAL-ELIGIBILITY-AND-DEFERRAL.md](DECISION-RECORD-008-HISTORICAL-ELIGIBILITY-AND-DEFERRAL.md)
 and decide which *kinds* of evidence count; they do not determine candidate-level eligibility.
 
 **Experiment — DEFERRED 2026-11-21.** The historical set does not reach 15 plans / 15
 determinable defects under those rulings, so the run is deferred under protocol §5.3 and any
-historical recall comparison is INCONCLUSIVE; the record is
-[EXPERIMENT-DEFERRAL-APPROVAL.md](EXPERIMENT-DEFERRAL-APPROVAL.md).
+historical recall comparison is INCONCLUSIVE. The rulings and the deferral are recorded in the
+same authoritative record (§1 and §4).
 
 Counts are unchanged and nothing is promoted: approved **0 / 0**; proposed under the rulings
 **5 plans / 6 defects** (shortfall **10 / 9**); C0 3 / 4; C1 4 / 5; C3 11 / 15; C2 13 / 15
