@@ -13,7 +13,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Formatting, static analysis, the full test suite, and the documentation link check.
+  # Formatting, static analysis, the build, and the documentation link check. The
+  # full test suite runs once, under -race, in the race-shard jobs below; a second
+  # plain run here repeated it. The job keeps its name because it is a required check.
   check:
     name: fmt, vet, build, test
     runs-on: ubuntu-latest
@@ -33,17 +35,6 @@ jobs:
         run: go vet ./...
       - name: build
         run: go build ./...
-      # The full ordinary suite, through the fast runner. On Linux the runner keeps
-      # each test's temporary SQLite database on RAM-backed /dev/shm when it fits;
-      # the wrapper falls back to the system temp directory (and says why) when it
-      # does not. Parallelism matches the four-core runner and the timeout matches
-      # go test's default, so this is the same suite under the same limits. The
-      # race-detector shards below run the same suite under -race.
-      - name: test (RAM-backed TMPDIR)
-        env:
-          SOP_TEST_PARALLEL: "4"
-          SOP_TEST_TIMEOUT: "10m"
-        run: ./scripts/checks/test-fast.sh
       # End-to-end ACP stdio smoke: builds the binary and drives initialize,
       # session/new, session/prompt, and session/cancel the way an ACP client does.
       # A blocking command harness keeps the governed child alive, so the job needs
@@ -203,15 +194,16 @@ jobs:
           bash scripts/checks/repo-security-gate.sh
 
   # The suite under the race detector, which the lifecycle and scheduler tests rely on,
-  # split across two runners (scripts/checks/race-shard.sh). Same RAM-backed TMPDIR
-  # runner as the ordinary suite: SQLite I/O under -race is the slow part.
+  # split across three runners (scripts/checks/race-shard.sh). This is the only CI run
+  # of the full suite. The fast runner keeps each test's temporary SQLite database on
+  # RAM-backed /dev/shm when it fits: SQLite I/O under -race is the slow part.
   race-shard:
     name: race detector shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
