@@ -717,7 +717,10 @@ stays open, and Decisions 7–9 remain open.
 **Decision 7 remains PENDING.** Threshold and cost readiness is assessed in
 [DECISION-007-THRESHOLD-COST-READINESS.md](DECISION-007-THRESHOLD-COST-READINESS.md). The
 registered thresholds, the 319–700 (no Arm D) and 499–1,309 (with Arm D) call ranges, the
-arm/repetition model, and the implementation gaps are recorded there.
+arm/repetition model, and the implementation gaps are recorded there. A decision-ready
+proposal (default 7-call, 613-call ceiling, EP-15 UNVERIFIED) is in
+[DECISION-007-OPERATOR-APPROVAL-PROPOSAL.md](DECISION-007-OPERATOR-APPROVAL-PROPOSAL.md); it is
+not approved.
 
 The cost-accounting and ceiling primitives pass their offline tests. The EGM
 threshold/stopping-rule, kappa, cluster-bootstrap, reproducibility, and run-manifest
