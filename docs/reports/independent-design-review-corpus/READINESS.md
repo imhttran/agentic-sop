@@ -705,6 +705,9 @@ human is identified. The three procedural ambiguities are **APPROVED as clarific
 [DECISION-006-PROCEDURAL-CLARIFICATIONS-APPROVAL.md](DECISION-006-PROCEDURAL-CLARIFICATIONS-APPROVAL.md);
 the analysis is in
 [DECISION-006-ADJUDICATION-PROCEDURE-CLARIFICATION.md](DECISION-006-ADJUDICATION-PROCEDURE-CLARIFICATION.md).
-Decision 6 adjudicator designation remains PENDING. The package cannot be mistaken for authorization: the corpus remains
+Decision 6 adjudicator designation remains PENDING. Candidate discovery and the
+operator-assisted plan are recorded in
+[DECISION-006-ADJUDICATOR-RECRUITMENT-SHORTLIST.md](DECISION-006-ADJUDICATOR-RECRUITMENT-SHORTLIST.md):
+no verified candidate is identified from this environment, and no name is invented. The package cannot be mistaken for authorization: the corpus remains
 **NOT FROZEN**, the experiment **NOT YET READY**, and H1/H2 **NOT ESTABLISHED**. Decision 6
 stays open, and Decisions 7–9 remain open.
