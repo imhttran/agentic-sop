@@ -1,9 +1,9 @@
 # Decision Record 008 — Historical Eligibility Rulings and Corpus Deferral (Independent Design Review / EGM)
 
-**Status: APPROVED 2026-11-22.** The operator approved the five conservative eligibility
+**Status: APPROVED 2026-11-21.** The operator approved the five conservative eligibility
 rulings (R-B, R-C-packet, R-C, counting unit, R-D — each Option A) and **Option B — Defer** for
 the historical corpus. The decision is recorded here from the operator's explicit instruction in
-the session of 2026-11-22, in the repository's written decision-record form established by
+the session of 2026-11-21, in the repository's written decision-record form established by
 Decisions 1–7. The proposal text in
 [HISTORICAL-CORPUS-OPERATOR-HANDOFF.md](HISTORICAL-CORPUS-OPERATOR-HANDOFF.md) and the
 [eligibility decision package](HISTORICAL-CORPUS-ELIGIBILITY-DECISION-PACKAGE.md) is preserved
@@ -11,7 +11,7 @@ as written and is not rewritten; this record is the decision.
 
 | Layer | State |
 | --- | --- |
-| Operator approval | **APPROVED 2026-11-22** — five eligibility rulings and deferral |
+| Operator approval | **APPROVED 2026-11-21** — five eligibility rulings and deferral |
 | Approver | **Tom Tran** |
 | Corpus owner | **Tom Tran** |
 | R-B (bot-surfaced evidence) | **Option A APPROVED** — independent historical evidence required |
@@ -31,10 +31,10 @@ as written and is not rewritten; this record is the decision.
 | Experiment status | **NOT YET READY** — deferred, not authorized |
 | H1 / H2 | **NOT ESTABLISHED** |
 
-**Verified at:** `origin/main` `bdd067ee800cd2085cc07fd5eb45fdd2fa0abe58` (2026-11-22), the
+**Verified at:** `origin/main` `bdd067ee800cd2085cc07fd5eb45fdd2fa0abe58` (2026-11-21), the
 merge of PR #641, which was the baseline against which this record was prepared.
 
-**Source of the decision:** the operator's explicit instruction in the session of 2026-11-22,
+**Source of the decision:** the operator's explicit instruction in the session of 2026-11-21,
 prepared from [HISTORICAL-CORPUS-OPERATOR-HANDOFF.md](HISTORICAL-CORPUS-OPERATOR-HANDOFF.md) §3
 and §4, the [eligibility decision package](HISTORICAL-CORPUS-ELIGIBILITY-DECISION-PACKAGE.md)
 §3–§6, and [HISTORICAL-CORPUS-FINAL-RECONCILIATION.md](HISTORICAL-CORPUS-FINAL-RECONCILIATION.md)
@@ -80,10 +80,34 @@ and §4, the [eligibility decision package](HISTORICAL-CORPUS-ELIGIBILITY-DECISI
 > candidate, establish determinability, adjudicate, construct a case, freeze the corpus, or
 > authorize execution.
 
-Recorded from the operator's explicit instruction on 2026-11-22. The approver is Tom Tran. No
-signature, time of day, or additional authorization is recorded; none was given.
+Recorded from the operator's explicit instruction on 2026-11-21. The approver is Tom Tran. No
+signature, time of day, or additional authorization is recorded; none was given. **Date basis:**
+the repository's own timestamps are 2026-11-21 (`-0600`) for every decision commit, including this
+record's, and Decisions 1–7 use 2026-11-21; an earlier draft of this record read 2026-11-22 from a
+UTC/local mix-up and was corrected against that evidence.
 
-## 2. Effect on the reconciled counts
+## 2. Protocol basis
+
+Each ruling applies §5.3 and Decision 3; none amends either. The mapping was verified against the
+registered text, which admits exactly four evidence forms — "merged fixes, erratum, reverted change
+or recorded gap" — and requires the owner to record determinability "from the document and its
+parent revision, with a one-line basis".
+
+| Ruling | §5.3 basis | Effect |
+| --- | --- | --- |
+| R-B | A review thread is none of the four admitted evidence forms | **Stricter** — excludes bot-only leads |
+| R-C-packet | "plans, specs or requirements" must state something an implementer would follow | **Stricter** — packet-level test |
+| R-C | Procedures are not plans, specs or requirements unless they state implementable requirements | **Stricter** |
+| Counting unit | §5.3 counts "plans" and records per-plan defects; a revision is not a new plan | **Stricter** — prevents revision inflation |
+| R-D | A still-open self-report is not one of the four admitted forms | **Stricter** |
+
+The deferral rests on the same section verbatim: *"If replacements cannot reach the
+15-determinable-defect floor, the run is deferred; the floor is not lowered"* and *"Below the
+floor, every recall comparison is INCONCLUSIVE."* **Conflict check:** no conflict with an explicit
+registered requirement; every ruling narrows eligibility, and the numeric minimums, arms,
+thresholds, the 613-call ceiling, and the stopping rules are untouched.
+
+## 3. Effect on the reconciled counts
 
 The rulings define the counting rule; they do not promote any candidate. "Proposed" means the
 conservative classification under the approved rules; "approved eligible" stays 0 until the
@@ -105,7 +129,7 @@ the counting unit fixes 13 distinct artifact paths at C2.
 **S6 (17 / 20) and S7 (15 / 20) are not adopted.** Both require permissive rulings the decision
 package recommends against, and S7 has no plan slack. The registered minimum is not lowered.
 
-## 3. S2 candidates and evidence pointers (verified, not promoted)
+## 4. S2 candidates and evidence pointers (verified, not promoted)
 
 Each pin was re-verified against `origin/main`: the commit exists, is an ancestor of `main`, the
 artifact is present at the pin, and the blob SHA-256 prefix matches the
@@ -125,7 +149,7 @@ freeze, and the experiment is now deferred. `GH-010` remains outside S2 (its rec
 confirmatory and its packet is an assessment); admitting it would make S2 6 / 7 and is not
 authorized by this record.
 
-## 4. Evidence source — Option B (defer)
+## 5. Evidence source — Option B (defer)
 
 No bounded search of an additional historical evidence source is authorized. The sibling
 repositories (`inventory`, `medical-billing`, `portfolios`, `scheduling`) are **not** opened: no
@@ -141,7 +165,7 @@ Consequences recorded:
    (b) a new independent human review record, or (c) an operator ruling that makes an already
    listed lead count and needs its line-level human verification.
 
-## 5. What this decision does and does not do
+## 6. What this decision does and does not do
 
 Established:
 
@@ -163,15 +187,15 @@ Not established or authorized:
 - No threshold, arm, cost ceiling (including 613 calls), or protocol text changes.
 - No model inference or experiment execution occurs; H1/H2 remain `NOT ESTABLISHED`.
 
-## 6. Decision state
+## 7. Decision state
 
 | # | Decision | State |
 | --- | --- | --- |
 | 1 | Corpus owner | **APPROVED 2026-11-21** — Tom Tran |
 | 2 | Historical inclusion and exclusion | **APPROVED 2026-11-21** — DECISION-RECORD-002 |
 | 3 | Strict versus partial eligibility | **APPROVED 2026-11-21** — conservative; DECISION-RECORD-003 |
-| 3a | R-B, R-C-packet, R-C, counting unit, R-D | **APPROVED 2026-11-22** — this record |
-| 3b | Historical corpus disposition | **RECORDED 2026-11-22 — below the floor; DEFERRED** — this record |
+| 3a | R-B, R-C-packet, R-C, counting unit, R-D | **APPROVED 2026-11-21** — this record |
+| 3b | Historical corpus disposition | **RECORDED 2026-11-21 — below the floor; DEFERRED** — this record |
 | 4 | Proposed protocol amendment | **REJECTED (unnecessary) 2026-11-21** — DECISION-RECORD-004 |
 | 5 | Independent seeder | **APPROVED 2026-11-21** — Tom Tran; DECISION-RECORD-005 |
 | 5 | Case checker, canonicalization/storage/recovery/residual risks, construction (D5-A, B1–B4, C) | **PENDING / UNAUTHORIZED** — `case_construction_authorized: false` |
@@ -180,7 +204,7 @@ Not established or authorized:
 | 8 | Corpus and instruction freeze | **PENDING** — corpus `NOT FROZEN` |
 | 9 | Full experiment execution | **PENDING / DEFERRED** — not authorized |
 
-## 7. Consistency
+## 8. Consistency
 
 - The registered protocol is byte-identical; its SHA-256 is unchanged.
 - `candidates.json` is unchanged: 23 entries; `include-with-review` 10, `hold` 5, `exclude` 8;
@@ -195,7 +219,7 @@ Not established or authorized:
   [reconciliation](HISTORICAL-CORPUS-FINAL-RECONCILIATION.md)) are preserved and not rewritten;
   this record is the operative decision.
 
-## 8. Mechanism
+## 9. Mechanism
 
 The decision is recorded as a written operator decision in this file, the form the decision
 package asks for ("record, in writing"). It creates no SOP task approval and no lifecycle

@@ -1,7 +1,7 @@
 # Historical Corpus — Operator Handoff
 
 **Type:** Concise operator handoff (non-normative). It states where the historical-corpus workstream stands, which decisions are yours, and what each one does to the count.
-It records no decision itself and promotes nothing. **Everything marked "recommended" was PROPOSED at the time of writing; the operator's five rulings and the Option B deferral were approved on 2026-11-21 and are recorded in [DECISION-003-ELIGIBILITY-RULINGS-APPROVAL.md](DECISION-003-ELIGIBILITY-RULINGS-APPROVAL.md) and [EXPERIMENT-DEFERRAL-APPROVAL.md](EXPERIMENT-DEFERRAL-APPROVAL.md).**
+It records no decision itself and promotes nothing. **Everything marked "recommended" was PROPOSED at the time of writing; the operator's five rulings and the Option B deferral were approved on 2026-11-21 and are recorded in [DECISION-RECORD-008-HISTORICAL-ELIGIBILITY-AND-DEFERRAL.md](DECISION-RECORD-008-HISTORICAL-ELIGIBILITY-AND-DEFERRAL.md).**
 **Evidence record (authoritative, not duplicated here):** [HISTORICAL-CORPUS-FINAL-RECONCILIATION.md](HISTORICAL-CORPUS-FINAL-RECONCILIATION.md) (candidate matrix, revision register, scenarios).
 **Also:** [eligibility decision package](HISTORICAL-CORPUS-ELIGIBILITY-DECISION-PACKAGE.md) (evidence for each option), [CORPUS-COUNT-CONVENTION.md](CORPUS-COUNT-CONVENTION.md), [gap closure](HISTORICAL-CORPUS-EVIDENCE-GAP-CLOSURE.md).
 **Baseline:** `origin/main` @ `64248ffb8628ec4611fa12a7b36cb51c80cb0aeb`, 2026-11-22. **Protocol:** [§5.3–5.4](../EGM-GOLDFISH-REVIEW-ASSESSMENT.md), SHA-256 `abba919e…` (unchanged).
@@ -40,7 +40,7 @@ If `GH-010` is admitted (owner accepts its recorded gap and the packet) S2 becom
 ## 3. Decisions that need you
 
 **Recorded 2026-11-21:** all five rulings below were approved as recommended (Option A each) and
-are operative in [DECISION-003-ELIGIBILITY-RULINGS-APPROVAL.md](DECISION-003-ELIGIBILITY-RULINGS-APPROVAL.md).
+are operative in [DECISION-RECORD-008-HISTORICAL-ELIGIBILITY-AND-DEFERRAL.md](DECISION-RECORD-008-HISTORICAL-ELIGIBILITY-AND-DEFERRAL.md).
 The table is kept as the evidence and count impact behind them. Candidate-level eligibility is
 still **not determined**.
 
@@ -83,8 +83,8 @@ The individual determinability decisions needed under S2 are five: `IDR-L-003`, 
 
 ### INCONCLUSIVE disposition (copy-ready, if you choose it)
 
-**Recorded 2026-11-21:** this disposition was approved and is operative in
-[EXPERIMENT-DEFERRAL-APPROVAL.md](EXPERIMENT-DEFERRAL-APPROVAL.md).
+**Recorded 2026-11-21:** this disposition was approved and is operative in the same record
+(Decision Record 008, §1 and §4).
 
 The protocol already says what follows a missed floor (§5.3): "If replacements cannot reach the 15-determinable-defect floor, the run is deferred; the floor is not lowered", and "Below the floor, every recall comparison is INCONCLUSIVE."
 

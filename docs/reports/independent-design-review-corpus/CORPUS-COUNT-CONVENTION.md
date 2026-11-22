@@ -68,8 +68,8 @@ merged requirement change (`aa53c882`) and a recorded gap (`RESOLVED-BACKLOG.md`
 C0 plus **every** proposed increment, each labelled with the decisions it is waiting on.
 This is the maximum provisional total, not a reached total. *The gating rulings (R-B,
 R-C-packet, R-C, counting unit, R-D) were recorded conservatively on 2026-11-21 in
-[DECISION-003-ELIGIBILITY-RULINGS-APPROVAL.md](DECISION-003-ELIGIBILITY-RULINGS-APPROVAL.md);
-no C0–C3 count changes, and C2 is no longer available under those rulings.*
+[DECISION-RECORD-008-HISTORICAL-ELIGIBILITY-AND-DEFERRAL.md](DECISION-RECORD-008-HISTORICAL-ELIGIBILITY-AND-DEFERRAL.md); no C0–C3 count changes, and C2
+is no longer available under those rulings.*
 
 | Layer | Source | Plans | Defects | Cumulative | Gating decisions |
 | --- | --- | --- | --- | --- | --- |
