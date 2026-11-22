@@ -200,7 +200,9 @@ applied.
 
 **Current status.** **RECORDED 2026-11-21.** Tom Tran is designated as seeder (also corpus
 owner); the case checker, sealed-manifest location, and construction authorization remain
-open. See [DECISION-RECORD-005](DECISION-RECORD-005-SEEDER.md).
+open. See [DECISION-RECORD-005](DECISION-RECORD-005-SEEDER.md). A decision-ready proposal for the
+open controls is in
+[DECISION-005-OPERATOR-APPROVAL-PROPOSAL.md](DECISION-005-OPERATOR-APPROVAL-PROPOSAL.md).
 
 **Verified evidence.** One seeder is designated (Tom Tran, 2026-11-21), who is also the corpus
 owner. No independent case checker is designated and no sealed-manifest location is selected.

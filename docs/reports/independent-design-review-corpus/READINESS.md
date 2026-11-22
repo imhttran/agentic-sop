@@ -687,8 +687,10 @@ designated, no sealed-manifest location is selected, no answer key exists, and
 The proposed strict corpus remains 3 plans / 4 defects and the proposed partial corpus 11
 plans / 11 defects; no candidate is promoted and the adjudicated count is 0. The corpus
 remains **NOT FROZEN**, the experiment **NOT YET READY**, and H1/H2 **NOT ESTABLISHED**.
-Decisions 6–9 remain open. Freeze preconditions 1–4 are met; precondition 5 is partially met;
-preconditions 6–7 remain open.
+A decision-ready proposal for the checker, sealed manifest, and construction authorization is
+in [DECISION-005-OPERATOR-APPROVAL-PROPOSAL.md](DECISION-005-OPERATOR-APPROVAL-PROPOSAL.md); it is
+not approved. Decisions 6–9 remain open. Freeze preconditions 1–4 and 7 are met; precondition 5
+is partially met; precondition 6 remains open.
 
 ## 17. Decision 6 preparation (current)
 
