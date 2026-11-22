@@ -11,7 +11,7 @@
 
 - **`GH-004` defect (d) is now verified**, so `GH-004` has **4 verified defects** (a, b, c, d) rather than 3 + 1 partial.
 - **`GH-010`, `GH-011`, `GH-012`, `GH-014` are verified at the line level** with exact lines, timing, and checks that the reviewed revision is the merged one. All four hold. `GH-010`'s Linux claim rests on the author's own source comment and is **not reproduced** (no Linux host here).
-- **C0–C3 do not change** (3 / 4, 4 / 5, 13 / 15, 11 / 15): these leads were already in C2 (`GH-010`–`GH-014`) or held (`GH-004`). The conditional scenarios in the previous report move by one defect: S7 (`GH-004` included) becomes **15 plans / 20 defects**. No plan is added.
+- **C0–C3 do not change** (3 / 4, 4 / 5, 13 / 15, 11 / 15): these leads were already in C2 (`GH-010`–`GH-014`) or held (`GH-004`). The conditional scenario S7, defined in the gap-closure report §8 (PR #634 with its fix #635), is **C2 13 / 15 + `IDR-L-001` (+1 plan / +1 defect, needs R-D) + `GH-004` (+1 plan / +4 defects) = 15 plans / 20 defects** (it was 19 with three verified defects for `GH-004`). It is a conditional route, not a total: it needs R-D yes, approval packets admitted, R-B Option B, R-A for `GH-004`'s PR-head pins, artifact counting and every adjudication to succeed. No plan is added.
 - **Not done:** the third follow-up, a different evidence source (the sibling repositories). It needs the operator's authorization and a scoping decision, and nothing was opened there.
 
 ## 2. `GH-004` (d) — resolved
@@ -79,7 +79,7 @@ Common checks (all four): the pin equals the merged blob (#620 §5.1); the revie
 | GH-010 | STRICT_CANDIDATE with a confirmatory recorded-gap pointer; Linux claim not reproduced | R-C-packet (an assessment; recommended: likely reject); owner ruling on the gap | C2 |
 | GH-011, GH-012, GH-014 | STRICT_CANDIDATE | R-B, R-C-packet | C2 |
 
-No class changes. C0 3 / 4; C1 4 / 5; C2 13 / 15 (2 short); C3 11 / 15 (4 short). Conditional scenarios from the earlier reports, with `GH-004` now carrying 4 verified defects: S7 15 plans / 20 defects; S6 is unaffected by `GH-004` (17 / 20). Nothing is added to C2; **new strict candidates: 0; new determinable defects: 0** (one more defect on a held lead only).
+No class changes. C0 3 / 4; C1 4 / 5; C2 13 / 15 (2 short); C3 11 / 15 (4 short). Conditional scenarios: S7 = C2 13 / 15 + `IDR-L-001` (+1 / +1) + `GH-004` (+1 / +4) = **15 / 20** (composition and gates in the first section above and in the gap-closure report §8); S6 (skills and guides) is unaffected by `GH-004` (17 / 20). Nothing is added to C2; **new strict candidates: 0; new determinable defects: 0** (one more defect on a held lead only).
 
 ## 5. Outstanding decisions and gaps
 
