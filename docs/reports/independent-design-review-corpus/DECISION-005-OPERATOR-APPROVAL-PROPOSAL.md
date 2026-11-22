@@ -111,6 +111,12 @@ or only the [RECORDED] ones.
 | SHA-256 integrity, immutable identity, versioning, backup/recovery, macOS/Linux | [RECORDED] case spec §6.1; Decision 005 §4 |
 | Encrypted copies for handoff/backup; append-only ledger; recovery-key holder | [PROPOSED] |
 
+**Detailed D5-B package (added after PR #628).** The canonicalization rule, the
+location-selection policy, the seven-step recovery procedure, the residual-risk matrix, and
+the exact D5-B1–B4 wording are in
+[DECISION-005-B-OPERATOR-APPROVAL-PACKAGE.md](DECISION-005-B-OPERATOR-APPROVAL-PACKAGE.md).
+Nothing in it is approved, and it selects no location.
+
 ### 3.2 Verified repository support
 
 - The readiness report compares five storage options and recommends **Option A + B**: an

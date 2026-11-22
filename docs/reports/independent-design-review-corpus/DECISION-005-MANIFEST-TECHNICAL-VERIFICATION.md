@@ -7,6 +7,7 @@ closes the justified G1–G7 gaps. It records no governance decision and authori
 **Plan:** [PLAN-EGM-Manifest-Verification.md](../../plans/PLAN-EGM-Manifest-Verification.md).
 **Readiness assessment:** [DECISION-005-CASE-CHECKER-MANIFEST-READINESS.md](DECISION-005-CASE-CHECKER-MANIFEST-READINESS.md).
 **Approval proposal:** [DECISION-005-OPERATOR-APPROVAL-PROPOSAL.md](DECISION-005-OPERATOR-APPROVAL-PROPOSAL.md).
+**Operator approval package (D5-B1–B4):** [DECISION-005-B-OPERATOR-APPROVAL-PACKAGE.md](DECISION-005-B-OPERATOR-APPROVAL-PACKAGE.md).
 **Case specification:** [CASE-CONSTRUCTION-SPECIFICATION.md](CASE-CONSTRUCTION-SPECIFICATION.md) §6.1.
 **Protocol:** [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](../EGM-GOLDFISH-REVIEW-ASSESSMENT.md).
 
