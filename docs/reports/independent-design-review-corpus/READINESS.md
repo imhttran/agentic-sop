@@ -747,3 +747,24 @@ threshold/stopping-rule, kappa, cluster-bootstrap, reproducibility, and run-mani
 evaluators are **not implemented**; the analysis is manual and must be pre-registered. No
 threshold or ceiling is approved, no run is authorized, and the corpus remains **NOT FROZEN**,
 the experiment **NOT YET READY**, and H1/H2 **NOT ESTABLISHED**. Decisions 8–9 remain open.
+
+## 18. Eligibility rulings and deferral recorded (current)
+
+**Eligibility rulings — APPROVED 2026-11-21.** The operator approved the five conservative
+rulings — R-B Option A, R-C-packet Option A, R-C Option A, counting unit Option A, and R-D
+(rejecting self-recorded, still-open limitations). They are operative in
+[DECISION-003-ELIGIBILITY-RULINGS-APPROVAL.md](DECISION-003-ELIGIBILITY-RULINGS-APPROVAL.md)
+and decide which *kinds* of evidence count; they do not determine candidate-level eligibility.
+
+**Experiment — DEFERRED 2026-11-21.** The historical set does not reach 15 plans / 15
+determinable defects under those rulings, so the run is deferred under protocol §5.3 and any
+historical recall comparison is INCONCLUSIVE; the record is
+[EXPERIMENT-DEFERRAL-APPROVAL.md](EXPERIMENT-DEFERRAL-APPROVAL.md).
+
+Counts are unchanged and nothing is promoted: approved **0 / 0**; proposed under the rulings
+**5 plans / 6 defects** (shortfall **10 / 9**); C0 3 / 4; C1 4 / 5; C3 11 / 15; C2 13 / 15
+remains an arithmetic ceiling that the rulings exclude. `candidates.json` is unchanged; the
+adjudicated count is **0**. The historical minimum is **not** lowered, no synthetic case
+substitutes for historical evidence, and Decisions 5–9 keep their prior states (D5 pending,
+D6 pending, D7 approved, D8/D9 not authorized). The corpus remains **NOT FROZEN**, the
+experiment **NOT YET READY**, and H1/H2 **NOT ESTABLISHED**.
