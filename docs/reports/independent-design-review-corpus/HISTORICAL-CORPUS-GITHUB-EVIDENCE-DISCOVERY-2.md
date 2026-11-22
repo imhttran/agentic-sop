@@ -1,5 +1,6 @@
 # Historical Corpus Discovery — GitHub Evidence, Second Pass
 
+**Status of every new candidate below: PROPOSED — NOT APPROVED.**
 **Type:** Investigation record (non-normative, read-only). It is **not** candidate promotion, adjudication,
 a corpus freeze, or an experiment result.
 **File name:** `-2` follows [HISTORICAL-CORPUS-GITHUB-EVIDENCE-DISCOVERY.md](HISTORICAL-CORPUS-GITHUB-EVIDENCE-DISCOVERY.md)
@@ -281,6 +282,16 @@ Reading the table:
 3. Build a candidate reviewer-visible tree for `GH-013` and one uncorrected lead, to test whether the pin tree can exclude the thread, later fixes and these reports.
 4. If more candidates are wanted, the remaining un-triaged surface is the 164 code-path threads that touch design-bearing files outside `docs/` (prompts, templates, config) and `GH2-003`–`005`.
 5. Recognise the ceiling: the corpus owner is the sole human, and every discovery link is a bot. If R-B is refused, the historical set stays near 3–7 plans and the floor needs a different source (external or additional human-reviewed material) or a protocol decision; that is out of scope here.
+
+### 11.1 Top three next investigations (ranked)
+
+Ranked by evidence strength, independent discovery, determinability, reviewer-visible material, contamination risk, duplication risk.
+
+1. **`GH-013` plus `GH-001`–`GH-003` adjudicator re-check, with a reviewer-visible tree built at each pin.** Merged defect, deterministic check, `GH-013` also has a merged correction (#486). Tests the contamination question (can the tree exclude the thread, later fixes and these reports) on the strongest leads.
+2. **`GH-009`, `GH-010`, `GH-011`, `GH-012`, `GH-014`: full-history corrective-change search and cluster de-duplication.** Merged, uncorrected, deterministic, but evidence is a bot finding only; the search either strengthens them (a later fix) or confirms they rest on R-B alone. Low duplication risk; cluster overlap is the main risk.
+3. **`GH-004` (c, d) and `GH2-003`–`GH2-005` triage.** Lower evidence strength and a kind ruling pending, but cheap and the only remaining untriaged defects.
+
+If the owner refuses R-B, none of these closes the floor; the shortfall is then reported, not worked around.
 
 ## 12. Non-authorization statement
 

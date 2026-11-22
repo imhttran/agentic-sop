@@ -215,3 +215,14 @@ packet as eligible; change any eligibility criterion, decision, threshold, or ca
 seeded or control case; designate an adjudicator, seeder, or case checker; access sealed answer-key material; adjudicate; freeze the corpus;
 run model inference for the experiment; or execute the experiment. Decision 6 remains pending. The corpus remains `NOT FROZEN`, the
 experiment `NOT YET READY`, and H1/H2 `NOT ESTABLISHED`.
+
+## 10. Update — second pass (PR #620)
+
+This report is the first pass and is otherwise unchanged. A second pass, [HISTORICAL-CORPUS-GITHUB-EVIDENCE-DISCOVERY-2.md](HISTORICAL-CORPUS-GITHUB-EVIDENCE-DISCOVERY-2.md), kept as a sibling file because it carries the full evidence tables, and updates this report's open items:
+
+- `GH-009`–`GH-014` (§3.4, `EVIDENCE_BLOCKED`) are now **verified** at their pins: **PROPOSED — NOT APPROVED** as 6 strict candidates / 7 defects (`GH-013` strongest).
+- `GH-006` (§3.2) is now verified; still held on artifact kind (R-C).
+- For `GH-001`, `GH-003` and `GH-009`–`GH-014` the reviewed pin equals the merged blob, so R-A (PR-head drafts) is moot for them.
+- `GH-003` (strict here) and `GH-004` (held here) are the same artifact kind; the second pass treats them under one ruling.
+
+Official counts, `candidates.json` and Decision 3 are unchanged; nothing is adjudicated.
