@@ -128,9 +128,9 @@ demonstrated need.
   freeze procedure (§5) a new freeze record and operator approval once the corpus is frozen.
 - **Ledger:** `LEDGER.txt` beside it, append-only by convention: version, SHA-256, date, role
   of the person who created or received it. It records access, not contents.
-- **Access list:** the freeze record carries the names and roles (§3.4). Adjudicators and
-  reviewers get only the blinded defect list export (Spec §6.2), generated from the manifest,
-  never the manifest.
+- **Access list:** the freeze record carries the names and roles (§3.4). Adjudicators get
+  only the blinded defect list export (Spec §6.2), generated from the manifest, never the
+  manifest. Reviewers (the models under test) get neither the list nor the manifest.
 - **Role separation in practice:** the seeder and corpus owner are the same person, and the
   analyst may be too. The checker receives an encrypted copy (Option B) scoped to the cases
   they check. Because one person holds several key-bearing roles, the separation that matters
