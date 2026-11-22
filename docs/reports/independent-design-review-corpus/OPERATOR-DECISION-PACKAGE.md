@@ -36,7 +36,7 @@ evidence, not approval of any decision in this package.
 | 2   | Historical inclusion and exclusion | **Recorded 2026-11-21** — see DECISION-RECORD-002                                                | Confirm the exclusions and holds; classify the extracted leads explicitly; keep unverified entries out of every floor         | 1                                           | Shortfall remains                             |
 | 3   | Strict versus partial eligibility  | **Recorded 2026-11-21** — conservative; seeded set additional                                    | Keep the conservative reading until the corpus can meet both floors without relaxing the recall denominator                   | 2, 4                                        | Shortfall remains                             |
 | 4   | Proposed protocol amendment        | **REJECTED (unnecessary) 2026-11-21**                                                            | Rejected as unnecessary under Decision 3                                                                                      | 1, 3                                        | Conservative reading applies                  |
-| 5   | Independent seeder                 | Not designated                                                                                   | Designate a human independent of the adjudicators                                                                             | None; needed by 6, 8                        | No seeded or no-known-defect cases            |
+| 5   | Independent seeder                 | **Recorded 2026-11-21** — seeder Tom Tran (also corpus owner); construction not authorized       | Designate a human independent of the adjudicators                                                                             | None; needed by 6, 8                        | No seeded or no-known-defect cases            |
 | 6   | Two independent human adjudicators | None identified; operator is treated as an author                                                | Designate two external humans and record authorship checks                                                                    | 5 (seeder must differ), 1                   | PASS is impossible; best outcome INCONCLUSIVE |
 | 7   | Thresholds and cost limits         | Pre-registered, unapproved                                                                       | Approve before freeze; no changes after the first run                                                                         | 2, 3 (corpus size)                          | No run authorized                             |
 | 8   | Corpus and instruction freeze      | `NOT FROZEN`; instructions draft                                                                 | Authorize only after 1–7 and corpus completion                                                                                | 1–7, corpus completion, WSB limits recorded | No reproducible run                           |
@@ -198,14 +198,18 @@ applied.
 
 ## 5. Independent seeder designation
 
-**Current status.** Open. No seeder is designated and no case is constructed.
+**Current status.** **RECORDED 2026-11-21.** Tom Tran is designated as seeder (also corpus
+owner); the case checker, sealed-manifest location, and construction authorization remain
+open. See [DECISION-RECORD-005](DECISION-RECORD-005-SEEDER.md).
 
-**Verified evidence.** No seeder is designated. No seeded or no-known-defect case is
-constructed (0 of about 8 and 0 of about 6). The protocol requires an independent seeder and
-a sealed manifest before any run.
+**Verified evidence.** One seeder is designated (Tom Tran, 2026-11-21), who is also the corpus
+owner. No independent case checker is designated and no sealed-manifest location is selected.
+No seeded or no-known-defect case is constructed (0 of about 8 and 0 of about 6), and
+`case_construction_authorized` is false. Protocol §5.3 requires seeding by someone other than
+the adjudicator and a sealed manifest before any run.
 
-**Recommended disposition.** Designate a human seeder who is independent of the adjudicators
-and, preferably, of the corpus owner. Record the independence statement.
+**Recorded disposition.** Tom Tran was designated as seeder, with the corpus-owner overlap
+recorded as a limitation (protocol §5.4 permits it). The analysis below is preserved.
 
 **Alternatives and trade-offs.**
 
@@ -221,11 +225,12 @@ both adjudicators; decision 8 needs the sealed manifest and access list.
 **Effect on experiment validity.** Seeded and no-known-defect cases are the only control for
 false positives and calibration. Without them, a PASS cannot support a quality claim.
 
-**Consequence of deferral.** The experiment remains unpowered for false positives.
+**Consequence of deferral (no longer applicable).** The experiment would remain unpowered for
+false positives.
 
-**Exact operator action required.** Record the seeder's name, the independence statement,
-and the planned location and access list for the sealed manifest (outside the reviewer
-project directory).
+**Recorded operator action.** The seeder, the overlap limitation, the independence
+restrictions, the pending checker and manifest, and `case_construction_authorized: false` are
+recorded in [DECISION-RECORD-005](DECISION-RECORD-005-SEEDER.md) §1–§5.
 
 ## 6. Two independent human adjudicators
 
@@ -375,9 +380,10 @@ The operator is asked to record, in writing:
 8. The freeze authorization, with the freeze commit and manifest hash.
 9. The execution authorization, with the budget, stop condition, and EP-15 disposition.
 
-Items 1–4 are recorded in [DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md),
+Items 1–5 are recorded in [DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md),
 [DECISION-RECORD-002](DECISION-RECORD-002-HISTORICAL-DISPOSITIONS.md),
-[DECISION-RECORD-003](DECISION-RECORD-003-ELIGIBILITY.md), and
-[DECISION-RECORD-004](DECISION-RECORD-004-PROTOCOL-AMENDMENT.md). Items 5–9 do not yet exist
-in the repository. PR #574 is merged evidence; it is not an approval of any
+[DECISION-RECORD-003](DECISION-RECORD-003-ELIGIBILITY.md),
+[DECISION-RECORD-004](DECISION-RECORD-004-PROTOCOL-AMENDMENT.md), and
+[DECISION-RECORD-005](DECISION-RECORD-005-SEEDER.md). Items 6–9 do not yet exist in the
+repository. PR #574 is merged evidence; it is not an approval of any
 item above.

@@ -33,13 +33,16 @@ The freeze cannot be executed until:
    [DECISION-RECORD-003](DECISION-RECORD-003-ELIGIBILITY.md).**
 4. The amendment decision is recorded (decision 4). **MET 2026-11-21 — rejected; see
    [DECISION-RECORD-004](DECISION-RECORD-004-PROTOCOL-AMENDMENT.md).**
-5. The seeder is designated (decision 5).
+5. The seeder is designated (decision 5). **PARTIAL 2026-11-21 — Tom Tran designated; case
+   checker, sealed manifest, and construction authorization remain open; see
+   [DECISION-RECORD-005](DECISION-RECORD-005-SEEDER.md).**
 6. The two human adjudicators are designated and their authorship checks are recorded
    (decision 6).
 7. The thresholds and cost ceiling are approved (decision 7).
 
 Preconditions 1–4 are met (owner, inclusion list, eligibility rule, and amendment decision
-recorded 2026-11-21). Preconditions 5–7 remain open.
+recorded 2026-11-21). Precondition 5 is partially met (seeder designated; construction
+controls open). Preconditions 6–7 remain open.
 
 The operator's freeze authorization is decision 8. Execution authorization is decision 9
 and is separate.
@@ -239,7 +242,7 @@ no case, approves no amendment, and executes no freeze.
 | 4   | Historical corpus shortfall                   | 0/15 strict; 10/15 partial-inclusive; shortfall 15/15 or 5/5                                                                                              | **NOT MET**                                                                               |
 | 5   | Seeded-case construction status               | 0 of about 8 constructed; method only                                                                                                                     | **NOT MET**                                                                               |
 | 6   | No-known-defect control status                | 0 of about 6 constructed; method only                                                                                                                     | **NOT MET**                                                                               |
-| 7   | Independent seeder availability               | None designated; no sealed manifest                                                                                                                       | **NOT MET**                                                                               |
+| 7   | Independent seeder availability               | Tom Tran designated 2026-11-21 (also corpus owner); case checker and sealed manifest pending; construction not authorized                                 | **PARTIAL**                                                                               |
 | 8   | Independent human adjudicator availability    | None identified; operator treated as an author; PASS unreachable                                                                                          | **NOT MET**                                                                               |
 | 9   | Reviewer-input boundaries                     | Protocol §5.1/§5.2 fixed; 17 artifacts hashed and 17 permitted-reference lists checked; no leakage overlap; held/excluded answer-bearing entries kept out | **PARTIAL** — defined for historical artifacts; no seeded or no-known-defect inputs exist |
 | 10  | Sealed answer-key separation                  | Procedure and access-list fields defined in §3.4; no sealed manifest exists                                                                               | **NOT MET**                                                                               |
