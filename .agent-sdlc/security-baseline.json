@@ -10,7 +10,7 @@
       "expires_at": "2027-06-30T00:00:00Z"
     },
     {
-      "fingerprint": "semgrep:1c1fe97130f651dc92e5172e21b0f333f6da5e7d16d114fa328cfbc7eff86180",
+      "fingerprint": "semgrep:bba96ea06deb2a362fa756257a2b51e29cfecd750ddbc72fc5d98c73869c8873",
       "rule_id": "dangerous-exec-command",
       "path": "internal/cli/mcp_start_work.go",
       "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
