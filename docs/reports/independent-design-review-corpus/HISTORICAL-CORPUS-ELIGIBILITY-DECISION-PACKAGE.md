@@ -19,10 +19,19 @@ and changes no rule, record or count.
 | R-C | Do skills and guides count? | **No**, for now | Operational instructions; every current instance is also bot-only and partly unverified |
 
 **Count outcome:** the historical set reaches the 15-plan floor only in the most permissive scenario (S6: R-B Option B, every packet admitted, R-C Option C and artifact counting, every adjudication succeeding), where it totals **17 plans / 19 defects**, with 2 plans and 4 defects of slack. Without R-C Option C the largest provisional total is **13 plans / 15 defects** (S4, 2 plans short); the most conservative reading leaves **4 / 5** (11 / 10 short). The decisions decide how far the proposals count; they do not by themselves close the shortfall.
-decide how far the proposals count; they do not close the shortfall.
 
-**Count reconciliation is active elsewhere.** A separate agent holds uncommitted work in the worktree `egm-count-reconciliation` (a corpus count convention defining classes C0–C3). It is not merged and is **not duplicated** here. This package uses
-those class names only as labels for the arithmetic in §9 and flags every number that depends on it. If that work changes a class, §9 follows it.
+**Count convention (merged).** The C0–C3 classes are defined by the merged
+[CORPUS-COUNT-CONVENTION.md](CORPUS-COUNT-CONVENTION.md) (PR #628, merge `ac11f223`), which is the
+authoritative presentation rule. This package uses those class names as labels for the
+arithmetic in §9 and flags every number that depends on the convention.
+
+**One figure below is superseded; the §9 table is kept as the analysis that produced it.** S6
+reads **17 plans / 19 defects** here because it counted one verified defect for `GH2-001`; the
+later line-level re-check verified a second one, so S6 is **17 plans / 20 defects** — see
+[HISTORICAL-CORPUS-FINAL-RECONCILIATION.md](HISTORICAL-CORPUS-FINAL-RECONCILIATION.md) and
+[HISTORICAL-CORPUS-EVIDENCE-GAP-CLOSURE.md](HISTORICAL-CORPUS-EVIDENCE-GAP-CLOSURE.md) §8. Where
+this package and the final reconciliation differ, **the reconciliation and the
+[operator handoff](HISTORICAL-CORPUS-OPERATOR-HANDOFF.md) govern**.
 
 ## 2. Protocol references (verbatim, §5.3)
 
@@ -211,7 +220,7 @@ No artifact above appears in `candidates.json`. No pin tree contains EGM or corp
 
 ## 9. Count scenarios
 
-Official baseline **C0 = 3 plans / 4 defects**; independently adjudicated **0 / 0**; nothing below is a reached or approved count. Class labels follow the pending count convention. Duplicates and exclusions contribute 0 (`GH3-001b` partial; `GH-013` second finding partial; manifest records `IDR-E-005`, `IDR-H-008` excluded).
+Official baseline **C0 = 3 plans / 4 defects**; independently adjudicated **0 / 0**; nothing below is a reached or approved count. Class labels follow the merged count convention. Duplicates and exclusions contribute 0 (`GH3-001b` partial; `GH-013` second finding partial; manifest records `IDR-E-005`, `IDR-H-008` excluded).
 
 | Scenario | R-B | Packets | Unit | Plans / defects | Shortfall vs 15 / 15 | Class |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -245,7 +254,7 @@ All **PROPOSED — PENDING OPERATOR APPROVAL**. Required of the operator, in thi
 2. The corpus owner is the sole human author and reviewer of record; each ruling above rests on one person.
 3. Circular origin of the bot-surfaced stratum (§3.2); stratified reporting is recommended if Option B is chosen.
 4. Four of the six #620 leads are not line-level re-verified; two packets are likely rejected under the recommended R-C-packet test, which reduces S4.
-5. The count convention is unmerged; the class labels may change.
+5. The count convention is merged (PR #628); the class labels are fixed, but every number here still depends on the rulings this package recommends.
 6. Without R-C Option C, even S4 leaves 2 plans short. S6 reaches the floor with a small margin, but only if every permissive ruling goes favorably and each included lead survives adjudication; four of its leads are skills or guides, the kind of artifact the recommended R-C Option A rejects.
 
 ## 12. Non-authorization statement
