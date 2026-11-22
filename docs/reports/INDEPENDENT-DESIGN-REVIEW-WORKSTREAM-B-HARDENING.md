@@ -272,8 +272,9 @@ upgraded.
 
 ### 9.3 Remaining execution risks
 
-1. Real-provider concurrency and batch latency unmeasured (EP-15); a missing C timing
-   makes H2 INCONCLUSIVE.
+1. Provider concurrency was observed once on a local oMLX server (§9.7); concurrency and
+   latency of the experiment's own provider are unmeasured, and a missing C timing makes H2
+   INCONCLUSIVE.
 2. Model identity is client-side only; provider-side substitution is undetectable.
 3. No sampling control; run-to-run variance is uncontrolled.
 4. Whether a real reviewer uses repository tools is unobserved.
@@ -282,7 +283,7 @@ upgraded.
 7. Token ceiling is a stop threshold, not a spend bound; the call ceiling is the hard bound.
 8. A prior unintended cloud call (earlier report) is outside the experiment data.
 
-### 9.4 EP-15 live-verification plan (not executed)
+### 9.4 EP-15 live-verification plan (executed once on a local provider; see §9.7)
 
 Procedure is §5. Bounds to fix before any run: **provider and model** named by the
 operator, one `sop` build recorded by sha256; **3 concurrent requests**, one project each,
@@ -312,13 +313,54 @@ pilot.
   seeded and no-known-defect cases, two human adjudicators, thresholds and freeze remain
   with the corpus workstream. Execution readiness neither depends on nor decides them.
 - **Minimum evidence before experiment authorization:** a passing preflight record for the
-  frozen overlay; a completed EP-15 live batch (or an explicit decision to accept it
-  UNVERIFIED, which makes C latency first-measured and H2 INCONCLUSIVE if missing); the
+  frozen overlay; an EP-15 batch on the experiment's own provider (§9.7 covers a local oMLX
+  server only), or an explicit decision to accept that gap, which makes C latency
+  first-measured and H2 INCONCLUSIVE if missing; the
   operator dispositions in §7; and the freeze record citing the limits above.
 
 ### 9.6 Statement
 
 **Execution readiness is NOT established.** The harness, isolation and attribution
-instruments are verified on synthetic runtime; EP-15 is UNVERIFIED, EP-02, EP-05/16, EP-09,
-EP-10 and EP-12 are PARTIAL, and no real-provider run has occurred. This section authorizes
-nothing.
+instruments are verified on synthetic runtime. EP-15 is PARTIAL: one valid batch on a local
+oMLX server (§9.7), none on the experiment's provider. EP-02, EP-05/16, EP-09, EP-10 and
+EP-12 are PARTIAL. No cloud-provider run has occurred. This section authorizes nothing.
+
+### 9.7 EP-15 live batch result (local oMLX, one valid batch)
+
+**Authorized by the operator:** loopback endpoints only, synthetic request only (no corpus or
+repository content), `--max-calls 4` and `--max-tokens 8000` per proxy (after earlier limits
+tripped, below), 3 concurrent `sop prompt` calls, one project each. `sop` and `expcheck` built
+from `31b479dd` (sha256 `67f89c0e8ad35a3c…` and `c427094751a4110c…`). Preflight passed for all three
+projects with a cleared environment (`env -i`).
+
+**Valid batch** (provider `mlx`, oMLX at `127.0.0.1:8000`, model `Qwen3-4B-4bit`, overlay class
+`medium` only):
+
+| Check | Result |
+| --- | --- |
+| Provider requests per run | 1; 0 extra; 0 refused by the ceiling |
+| Model sent / returned | `Qwen3-4B-4bit` / `Qwen3-4B-4bit` |
+| `expcheck attribute` | no problems on all three; 3 distinct run directories, each matching its work-item id |
+| First-call start times | within 7 µs of each other |
+| Per-call duration | 20.8 s, 15.9 s, 13.6 s (output tokens 1294, 886, 738; about 54 to 62 tokens/s each) |
+| Batch wall clock | 21.08 s, against about 50 s if the calls had been serialized |
+| Request sha256 (prefix) | `9d12713162e76cc1`, `1e55225c4d68a22f`, `4b58d8a54630162c` |
+| Response sha256 (prefix) | `2748ee98fecbab90`, `79c6b1e1b782d201`, `2f164bf0691c6406` |
+
+**Reading:** this oMLX server served three simultaneous requests in parallel and attributed them
+cleanly. It says nothing about the experiment's own provider, about full-run latency, or about a
+real reviewer's tool use (the `mlx` provider is text-only, so no tools ran). The batch shares
+one machine with other work and is not comparable with a pilot.
+
+**Earlier attempts, invalid and not evidence.** Four batches on the native tool loop
+(`llama3.2:3b` and `qwen3-coder:30b` through Ollama) aborted under the plan's own rule on a
+`429` from a ceiling: the models spent every call on repository tools and never answered
+(call ceiling 2, then token threshold 2000, then call ceiling 4, then 4 again). The ceilings
+held (every proxy forwarded at most its call limit; the rest were refused with zero tokens).
+Their first calls also overlapped, but the runs failed, so they carry no result.
+
+**Caveats.** The per-run tool-audit files were reused across attempts and not cleared, so the
+`tool_invocations` lists in the valid batch's attribution output are stale entries from the
+earlier Ollama runs (all timestamps precede the valid batch); this batch made no tool calls.
+Raw evidence lived in a session scratchpad and is not committed; the hashes above are the
+durable record.
