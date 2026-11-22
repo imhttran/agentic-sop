@@ -4,7 +4,8 @@
 operator. It approves nothing, selects no location, creates no manifest or key, and
 authorizes no case construction.
 **Status:** **PROPOSED — PENDING OPERATOR APPROVAL.**
-**Baseline:** `origin/main` @ `59018d95` (merged #621, #623, #624, #628).
+**Baseline:** `origin/main` @ `59018d95` (merged #621, #623, #624, #628); F1 was closed on
+top of `19d88973`.
 **Technical verification:** [DECISION-005-MANIFEST-TECHNICAL-VERIFICATION.md](DECISION-005-MANIFEST-TECHNICAL-VERIFICATION.md).
 **Readiness assessment:** [DECISION-005-CASE-CHECKER-MANIFEST-READINESS.md](DECISION-005-CASE-CHECKER-MANIFEST-READINESS.md).
 **Decision 5 proposal (D5-A/5B/5C):** [DECISION-005-OPERATOR-APPROVAL-PROPOSAL.md](DECISION-005-OPERATOR-APPROVAL-PROPOSAL.md).
@@ -31,7 +32,7 @@ Verified in this session at `59018d95`, in an isolated worktree, with synthetic 
 | Access checks (G5) | `access.go` | **Implemented as a library only — not exposed by the CLI** |
 | Corrupt-manifest handling (G6) | negative tests | **Implemented.** `Load`/`Verify` fail closed |
 | Export + tree hash (G7) | `export.go` | **Implemented.** Private fields excluded; symlinks rejected in a tree |
-| **Manifest sealer / writer** | — | **Absent.** The CLI has exactly one subcommand, `verify` |
+| **Manifest sealer / writer** | `seal.go`, `cmd/egmmanifest seal` | **Implemented (F1 closed).** Canonical bytes + one newline, exclusive publication, exact-byte digest |
 
 Focused results: `go test ./internal/egmmanifest/... -count=1` → **PASS**;
 `go vet` → **clean**. Nothing in SOP imports this package; no network or model call is made.
@@ -40,7 +41,7 @@ Focused results: `go test ./internal/egmmanifest/... -count=1` → **PASS**;
 
 | # | Finding | Kind | Consequence |
 | --- | --- | --- | --- |
-| **F1** | **No sealer.** No library or CLI path writes a manifest or computes `sealed_sha256` for a new case. | Gap in authorized scope (sealing was never authorized) | A manifest cannot be produced with the shipped tooling. **Must be resolved before the first case is sealed**, by a small `seal`/`digest` subcommand or an approved scripted procedure |
+| **F1** | ~~**No sealer.**~~ **Closed technically.** `egmmanifest seal` now computes `sealed_sha256`, writes canonical bytes with exactly one trailing newline, publishes exclusively, and reports the exact-byte SHA-256. | Gap closed by tooling; see the technical verification report §4.2 | A manifest can now be produced without hand-computing digests. Sealing *real* cases still needs D5-B1–B4 approved, D5-A recorded, and D5-C authorization |
 | **F2** | **"Manifest hash" was undefined.** Per-case canonical digests exist; there is no CLI manifest digest, and a whole-file hash depends on formatting. | Ambiguity | Fixed by the §2 rule: the sealed file's exact bytes are canonical, so the file hash is a content function |
 | **F3** | **Format mismatch.** `Load` parses **JSON only**, but the readiness report names `manifest-v<N>.<hash>.yaml` and the case spec's example is YAML. | Documentation inconsistency | D5-B1/B2 fix the sealed format as **JSON**; the YAML example remains illustrative of the field set |
 | **F4** | **Digest-input shape is load-bearing.** The digest input contains `"sealed_sha256":""` (present, empty) and always contains `leak_checks`; `omitempty` fields are absent when empty. | Compatibility risk | Must be part of the approved rule, or an independent reimplementation would compute different digests |
@@ -212,12 +213,13 @@ make the procedure one-command instead of five (a `digest` for the manifest hash
 | 6 | Windows `ErrUnsupported` | **Requires operator decision** | The experiment targets macOS/Linux; the access checks return a documented unsupported error on Windows. Operator records Windows as out of scope (or authorizes a Windows check later) |
 | 7 | Backup-key custody | **Requires operator decision** | A lost key loses the manifest. D5-B3 names the recovery-key holder and the second device |
 | 8 | Manifest integrity vs independent defect determinability | **Controlled procedurally** | Hashing proves the record is unchanged, not that a case is a good artifact or that its defect is determinable. That stays the case checker's judgment (D5-A) |
-| 9 | **No sealer (F1)** | **Requires remediation before sealing** | A manifest cannot be produced with the shipped tooling. Resolve with a small `seal` subcommand or an approved scripted procedure **before the first case is sealed** |
+| 9 | **No sealer (F1)** | **Addressed by implementation** (closed technically) | `egmmanifest seal` now produces a sealed manifest and refuses to reseal a modified record. Residual: the sealer validates *shape and integrity*, not whether a case is a good artifact, and it has never run on a real corpus |
 | 10 | Manifest-hash scope, format, digest-input shape (F2–F4) | **Requires operator decision** | Settled by approving §2.1 verbatim; declining or editing it produces a different, incompatible rule |
 
 **Explicitly not accepted silently:** rows 1, 2, 5, and 8 are limitations the operator must
-accept on the record; rows 4, 6, 7, and 10 are decisions only the operator can make; row 9 is
-a prerequisite block, not a risk to accept.
+accept on the record; rows 4, 6, 7, and 10 are decisions only the operator can make. Row 9 is
+now closed in code; what remains of it is the untested-on-real-data limitation in the technical
+verification report §9, which is not a gate on approval.
 
 ## 6. Exact operator decision text
 
@@ -279,8 +281,10 @@ another.
 > independent defect determinability.
 > Decided: the leakage-vocabulary home (D5-B2); Windows out of scope — `<accepted or
 > authorize a Windows check later>`.
-> Required before the first case is sealed: a manifest sealer (§1.1 F1), by a small
-> `seal` subcommand or an approved scripted procedure.
+> Technical prerequisites: F1 (a manifest sealer) is **closed** — `egmmanifest seal` computes
+> the digests, writes canonical bytes with one trailing newline, publishes exclusively, and
+> reports the exact-byte SHA-256. Producing a real sealed manifest still requires this decision
+> set to be approved and D5-A recorded; the sealer is tooling, not an authorization.
 >
 > This records dispositions only. It authorizes no construction, adjudication, freeze, or
 > execution.
@@ -294,7 +298,7 @@ another.
 | Sealed-manifest location and access model | Construction | **MET** — D5-B2, once the operator supplies the path |
 | Recovery procedure and key holder | Sealing | **MET** — D5-B3, once the holder is named |
 | Residual-risk disposition | Construction | **MET** — D5-B4 |
-| Manifest sealer exists (F1) | Sealing | **NOT MET** — remediation or approved procedure |
+| Manifest sealer exists (F1) | Sealing | **MET (technical)** — `egmmanifest seal`; not an authorization to seal real cases |
 | Independent case checker designated | Construction | **NOT MET** — D5-A |
 | Case specification and schema readiness | Construction | **MET** — spec §6; schema implemented |
 | Leakage and independence controls | Construction | **PARTIAL** — vocabulary home from D5-B2 |

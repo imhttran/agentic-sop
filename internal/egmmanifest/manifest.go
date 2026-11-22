@@ -90,6 +90,12 @@ type Manifest struct {
 // Validate checks the manifest and every case. It fails closed: any missing, malformed,
 // duplicated, or contradictory field is an error.
 func (m *Manifest) Validate() error {
+	return m.validate(true)
+}
+
+// validate performs the schema checks. With requireSealed false the per-case
+// sealed_sha256 field is not checked, because a sealer computes it.
+func (m *Manifest) validate(requireSealed bool) error {
 	if m == nil {
 		return errors.New("egmmanifest: nil manifest")
 	}
@@ -105,8 +111,11 @@ func (m *Manifest) Validate() error {
 	seen := make(map[string]bool, len(m.Cases))
 	for i := range m.Cases {
 		c := &m.Cases[i]
-		if err := c.validate(); err != nil {
+		if err := c.validateContent(); err != nil {
 			return fmt.Errorf("egmmanifest: case %d (%q): %w", i, c.ID, err)
+		}
+		if requireSealed && !hex64Pattern.MatchString(c.SealedSHA256) {
+			return fmt.Errorf("egmmanifest: case %d (%q): %w", i, c.ID, errSealedSHA256)
 		}
 		if seen[c.ID] {
 			return fmt.Errorf("egmmanifest: duplicate case id %q", c.ID)
@@ -116,7 +125,10 @@ func (m *Manifest) Validate() error {
 	return nil
 }
 
-func (c *Case) validate() error {
+var errSealedSHA256 = errors.New("sealed_sha256 must be 64 lowercase hex characters")
+
+// validateContent checks every case field except sealed_sha256, which is derived content.
+func (c *Case) validateContent() error {
 	if !caseIDPattern.MatchString(c.ID) {
 		return errors.New("id must match [A-Za-z0-9][A-Za-z0-9._-]*")
 	}
@@ -152,9 +164,6 @@ func (c *Case) validate() error {
 	}
 	if !hex64Pattern.MatchString(c.InstructionBlockSHA256) {
 		return errors.New("instruction_block_sha256 must be 64 lowercase hex characters")
-	}
-	if !hex64Pattern.MatchString(c.SealedSHA256) {
-		return errors.New("sealed_sha256 must be 64 lowercase hex characters")
 	}
 	for j, ref := range c.PermittedReferences {
 		if !safeRelativePath(ref.Path) {
@@ -253,7 +262,21 @@ func Load(path string) (*Manifest, error) {
 	}
 	defer f.Close()
 
-	dec := json.NewDecoder(f)
+	m, err := parseManifest(f)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.Validate(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// parseManifest strictly decodes a manifest without validating it. It rejects unknown
+// fields and trailing data, and Case.UnmarshalJSON rejects a missing or partial leak_checks
+// object, so both Load and the sealer share one parser.
+func parseManifest(r io.Reader) (*Manifest, error) {
+	dec := json.NewDecoder(r)
 	dec.DisallowUnknownFields()
 	var m Manifest
 	if err := dec.Decode(&m); err != nil {
@@ -264,9 +287,6 @@ func Load(path string) (*Manifest, error) {
 	// delimiter without checking for content after it.
 	if err := dec.Decode(new(json.RawMessage)); !errors.Is(err, io.EOF) {
 		return nil, errors.New("egmmanifest: trailing data after the manifest")
-	}
-	if err := m.Validate(); err != nil {
-		return nil, err
 	}
 	return &m, nil
 }
