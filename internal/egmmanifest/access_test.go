@@ -36,6 +36,31 @@ func TestCheckOutsideSymlink(t *testing.T) {
 	}
 }
 
+func TestCheckOutsideSymlinkedMissingDescendant(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation needs privileges on Windows")
+	}
+	root := t.TempDir()
+	outsideDir := t.TempDir()
+	link := filepath.Join(outsideDir, "link")
+	if err := os.Symlink(root, link); err != nil {
+		t.Skip("symlink unsupported:", err)
+	}
+	// Neither link/new nor link/new/key.json exists yet; the check must still follow the
+	// symlink rather than fall back to the unresolved path.
+	target := filepath.Join(link, "new", "key.json")
+	if err := egmmanifest.CheckOutside(target, root); err == nil {
+		t.Fatal("unresolved-descendant path beneath a symlink to the forbidden root was accepted")
+	}
+}
+
+func TestCheckOutsideMissingAncestor(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "does", "not", "exist")
+	if err := egmmanifest.CheckOutside(missing, filepath.Join(t.TempDir(), "other")); err != nil {
+		t.Fatalf("nonexistent outside path rejected: %v", err)
+	}
+}
+
 func TestCheckFileMode(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("mode bits are not meaningful on Windows")

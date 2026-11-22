@@ -52,19 +52,31 @@ func within(p, root string) bool {
 	return cleanP == cleanRoot || strings.HasPrefix(cleanP, cleanRoot+string(filepath.Separator))
 }
 
+// resolveMaybe resolves every symlink in p. When p does not exist yet, it resolves the
+// nearest existing ancestor and appends the remaining components, so a symlink anywhere
+// above a not-yet-created path is still followed. If the location cannot be established
+// safely the error is returned rather than falling back to the unresolved path.
 func resolveMaybe(p string) (string, error) {
-	if r, err := filepath.EvalSymlinks(p); err == nil {
-		return r, nil
+	current := filepath.Clean(p)
+	var missing []string
+	for {
+		if _, err := os.Lstat(current); err == nil {
+			break
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return "", fmt.Errorf("egmmanifest: resolve %s: %w", p, err)
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", fmt.Errorf("egmmanifest: resolve %s: no existing ancestor", p)
+		}
+		missing = append([]string{filepath.Base(current)}, missing...)
+		current = parent
 	}
-	dir, base := filepath.Split(p)
-	if dir == "" {
-		return filepath.Clean(p), nil
-	}
-	r, err := filepath.EvalSymlinks(filepath.Clean(dir))
+	real, err := filepath.EvalSymlinks(current)
 	if err != nil {
-		return filepath.Clean(p), nil
+		return "", fmt.Errorf("egmmanifest: resolve %s: %w", p, err)
 	}
-	return filepath.Join(r, base), nil
+	return filepath.Join(append([]string{real}, missing...)...), nil
 }
 
 // CheckFileMode verifies that path is a regular file (not a symlink) with no group or

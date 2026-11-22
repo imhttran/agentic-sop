@@ -60,6 +60,11 @@ defect class other than `none` and an expected finding with an allowed severity
 control check; all hashes are 64 lowercase hex; paths are clean relative paths; every
 leak-check boolean is false; unknown fields and trailing data are rejected.
 
+`leak_checks` and all three of its booleans must be stated explicitly. Load requires the
+object and each key to be present, so a stripped or partial record fails closed instead of
+defaulting to `false` — the canonical form of the zero value is identical to an explicit
+all-false record, so a silent default would let a tampered manifest verify.
+
 ### 3.2 Canonicalization
 
 Canonical bytes are UTF-8, compact JSON with sorted object keys, no HTML escaping, and
@@ -74,7 +79,9 @@ a later change would invalidate every earlier hash.
 ## 4. Integrity verification behavior
 
 `Load` reads an explicit path, rejects unknown fields and trailing data, and validates the
-schema. `Verify` then:
+schema. Trailing data is detected by requiring a second decode to return `io.EOF`; an
+`Decoder.More()` probe is not an end-of-input test (it returns `false` at a closing
+delimiter even when bytes follow). `Verify` then:
 
 1. recomputes every case digest and compares `sealed_sha256`;
 2. optionally recomputes each artifact and permitted-reference hash under `ArtifactRoot`;
@@ -102,9 +109,12 @@ decision; the package does not choose a location or create a vocabulary file.
 
 ## 6. Access-control assumptions and limitations
 
-`CheckOutside` resolves the target and each forbidden root (including the parent of a path
-that does not exist yet) and rejects the path if it is equal to or inside a root. A symlink
-cannot hide the real location.
+`CheckOutside` resolves the target and each forbidden root and rejects the path if it is
+equal to or inside a root. For a path that does not exist yet, it resolves the nearest
+existing ancestor and re-appends the missing components, so a symlink above a
+not-yet-created directory or file cannot hide the real location. If the location cannot be
+established (no existing ancestor, unreadable component, broken link) the check returns an
+error rather than falling back to the unresolved path.
 
 `CheckFileMode`/`CheckDirMode` reject symlinks and require no group/other permission bits;
 an optional exact mode is checked. The checks are Unix-portable (macOS and Linux). On
@@ -122,16 +132,21 @@ Run at `965ddc29` in an isolated worktree:
 
 | Command | Result |
 | --- | --- |
-| `go test ./internal/egmmanifest -count=1` | **PASS** (36 tests) |
+| `go test ./internal/egmmanifest -count=1` | **PASS** (39 test functions, 61 cases with subtests) |
 | `go vet ./internal/egmmanifest ./cmd/egmmanifest` | **clean** |
 | `go build ./...` | **clean** |
 
 Coverage: schema acceptance/rejection (14 negative cases), load errors (unknown field,
-trailing data, invalid JSON, missing file), canonical key-order stability and content
-sensitivity, sealing, leakage positive/negative and no-term-echo, access outside/symlink/mode
-checks, digest/artifact/reference/tree mismatch, fail-closed schema failure, export private
-exclusion, export determinism, private-vs-public digest behavior, and tree-hash determinism
-and skip behavior.
+trailing object/array/delimiter/scalar data, invalid JSON, missing file, missing/partial/
+non-boolean `leak_checks`), canonical key-order stability and content sensitivity, sealing,
+leakage positive/negative and no-term-echo, access outside/symlink/symlinked-missing-
+descendant/mode checks, digest/artifact/reference/tree mismatch, fail-closed schema failure,
+export private exclusion, export determinism, private-vs-public digest behavior, and
+tree-hash determinism and skip behavior.
+
+Three defects found in PR review (#623) were fixed with regression tests: unresolved
+symlinked descendants below a not-yet-created path, trailing-delimiter acceptance, and
+implicit defaulting of `leak_checks`.
 
 No real manifest, answer key, artifact, or case was used; every fixture is synthetic.
 
