@@ -88,6 +88,18 @@ and problem categories only; nonzero exit on failure.
 
 **State:** Complete. `cmd/egmmanifest/main.go`.
 
+### MP-10 — Sealer
+
+Seal an unsigned manifest: reuse `parseManifest`, `CaseDigest`, `Canonical`, and `Validate`;
+populate only `sealed_sha256`; emit canonical bytes plus one trailing newline; publish
+exclusively (temporary file, `fsync`, `0400`, `os.Link`, no overwrite, no partial output);
+report the exact-byte SHA-256 and the verification status of the written file. Refuse a
+record whose stored digest no longer matches. Fail closed on every invalid-input and unsafe
+path case.
+
+**State:** Complete. `internal/egmmanifest/seal.go`, `cmd/egmmanifest/main.go`,
+`internal/egmmanifest/seal_test.go`, `cmd/egmmanifest/main_test.go`.
+
 ### MP-9 — Technical report
 
 Record the G1–G7 matrix, implementation decisions, schema and canonicalization, test
@@ -98,7 +110,7 @@ results, and residual risks.
 ## Acceptance criteria
 
 - `go test ./internal/egmmanifest` passes with positive, negative, corruption,
-  determinism, leakage, and export tests.
+  determinism, leakage, export, and sealer tests.
 - `go vet` and `go build ./...` are clean.
 - No real manifest, answer key, or case exists.
 - No governance decision is recorded.
@@ -117,5 +129,6 @@ results, and residual risks.
 | MP-7 Export | Complete |
 | MP-8 CLI | Complete |
 | MP-9 Report | Complete |
+| MP-10 Sealer | Complete |
 
 These are task states in this plan, not SOP lifecycle transitions.
