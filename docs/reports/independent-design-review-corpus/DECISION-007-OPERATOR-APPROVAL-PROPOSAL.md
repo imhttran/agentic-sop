@@ -2,7 +2,8 @@
 
 **Type:** Operator approval proposal (non-normative). It prepares the exact Decision 7 wording
 for the operator to accept, amend, or reject.
-**Status:** **PENDING OPERATOR APPROVAL — Decision 7 is not recorded.**
+**Status:** **APPROVED 2026-11-21 — see [DECISION-RECORD-007](DECISION-RECORD-007-THRESHOLDS.md).**
+The proposal text below is preserved as the approved basis; this file is not the decision record.
 **Baseline:** `origin/main` @ `2c56abb9` (merge of PR #614).
 **Source assessment:** [DECISION-007-THRESHOLD-COST-READINESS.md](DECISION-007-THRESHOLD-COST-READINESS.md).
 **Protocol:** [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](../EGM-GOLDFISH-REVIEW-ASSESSMENT.md) §§6.1–6.2, 7.
@@ -15,7 +16,9 @@ is made. The corpus is **NOT FROZEN** and the experiment is **NOT YET READY**.
 
 ## 1. Exact proposed operator approval
 
-Proposed text, ready to record verbatim if the operator accepts it. It is **not recorded here**.
+The operator approved this text on 2026-11-21; the decision is recorded in
+[DECISION-RECORD-007](DECISION-RECORD-007-THRESHOLDS.md). The text is preserved as the approved
+basis.
 
 > Decision 7 — APPROVED
 >

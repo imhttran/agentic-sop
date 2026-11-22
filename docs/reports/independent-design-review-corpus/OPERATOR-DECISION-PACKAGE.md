@@ -38,7 +38,7 @@ evidence, not approval of any decision in this package.
 | 4   | Proposed protocol amendment        | **REJECTED (unnecessary) 2026-11-21**                                                            | Rejected as unnecessary under Decision 3                                                                                      | 1, 3                                        | Conservative reading applies                  |
 | 5   | Independent seeder                 | **Recorded 2026-11-21** — seeder Tom Tran (also corpus owner); construction not authorized       | Designate a human independent of the adjudicators                                                                             | None; needed by 6, 8                        | No seeded or no-known-defect cases            |
 | 6   | Two independent human adjudicators | None identified; operator is treated as an author                                                | Designate two external humans and record authorship checks                                                                    | 5 (seeder must differ), 1                   | PASS is impossible; best outcome INCONCLUSIVE |
-| 7   | Thresholds and cost limits         | Pre-registered, unapproved                                                                       | Approve before freeze; no changes after the first run                                                                         | 2, 3 (corpus size)                          | No run authorized                             |
+| 7   | Thresholds and cost limits         | **APPROVED 2026-11-21** — thresholds + 613-call ceiling; no dollar ceiling                       | Approve the pre-registered thresholds and a hard cost ceiling                                                                 | 2, 3                                        | No run                                        |
 | 8   | Corpus and instruction freeze      | `NOT FROZEN`; instructions draft                                                                 | Authorize only after 1–7 and corpus completion                                                                                | 1–7, corpus completion, WSB limits recorded | No reproducible run                           |
 | 9   | Full experiment execution          | Not authorized                                                                                   | Authorize explicitly after freeze, EP-15 disposition, and readiness checks                                                    | 8, EP-15, approved budget                   | No execution                                  |
 
@@ -270,21 +270,23 @@ check, the second-adjudication sampling rule, and the conflict-of-interest recor
 
 ## 7. Thresholds and cost limits
 
-**Current status.** Open. The thresholds are pre-registered by the assessment but not
-approved; no hard cost ceiling is approved. A readiness assessment is in
+**Current status.** **RECORDED 2026-11-21.** The thresholds and a 613-call ceiling are
+approved in [DECISION-RECORD-007](DECISION-RECORD-007-THRESHOLDS.md); no dollar ceiling is set.
+A readiness assessment is in
 [DECISION-007-THRESHOLD-COST-READINESS.md](DECISION-007-THRESHOLD-COST-READINESS.md), and a
 decision-ready proposal is in
 [DECISION-007-OPERATOR-APPROVAL-PROPOSAL.md](DECISION-007-OPERATOR-APPROVAL-PROPOSAL.md).
 
 **Verified evidence.** The assessment owns the thresholds and the call budget. The current
 planning range is 319–700 calls without Arm D and 499–1,309 with Arm D across the 15–29 plan
-range. No threshold is approved. No run is authorized. The Workstream B verification also
+range. Decision 7 is recorded: the thresholds and a 613-call ceiling are approved. No run is
+authorized. The Workstream B verification also
 records one unintended real cloud call outside the pilot and experiment budgets (no plan or
 repository content, output not kept, call count unknown); it is not experiment data and
 does not change the assessment's budget, but the operator should account for it.
 
-**Recommended disposition.** Approve the pre-registered thresholds and a hard cost ceiling
-before freeze, and record that no threshold may change after the first run.
+**Recorded disposition.** The pre-registered thresholds and a 613-call ceiling were approved,
+with the no-post-run-change rule. The analysis below is preserved.
 
 **Alternatives and trade-offs.**
 
@@ -299,11 +301,11 @@ budget. Decision 9 needs the approved ceiling.
 **Effect on experiment validity.** Changing a threshold after seeing data invalidates the
 pre-registration.
 
-**Consequence of deferral.** The experiment cannot be authorized.
+**Consequence of deferral (no longer applicable).** The experiment could not be authorized.
 
-**Exact operator action required.** Record the approved threshold values, the hard call or
-cost ceiling, the measurement rule for unreported usage, and the "no threshold change after
-the first run" statement.
+**Recorded operator action.** The thresholds, the 613-call ceiling, the measurement rule, and
+the no-post-run-change statement are recorded in
+[DECISION-RECORD-007](DECISION-RECORD-007-THRESHOLDS.md) §1–§6.
 
 ## 8. Corpus and instruction freeze authorization
 
@@ -387,10 +389,11 @@ The operator is asked to record, in writing:
 8. The freeze authorization, with the freeze commit and manifest hash.
 9. The execution authorization, with the budget, stop condition, and EP-15 disposition.
 
-Items 1–5 are recorded in [DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md),
+Items 1–5 and 7 are recorded in [DECISION-RECORD-001](DECISION-RECORD-001-CORPUS-OWNER.md),
 [DECISION-RECORD-002](DECISION-RECORD-002-HISTORICAL-DISPOSITIONS.md),
 [DECISION-RECORD-003](DECISION-RECORD-003-ELIGIBILITY.md),
-[DECISION-RECORD-004](DECISION-RECORD-004-PROTOCOL-AMENDMENT.md), and
-[DECISION-RECORD-005](DECISION-RECORD-005-SEEDER.md). Items 6–9 do not yet exist in the
-repository. PR #574 is merged evidence; it is not an approval of any
+[DECISION-RECORD-004](DECISION-RECORD-004-PROTOCOL-AMENDMENT.md),
+[DECISION-RECORD-005](DECISION-RECORD-005-SEEDER.md), and
+[DECISION-RECORD-007](DECISION-RECORD-007-THRESHOLDS.md). Item 6 (adjudicators) and items 8–9
+(freeze, execution) are not recorded. PR #574 is merged evidence; it is not an approval of any
 item above.

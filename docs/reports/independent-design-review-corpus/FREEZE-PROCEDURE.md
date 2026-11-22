@@ -38,11 +38,13 @@ The freeze cannot be executed until:
    [DECISION-RECORD-005](DECISION-RECORD-005-SEEDER.md).**
 6. The two human adjudicators are designated and their authorship checks are recorded
    (decision 6).
-7. The thresholds and cost ceiling are approved (decision 7).
+7. The thresholds and cost ceiling are approved (decision 7). **MET 2026-11-21 — thresholds
+   and a 613-call ceiling approved; no dollar ceiling is set; see
+   [DECISION-RECORD-007](DECISION-RECORD-007-THRESHOLDS.md).**
 
-Preconditions 1–4 are met (owner, inclusion list, eligibility rule, and amendment decision
-recorded 2026-11-21). Precondition 5 is partially met (seeder designated; construction
-controls open). Preconditions 6–7 remain open.
+Preconditions 1–4 and 7 are met (owner, inclusion list, eligibility rule, amendment decision,
+and thresholds/call ceiling recorded 2026-11-21). Precondition 5 is partially met (seeder
+designated; construction controls open). Precondition 6 remains open.
 
 The operator's freeze authorization is decision 8. Execution authorization is decision 9
 and is separate.
@@ -249,7 +251,7 @@ no case, approves no amendment, and executes no freeze.
 | 11  | Revision and artifact integrity               | All 17 recorded artifacts resolve and match SHA-256; every permitted reference exists; 6 entries have no artifact and are not counted                     | **MET for recorded artifacts**; the set is not frozen                                     |
 | 12  | Workstream B dependencies                     | PR #574 merged: EP-01/03/04/05/06/07/08/11/13/14 VERIFIED; EP-02/09/10/12/16 PARTIAL; EP-15 UNVERIFIED                                                    | **PARTIAL**                                                                               |
 | 13  | Model configuration and instruction readiness | `models.<class>` overlay requirement and EP-13 route verified; instruction blocks draft, not frozen; config overlay sha256 recorded for the pilots only   | **PARTIAL**                                                                               |
-| 14  | Cost limits and execution authorization       | Thresholds and budget pre-registered in the assessment; none approved; no execution authorization                                                         | **NOT MET**                                                                               |
+| 14  | Cost limits and execution authorization       | Thresholds and a 613-call ceiling approved 2026-11-21; no dollar ceiling; no execution authorization                                                      | **PARTIAL**                                                                               |
 
 **Why the verdict is NOT READY.** The corpus fails both floors under either reading, the
 seeded and no-known-defect controls do not exist, no independent seeder or two independent
