@@ -13,6 +13,11 @@ closes that report's open items rather than repeating its sweep.
 [DISC-001-H-001-EVIDENCE-VERIFICATION.md](DISC-001-H-001-EVIDENCE-VERIFICATION.md) (PR #618),
 [candidates.json](candidates.json) (unchanged).
 
+A third pass, [HISTORICAL-CORPUS-EVIDENCE-DISCOVERY-3.md](HISTORICAL-CORPUS-EVIDENCE-DISCOVERY-3.md), closes this
+report's §10 gap 4 (full-history corrective tracing for `GH-009`–`GH-014`), adds one spec lead (`GH3-001`,
+`docs/specs/PROMPT-EXECUTION.md`) whose evidence is a merged requirement change plus a recorded gap rather than a
+review thread, and records a `recorded gap` pointer for `GH-010`. This report is otherwise unchanged.
+
 Lead IDs use `GH-` as in the first pass; `GH-009`–`GH-014` and `GH-006` keep their first-pass IDs. New leads use `GH2-`.
 Classifications are **investigative proposals**. Nothing here is eligible, counted, or adjudicated.
 
