@@ -18,7 +18,7 @@ and changes no rule, record or count.
 | Unit | What is the floor's counting unit? | **Distinct artifact path, with a same-defect rule**; report cluster counts as a sensitivity row | The protocol counts "plans" and per-plan defects; revisions would inflate |
 | R-C | Do skills and guides count? | **No**, for now | Operational instructions; every current instance is also bot-only and partly unverified |
 
-**Count outcome:** the historical set reaches the 15-plan floor in **exactly one** scenario (S6: every permissive choice, including R-C Option C, with every adjudication succeeding and zero plan slack). Without R-C Option C the largest provisional total is **13 plans / 15 defects** (S4, 2 plans short); the most conservative reading leaves **4 / 5** (11 / 10 short). The decisions decide how far the proposals count; they do not by themselves close the shortfall.
+**Count outcome:** the historical set reaches the 15-plan floor only in the most permissive scenario (S6: R-B Option B, every packet admitted, R-C Option C and artifact counting, every adjudication succeeding), where it totals **17 plans / 19 defects**, with 2 plans and 4 defects of slack. Without R-C Option C the largest provisional total is **13 plans / 15 defects** (S4, 2 plans short); the most conservative reading leaves **4 / 5** (11 / 10 short). The decisions decide how far the proposals count; they do not by themselves close the shortfall.
 decide how far the proposals count; they do not close the shortfall.
 
 **Count reconciliation is active elsewhere.** A separate agent holds uncommitted work in the worktree `egm-count-reconciliation` (a corpus count convention defining classes C0–C3). It is not merged and is **not duplicated** here. This package uses
@@ -174,7 +174,7 @@ B is available as a *conservative owner ruling* under Decision 3 but is not what
 | --- | --- | --- |
 | **A (recommended)** | **Do not count** skills, guides, reference docs and procedures unless the document states requirements a developer would implement and a T1 pointer exists; decide per document at freeze | 0 |
 | B | Count skills and guides with a T1 pointer | 0 (none has one) |
-| C | Count them with T3 evidence under R-B Option B | `GH-005` and `GH-006` (two distinct paths, one verified defect each, no overlap with S4): **+2 plans / +2 defects** (scenario S6). `GH2-001`–`002` (one defect verified each) and `GH2-003`–`005` (triaged only) are not added; unverified items cannot count |
+| C | Count them with T3 evidence under R-B Option B | `GH-005`, `GH-006`, `GH2-001` and `GH2-002`: four distinct paths with one verified defect each (#613 §3.2, #620 §5.3), no overlap with S4: **+4 plans / +4 defects** (scenario S6). `GH2-003`–`005` are triaged only and cannot count until verified |
 
 ### 6.4 Proposed operator wording — PROPOSED — PENDING OPERATOR APPROVAL
 
@@ -220,14 +220,14 @@ Official baseline **C0 = 3 plans / 4 defects**; independently adjudicated **0 / 
 | S3 | B | none | artifact | 6 / 7 (+ `GH-001`, `GH-002`) | 9 / 8 | — |
 | S4 — maximum provisional | B | all admitted | artifact | **13 / 15** | 2 / 0 | C2 |
 | S5 | B | all admitted | subject cluster | 11 / 15 | 4 / 0 | C3 |
-| **S6 — S4 plus R-C Option C** | B and R-C C | all admitted | artifact | **15 / 17** (S4 + `GH-005`, `GH-006`) | **0 / 0** | — |
+| **S6 — S4 plus R-C Option C** | B and R-C C | all admitted | artifact | **17 / 19** (S4 + `GH-005`, `GH-006`, `GH2-001`, `GH2-002`) | **0 / 0** (slack 2 / 4) | — |
 
 - **Conservative provisional total: S1 (4 / 5).** If the recommended R-C-packet Option A is approved with R-B Option A, **S2 (5 / 6)** applies.
 - **Maximum defensible provisional total: S4 (13 / 15)**, which needs R-B Option B, every packet admitted, artifact counting, every adjudication to succeed, and has **no defect slack** (exactly 15). It is not an approved corpus.
-- **Only S6 adds held leads, and only `GH-005` and `GH-006`** (distinct paths, verified, no overlap with S4). `GH-004`, `GH2-001`–`005` and `DISC-001` / `IDR-H-001` are never added: their additivity is undefined until the unit is ruled.
-- **S6 has zero plan slack** (exactly 15 plans). It needs R-B Option B, every packet admitted, R-C Option C and every adjudication to succeed; one failure puts it below the floor. It is the maximum, not a forecast, and not an approved corpus.
+- **Only S6 adds held leads, and only the four verified ones** (`GH-005`, `GH-006`, `GH2-001`, `GH2-002`: distinct paths, one verified defect each, no overlap with S4). `GH-004`, `GH2-003`–`005` and `DISC-001` / `IDR-H-001` are never added: `GH-004` and `DISC-001` / `IDR-H-001` overlap by subject and their additivity is undefined until the unit is ruled; `GH2-003`–`005` are unverified.
+- **S6 has slack of 2 plans and 4 defects**, so one or two failed adjudications would not by themselves drop it below the floor. It still needs R-B Option B, every packet admitted, R-C Option C, artifact counting and a favorable ruling on every included lead; each skill and guide lead is also a T3 item whose determinability has been verified once by a model and by no human. It is the maximum, not a forecast, and not an approved corpus.
 - **GH-010 note:** if the owner accepts its recorded gap **and** admits the packet, S2 becomes 6 / 7 (10 → 9 plans short). That is not in the table because it needs two owner rulings the package recommends against.
-- Plans are the binding constraint in every row except S6. Arithmetic cross-check: S2 = 3 + 1 + 1 = 5 plans, 4 + 1 + 1 = 6 defects; S3 = 3 + 2 + 1 = 6, 4 + 2 + 1 = 7; S4 = 3 + 3 + 6 + 1 = 13, 4 + 3 + 7 + 1 = 15; S6 = 13 + 2 = 15 plans, 15 + 2 = 17 defects.
+- Plans are the binding constraint in every row except S6. Arithmetic cross-check: S2 = 3 + 1 + 1 = 5 plans, 4 + 1 + 1 = 6 defects; S3 = 3 + 2 + 1 = 6, 4 + 2 + 1 = 7; S4 = 3 + 3 + 6 + 1 = 13, 4 + 3 + 7 + 1 = 15; S6 = 13 + 4 = 17 plans, 15 + 4 = 19 defects.
 
 ## 10. Recommended operator decisions
 
@@ -246,7 +246,7 @@ All **PROPOSED — PENDING OPERATOR APPROVAL**. Required of the operator, in thi
 3. Circular origin of the bot-surfaced stratum (§3.2); stratified reporting is recommended if Option B is chosen.
 4. Four of the six #620 leads are not line-level re-verified; two packets are likely rejected under the recommended R-C-packet test, which reduces S4.
 5. The count convention is unmerged; the class labels may change.
-6. Without R-C Option C, even S4 leaves 2 plans short. S6 reaches 15 plans with no slack, so the floor is met only if every permissive ruling and every adjudication goes the favorable way.
+6. Without R-C Option C, even S4 leaves 2 plans short. S6 reaches the floor with a small margin, but only if every permissive ruling goes favorably and each included lead survives adjudication; four of its leads are skills or guides, the kind of artifact the recommended R-C Option A rejects.
 
 ## 12. Non-authorization statement
 
