@@ -3,7 +3,11 @@
 **Type:** Procedural-clarification proposal (non-normative). It analyses three ambiguities in
 the registered adjudication procedure and recommends interpretations. It approves nothing and
 authorizes no experiment activity.
-**Status:** **PROPOSED — NOT APPROVED. Decision 6 remains PENDING.**
+**Status:** **APPROVED — PROCEDURAL CLARIFICATIONS ONLY (2026-11-21).** The three
+interpretations in §§3–5 are approved in
+[DECISION-006-PROCEDURAL-CLARIFICATIONS-APPROVAL.md](DECISION-006-PROCEDURAL-CLARIFICATIONS-APPROVAL.md).
+Decision 6 adjudicator designation remains **PENDING**. Other operational recommendations
+in this proposal are **not** approved.
 **Baseline:** `origin/main` @ `f2a10fb2` (merge of PR #604).
 **Protocol:** [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](../EGM-GOLDFISH-REVIEW-ASSESSMENT.md) — authoritative.
 **Qualification package (input):** [DECISION-006-ADJUDICATOR-QUALIFICATION-PACKAGE.md](DECISION-006-ADJUDICATOR-QUALIFICATION-PACKAGE.md).

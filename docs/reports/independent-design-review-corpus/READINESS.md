@@ -700,8 +700,11 @@ conflict-of-interest declaration, the blinding procedure, and the double-adjudic
 
 No adjudicator is designated, contacted, or assessed. The repository shows only Tom Tran as a
 human identity; he is the corpus owner and seeder and cannot adjudicate. No qualified external
-human is identified. The three procedural ambiguities are analysed in
-[DECISION-006-ADJUDICATION-PROCEDURE-CLARIFICATION.md](DECISION-006-ADJUDICATION-PROCEDURE-CLARIFICATION.md);
-Decision 6 remains PENDING. The package cannot be mistaken for authorization: the corpus remains
+human is identified. The three procedural ambiguities are **APPROVED as clarifications**
+(2026-11-21) in
+[DECISION-006-PROCEDURAL-CLARIFICATIONS-APPROVAL.md](DECISION-006-PROCEDURAL-CLARIFICATIONS-APPROVAL.md);
+the analysis is in
+[DECISION-006-ADJUDICATION-PROCEDURE-CLARIFICATION.md](DECISION-006-ADJUDICATION-PROCEDURE-CLARIFICATION.md).
+Decision 6 adjudicator designation remains PENDING. The package cannot be mistaken for authorization: the corpus remains
 **NOT FROZEN**, the experiment **NOT YET READY**, and H1/H2 **NOT ESTABLISHED**. Decision 6
 stays open, and Decisions 7–9 remain open.

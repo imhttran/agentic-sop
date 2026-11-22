@@ -234,8 +234,11 @@ recorded in [DECISION-RECORD-005](DECISION-RECORD-005-SEEDER.md) §1–§5.
 
 ## 6. Two independent human adjudicators
 
-**Current status.** Open. No adjudicator is identified. A preparation package is in
+**Current status.** Open — adjudicator designation remains pending. No adjudicator is
+identified. A preparation package is in
 [DECISION-006-ADJUDICATOR-QUALIFICATION-PACKAGE.md](DECISION-006-ADJUDICATOR-QUALIFICATION-PACKAGE.md).
+**Procedural clarifications:** **APPROVED 2026-11-21** — see
+[DECISION-006-PROCEDURAL-CLARIFICATIONS-APPROVAL.md](DECISION-006-PROCEDURAL-CLARIFICATIONS-APPROVAL.md).
 
 **Verified evidence.** The repository shows only the operator as a human identity. The
 operator is treated conservatively as an author or direct editor of the candidate plans. No
