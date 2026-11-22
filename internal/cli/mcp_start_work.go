@@ -152,6 +152,9 @@ type workEnv struct {
 	// platform implementation; tests inject a fake so no test signals a process.
 	stop workStopper
 	now  func() time.Time
+	// recorded, when set, is called once the watcher has written a job's exit and
+	// terminal event. Nil in production; tests wait on it so no write outlives them.
+	recorded func(pid int)
 }
 
 // defaultWorkEnv is the production start-work environment.
@@ -435,6 +438,9 @@ func startWork(dir string, env workEnv, in startWorkArgs) (map[string]any, error
 	// Record the exit while this server lives. A detached child outlives the
 	// server; its exit is then reported as "ended" with no code.
 	go func() {
+		if env.recorded != nil {
+			defer env.recorded(pid)
+		}
 		code := wait()
 		endedAt := env.now().UTC()
 		_ = writeJSONFile(filepath.Join(jobDir, workExitFile), workExit{ExitCode: code, EndedAt: endedAt})

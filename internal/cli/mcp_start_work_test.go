@@ -25,6 +25,7 @@ type fakeWork struct {
 	nextPID   int
 	live      map[int]bool
 	done      map[int]chan int
+	settled   map[int]chan struct{} // closed once the watcher recorded the exit and event
 	launchErr error
 	clock     time.Time
 	// recorded notes, per launch, whether job.json already existed when the
@@ -33,7 +34,7 @@ type fakeWork struct {
 }
 
 func newFakeWork() *fakeWork {
-	return &fakeWork{nextPID: 4000, live: map[int]bool{}, done: map[int]chan int{}, clock: time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)}
+	return &fakeWork{nextPID: 4000, live: map[int]bool{}, done: map[int]chan int{}, settled: map[int]chan struct{}{}, clock: time.Date(2026, 10, 27, 12, 0, 0, 0, time.UTC)}
 }
 
 func (f *fakeWork) env() workEnv {
@@ -52,6 +53,7 @@ func (f *fakeWork) env() workEnv {
 			f.live[pid] = true
 			ch := make(chan int, 1)
 			f.done[pid] = ch
+			f.settled[pid] = make(chan struct{})
 			_ = os.WriteFile(logPath, []byte("SOP\nstarted "+args[0]+"\n"), 0o644)
 			return pid, func() int { return <-ch }, nil
 		},
@@ -66,30 +68,43 @@ func (f *fakeWork) env() workEnv {
 			f.clock = f.clock.Add(time.Second)
 			return f.clock
 		},
+		recorded: func(pid int) {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			close(f.settled[pid])
+		},
 	}
 }
 
-// finish ends a job with code and waits until the server recorded the exit.
+// finish ends a job with code and waits until the watcher recorded the exit and
+// its terminal event. Waiting only for exit.json let the event's store writes race
+// the test's TempDir cleanup ("directory not empty").
 func (f *fakeWork) finish(t *testing.T, dir string, pid, code int) {
 	t.Helper()
 	f.mu.Lock()
-	ch := f.done[pid]
+	ch, settled := f.done[pid], f.settled[pid]
 	f.mu.Unlock()
 	ch <- code
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		jobs, _ := listWorkJobs(dir, f.env())
-		for _, j := range jobs {
-			if j.PID == pid && j.ExitCode != nil {
-				f.mu.Lock()
-				f.live[pid] = false
-				f.mu.Unlock()
-				return
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
+	select {
+	case <-settled:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("exit for pid %d was not recorded", pid)
 	}
-	t.Fatalf("exit for pid %d was not recorded", pid)
+	f.mu.Lock()
+	f.live[pid] = false
+	f.mu.Unlock()
+	if jobs, _ := listWorkJobs(dir, f.env()); !hasExit(jobs, pid) {
+		t.Fatalf("watcher settled but no exit recorded for pid %d", pid)
+	}
+}
+
+func hasExit(jobs []workJobView, pid int) bool {
+	for _, j := range jobs {
+		if j.PID == pid && j.ExitCode != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // vanish makes a job's process disappear without an exit record.
