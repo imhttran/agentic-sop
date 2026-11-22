@@ -253,6 +253,14 @@ Reading:
 - The conservative bound for planning purposes stays at 11 plans short, with one more
   defect in hand.
 
+**Count class.** The **4 / 5** above is **C1 — the conservative total**: the recorded baseline
+plus the only increment that needs no open ruling. It is **not** the maximum. Adding the
+conditional layers from #613 and #620 (`+3 / +3`, `+6 / +7`, all gated on R-B and/or
+R-C-packet) gives **C2 = 13 / 15** by artifact counting — 2 plans short, with the defect floor
+met exactly and zero slack. The #613/#620 layers were not re-verified here; they are counted in
+C2 because their sources report them, not because this pass confirmed them. See
+[CORPUS-COUNT-CONVENTION.md](CORPUS-COUNT-CONVENTION.md) §2–§3.
+
 ## 10. Unresolved evidence gaps
 
 - No exported reviewer-visible tree has been built for any pin, including this one; whether

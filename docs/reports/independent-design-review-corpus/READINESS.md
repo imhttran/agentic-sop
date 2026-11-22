@@ -615,6 +615,15 @@ eligibility rule, or threshold.
 | Full experiment | **NOT YET READY** |
 | H1/H2 outcomes | **NOT ESTABLISHED** |
 
+**Counting convention (added after PRs #626 and #627).** The "3 plans / 4 defects" above is
+**C0**, the recorded baseline — not a maximum and not a reached total. The
+[CORPUS-COUNT-CONVENTION.md](CORPUS-COUNT-CONVENTION.md) publishes one labelled set instead of
+per-report headlines: **C0 = 3 / 4** (shortfall 12 / 11), **C1 = 4 / 5** (conservative; the one
+proposal needing no open ruling, shortfall 11 / 10), **C2 = 13 / 15** (conditional
+artifact-counted stack; 2 plans short, defect floor met exactly with zero slack), and **C3 =
+11 / 15** (cluster sensitivity, not a total). No class is met, nothing is promoted, and the
+independently adjudicated count is **0**.
+
 **What changed since §10:** two additional historical design defects are extracted — one
 proposed strict, one proposed partial — and the amended-best-case arithmetic now reaches the
 defect floor and misses the plan floor by one. No candidate was promoted, no case was

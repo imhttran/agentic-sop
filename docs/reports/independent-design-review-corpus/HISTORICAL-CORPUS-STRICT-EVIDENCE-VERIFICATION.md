@@ -154,6 +154,14 @@ Official counts unchanged; independently adjudicated **0 / 0**; seeded cases exc
 
 Cluster-adjusted (PR #620 §9): the PR #620 layer counts 4 plans, so the stack is **10 / 14**, shortfall **5 / 1**. Conservative bounds from PR #620 stand (8 / 6 and 11 / 10 short). These are possible additions, not members.
 
+**Count class (added after PRs #626 and #627).** The **12 / 14** above is **C2 — the conditional
+artifact-counted stack**: every proposed increment, every gating ruling assumed favorable, zero
+independently adjudicated. It is **not** the conservative total. The recorded baseline is
+**C0 = 3 / 4**, and the only increment that needs no open ruling is `GH3-001a` from
+[#627](HISTORICAL-CORPUS-EVIDENCE-DISCOVERY-3.md), giving **C1 = 4 / 5** (shortfall 11 / 10).
+With #627 the stack is **13 / 15** (2 plans short, defect floor met with zero slack). See
+[CORPUS-COUNT-CONVENTION.md](CORPUS-COUNT-CONVENTION.md) §2–§3.
+
 ## 10. Remaining blockers
 
 1. R-B and R-C-packet rulings (they gate all 12 plans).
