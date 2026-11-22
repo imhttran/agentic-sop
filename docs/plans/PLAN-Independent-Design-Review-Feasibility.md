@@ -188,6 +188,19 @@ did not authorize the experiment, freeze the corpus, or approve any governance d
 recorded verdicts are unchanged: corpus `NOT FROZEN`, freeze `NOT READY`, experiment `NOT YET
 READY`, and H1/H2 `NOT ESTABLISHED`.
 
+## Historical evidence workstream — closure note
+
+**Status: COMPLETE (evidence) — governance pending.** Recorded 2026-11-22 against `origin/main` `64248ffb`. This is a coordination status, not an SOP lifecycle transition: no plan was activated or completed in SOP and no lifecycle event was recorded. The task States above are preserved as written; where they predate Decision 2 (for example FEAS-A3 "0 strict"), the figures in the reports below supersede them.
+
+| Criterion (historical parts of FEAS-A1 to FEAS-A3) | Evidence |
+| --- | --- |
+| Candidate paths and revisions recorded; no later evidence treated as available to the reviewer (A1) | `candidates.json` (23 entries) and the revision register in `HISTORICAL-CORPUS-FINAL-RECONCILIATION.md` §3 (23 pins re-checked: exist, ancestors of `main`, hashes match) |
+| Every determinability classification labelled proposed or verified; pointers resolve (A2) | reconciliation §4 (tiers T1–T3, "V" column); no item is adjudicated (0 / 0) |
+| Verified, proposed and missing counts stated separately (A3) | reconciliation §6.1: approved 0 / 0; C0 3 / 4; C1 4 / 5; C2 13 / 15; C3 11 / 15; recommended S2 5 / 6 |
+| Floors met (A3 "Not met") | **still not met**: shortfall 15 / 15 approved, 10 / 9 under the recommended rules |
+
+Remaining work is governance: the eligibility rulings and the evidence-source or INCONCLUSIVE decision in `HISTORICAL-CORPUS-OPERATOR-HANDOFF.md`, then Decisions 6, 8 and 9. No further in-repository historical discovery is justified.
+
 ## Dependencies and status
 
 These are coordination statuses in this record, not SOP lifecycle transitions; no plan
