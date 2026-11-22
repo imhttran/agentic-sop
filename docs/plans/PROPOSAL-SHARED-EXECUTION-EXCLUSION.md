@@ -173,11 +173,11 @@ evidence list); none of the alternatives was prototyped.
    process the CLI does not have today. The lease keeps the file-based model and
    adds an owner record and a heartbeat.
 5. **The parent writes the lease for the child before launch.** Rejected in the
-   [design record](PLAN-ACP-EXECUTION-LEASE-WIRING-DESIGN-DECISIONS.md) (D1, an
-   unapproved recommendation): the record would name the parent's pid, so if the
+   [design record](PLAN-ACP-EXECUTION-LEASE-WIRING-DESIGN-DECISIONS.md) (D1,
+   approved on 2026-11-21): the record would name the parent's pid, so if the
    parent exits while the child runs the lease reads as stale and `sop resume`
    could release a live execution. This conflicts with the first bullet of §2,
-   which has the parent write the owner record; reconcile §2 when D1 is approved.
+   which has the parent write the owner record; §2 still needs reconciling with D1.
 6. **Do nothing, or advisory only.** Leaves the gap open. `advisory` is kept as a
    rollout stage (§7), not as an end state.
 

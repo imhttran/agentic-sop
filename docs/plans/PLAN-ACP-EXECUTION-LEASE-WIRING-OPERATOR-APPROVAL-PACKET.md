@@ -1,7 +1,7 @@
 # Operator approval packet — ACP execution-lease wiring
 
-Status: **approval packet, read-only. Nothing here is approved, applied, or
-authorized.** This document requests the decisions the blocked SOP run needs before
+Status: **Decision 1 APPROVED by Tom Tran on 2026-11-21; Decisions 2–4 are not
+decided.** Nothing is applied. This document requests the decisions the blocked SOP run needs before
 implementation may resume. It follows the repository's decision-record convention
 (`docs/plans/PROPOSAL-*-OPERATOR-DECISION-RECORD.md`).
 
@@ -34,6 +34,11 @@ Follow-up tests: #575.
 | Plan digest        | the plan and mapping were edited after compilation, so `plan.meta.json` `source_sha256` (`6e9922ed…`) is expected to mismatch; not yet checked by SOP     |
 
 ## Decision 1 — authorize the plan
+
+**Recorded: APPROVED** by Tom Tran on 2026-11-21. Scope: stages 2–16 of
+`PLAN-ACP-EXECUTION-LEASE-WIRING.md`; design decisions D1–D9 accepted as recommended. The
+plan's `Status:` line now names the approver and date. No SOP run, retry, reconcile or
+baseline change was made by this approval.
 
 **Requested:** approve `PLAN-ACP-EXECUTION-LEASE-WIRING.md` as the implementation
 authority for stages 2–16 (stage 1 is dropped), with the design decisions in the design

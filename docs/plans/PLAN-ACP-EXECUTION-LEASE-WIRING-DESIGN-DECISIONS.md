@@ -1,6 +1,8 @@
 # Design decisions — `PLAN-ACP-EXECUTION-LEASE-WIRING.md`
 
-Status: **decision record for operator review. Nothing here is approved.** These
+Status: **D1–D9 accepted as recommended** by Tom Tran on 2026-11-21 (operator Decision 1 in
+the [approval packet](PLAN-ACP-EXECUTION-LEASE-WIRING-OPERATOR-APPROVAL-PACKET.md)). Nothing else
+here is approved. These
 entries resolve the plan's "Known conflict" and "Open questions" so the plan can be
 approved or amended with an explicit record instead of being inferred from an
 existing SOP run.
