@@ -337,7 +337,27 @@ that filesystem permissions provide complete role isolation, and none asserts th
 verification establishes defect determinability. The technical report §6 and the D5-B package
 §5 both state the opposite.
 
-## 9. Non-authorization statement
+## 9. Workstream closure and preserved state
+
+| Item | State |
+| --- | --- |
+| Technical plan [PLAN-EGM-Manifest-Verification.md](../../plans/PLAN-EGM-Manifest-Verification.md) | **COMPLETE (technical)** — MP-1–MP-10, acceptance criteria verified at `f21cc0fc`; kept in `docs/plans/` because two documents reference its path; no `planflow.Complete` was applicable (the plan was never imported into SOP's plan store) |
+| Governance portion of Decision 5 | **OPEN** — this record cannot close it, and no approval was recorded |
+| Real artifacts | **None** — no case, manifest, answer key, vocabulary file, or secret exists |
+| Case construction | **UNAUTHORIZED** — `case_construction_authorized: false` |
+
+**Worktrees and branches.** Seven Decision 5 worktrees exist locally; all are clean and all of
+their branches are merged into `origin/main` except one. `docs/egm-decision-5-readiness`
+(`19568938`) is **unmerged and superseded**: its copy of the readiness assessment predates the
+current-status pointer and still records Decision 7 as `PENDING`, which is wrong. It must not be
+merged. It is preserved, not deleted, because deleting an unmerged branch or unique evidence is
+not authorized here. Proposed cleanup for the operator: remove the six merged Decision 5
+worktrees (`egm-manifest-verification`, `egm-manifest-sealer`, `egm-d5b-approval`,
+`egm-d5-closeout`, `egm-decision-5-approval`, `egm-decision-5-readiness-fix`) after confirming
+each is clean, and keep `egm-decision-5-readiness` for audit. Nothing was removed in this cycle,
+and no worktree, uncommitted file, or ignored `.agent-sdlc/` evidence was touched.
+
+## 10. Non-authorization statement
 
 This closeout approves nothing. It does not approve D5-A, D5-B1–B4, or D5-C; designate a
 checker, analyst, or adjudicator; select a manifest directory, vocabulary location, or
