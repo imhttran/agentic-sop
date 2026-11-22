@@ -3,7 +3,9 @@
 **Type:** Readiness assessment and proposal (non-normative). It prepares the open Decision 5
 controls for operator review. It designates nobody, selects no location, creates no manifest,
 key or secret, constructs no case, and authorizes nothing.
-**Baseline:** `origin/main` @ `7f8cb0626ead2820c45dc6f8fb469e031e50c6c3`, 2026-11-21.
+**Baseline:** `origin/main` @ `868ef0b2a54ac7978706f8e94fba1b46d781c460`, 2026-11-21 (analysis
+prepared at `7f8cb062`; reconciled after Decision 7).
+**Decision-ready wording:** [DECISION-005-OPERATOR-APPROVAL-PROPOSAL.md](DECISION-005-OPERATOR-APPROVAL-PROPOSAL.md).
 **Protocol:** [EGM-GOLDFISH-REVIEW-ASSESSMENT.md](../EGM-GOLDFISH-REVIEW-ASSESSMENT.md)
 (SHA-256 `abba919e…2305c`, re-computed on this baseline and unchanged).
 **Records read:** [DECISION-RECORD-005-SEEDER.md](DECISION-RECORD-005-SEEDER.md),
@@ -229,7 +231,7 @@ with `shasum` and a checklist, is an operator decision (§9).
 | Explicit case-construction authorization (`case_construction_authorized: true`) | PENDING | **Case construction** (Decision 005 §5) |
 | Analyst designation | not designated | Before the unblinding key is created, i.e. before freeze/execution (protocol §5.4); not a construction gate in the records |
 | Two independent human adjudicators | PENDING (Decision 6) | **Freeze** (precondition 6); not needed to construct cases |
-| Thresholds and cost ceiling | PENDING (Decision 7) | Freeze (precondition 7) |
+| Thresholds and cost ceiling | **APPROVED 2026-11-21** (Decision 7) | — |
 | Corpus and instruction freeze | PENDING (Decision 8) | Execution |
 | Full experiment execution | PENDING (Decision 9) | Execution |
 
