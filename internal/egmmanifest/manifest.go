@@ -1,9 +1,11 @@
 package egmmanifest
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"regexp"
@@ -184,6 +186,50 @@ func (c *Case) validate() error {
 	return nil
 }
 
+// leakCheckFields are the attestations every loaded case must state explicitly.
+var leakCheckFields = []string{
+	"artifact_contains_answer",
+	"permitted_reference_contains_answer",
+	"later_evidence_in_tree",
+}
+
+// UnmarshalJSON decodes a case record, requiring the leak_checks object and all three of
+// its booleans to be present. A missing attestation must fail closed instead of defaulting
+// to false, otherwise a stripped manifest would verify as though every check had run (the
+// canonical form of the zero value is identical to an explicit all-false record).
+func (c *Case) UnmarshalJSON(data []byte) error {
+	type plain Case
+	var v plain
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&v); err != nil {
+		return err
+	}
+
+	var probe struct {
+		LeakChecks map[string]json.RawMessage `json:"leak_checks"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return err
+	}
+	if probe.LeakChecks == nil {
+		return errors.New("leak_checks object is required")
+	}
+	for _, field := range leakCheckFields {
+		raw, ok := probe.LeakChecks[field]
+		if !ok || string(bytes.TrimSpace(raw)) == "null" {
+			return fmt.Errorf("leak_checks.%s is required", field)
+		}
+		var b bool
+		if err := json.Unmarshal(raw, &b); err != nil {
+			return fmt.Errorf("leak_checks.%s must be a boolean", field)
+		}
+	}
+
+	*c = Case(v)
+	return nil
+}
+
 func safeRelativePath(p string) bool {
 	if p == "" || strings.ContainsRune(p, 0) {
 		return false
@@ -213,7 +259,10 @@ func Load(path string) (*Manifest, error) {
 	if err := dec.Decode(&m); err != nil {
 		return nil, fmt.Errorf("egmmanifest: decode manifest: %w", err)
 	}
-	if dec.More() {
+	// A second decode must report io.EOF; anything else means trailing bytes remain.
+	// Decoder.More is not an end-of-input test: it returns false before a closing
+	// delimiter without checking for content after it.
+	if err := dec.Decode(new(json.RawMessage)); !errors.Is(err, io.EOF) {
 		return nil, errors.New("egmmanifest: trailing data after the manifest")
 	}
 	if err := m.Validate(); err != nil {
