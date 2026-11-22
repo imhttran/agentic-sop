@@ -7,7 +7,7 @@ and [WORKSTREAM-B-RECONCILIATION.md](independent-design-review-corpus/WORKSTREAM
 It is **not** an experiment result, authorizes no experiment, pilot or real inference,
 changes no threshold or eligibility rule, and does not touch the corpus or its freeze.
 
-**Baseline:** `origin/main` @ `5a94dfe1` (PRs #574, #577 and #579 are on it). No change was
+**Baseline (sections 1-8):** `origin/main` @ `5a94dfe1` (PRs #574, #577 and #579 are on it). No change was
 made to SOP routing, providers, prompt construction or the execution lease. The only code
 added is experiment-local: [`internal/expharness`](../../internal/expharness) and its thin
 front end [`cmd/expcheck`](../../cmd/expcheck). Nothing in SOP calls either.
@@ -211,3 +211,114 @@ they actually live.
 - The model-based `sop review` gate was not run for the same reason as in the earlier report
   (it would send the diff to a cloud model without separate authorization); see the PR for
   the gates that were.
+
+## 9. Independent re-verification and consolidated readiness (2026-11-21)
+
+**Type:** documentation update only. **Baseline:** `origin/main` @ `38e20a52` (PR #588
+merged as `e829e5d9`). No code, default, threshold, corpus file or decision record was
+changed. **Platform:** macOS (Darwin); the code under test has no platform-specific path
+(this report's earlier `/bin/true` note stands). No real-provider request was sent.
+
+**Re-run offline on this baseline** (no inference): `go test ./internal/expharness
+-count=1 -race` (16 tests pass, including `TestThreeConcurrentCallsAreIsolatedAndAttributed`)
+and `go test ./internal/model ./internal/cli ./internal/perf ./internal/ollamaagent
+-count=1 -run 'Verify|Routing|Prompt|Usage|Fallback|Resolve'` (all pass). Code re-read:
+`internal/model/model.go` (`DefaultRoute`), `internal/cli/prompt.go` (`promptRunID`),
+`internal/ollamaagent/config.go`, `internal/agent/provider.go`.
+
+**Label mapping.** The task brief's seven labels are matched to the authoritative EP
+definitions (§6) by theme, not by number: request construction → EP-01 plus §3;
+attribution → EP-02; tool-use evidence → EP-05/EP-16; isolation and concurrency →
+EP-06/07/08; reproducibility → EP-10/EP-12; provider concurrency → EP-15; retries and
+usage → EP-09/EP-03.
+
+### 9.1 Control results
+
+| Theme (authoritative ID) | Implementation / tests | Verified | Not established | Live provider needed? |
+| --- | --- | --- | --- | --- |
+| Request construction, boundaries (EP-01, §3) | `expharness.Render/ScanRequest/CheckRefs`; `TestRenderedRequestReachesProviderVerbatimInsideSOPWrapper` | Request reaches the provider verbatim inside SOP's fixed wrapper; fence is byte-stable | No instruction/data boundary exists (delimiter only); model obedience | Yes, for model behavior only |
+| Identity, attribution (EP-02) | `expharness.Attribute`; `TestInheritedModelOverrideIsDetectedByProxyAndPreflight` | Sent model equals routed model; override detected | Provider-side substitution invisible; returned `model` is self-reported | Yes, whether a provider returns an id |
+| Tool-use evidence (EP-05/EP-16) | `SOP_TOOL_AUDIT_LOG`; `TestNativeToolUseAndRetriesAreObservable` | Tool call observable on synthetic runtime | Whether a real model inspects the repository (0 of 4 in Pilot B) | Yes |
+| Isolation, concurrency (EP-06/07/08) | `promptRunID` (`os.Mkdir` reservation, suffix on `IsExist`); `TestSameProjectProcessesKeepSeparateRuns`, `TestFailureAndCeilingLeaveNoRunDirectory` | Atomic id, distinct run dirs, no cross-run request leakage, clean failure | Provider-side behavior under load | No for local; EP-15 for provider |
+| Reproducibility, sampling (EP-10/EP-12) | `ollamaagent.Config`, `agent.provider` request structs | Manifest and hash reproducibility; per-request duration | SOP sends **no temperature, seed or top_p**; only an output cap (`num_predict`/`max_tokens`, default 16384, `agent.DefaultMaxOutputTokens`). Model behavior is not reproducible; repetition carries variance | Yes, for variance |
+| Provider concurrency, latency (EP-15) | Gated synthetic provider; proxy ceilings | Procedure and instruments only | Real concurrency and batch latency | **Yes** |
+| Retries, usage (EP-09/EP-03) | proxy count vs `tokens.calls`; `internal/perf` tests | Retried native turns visible as extra proxy requests; `unreported_calls` handled | Real-provider usage fields; which requests were retries. Default call timeout is 120 s (`defaultTimeout`) | Yes, for real usage fields |
+
+Result classes after this pass (no PASS granted that the evidence does not support):
+**Verified (synthetic/code):** EP-01 mechanism, EP-06/07/08, EP-03 mechanics.
+**Partially verified:** EP-02, EP-05/EP-16 (instrument verified, behavior not), EP-09,
+EP-10, EP-12. **Unverified:** EP-15. This matches the earlier classification; nothing was
+upgraded.
+
+### 9.2 Provider configuration, re-confirmed
+
+- **`small` cloud fallback is still present.** `DefaultRoute().Small` is local
+  `qwen3:4b` with a `Fallback` to cloud `ollama` / `nemotron-3-nano:30b-cloud`; an overlay
+  cannot remove it. `medium` and `large` have **no fallback but are cloud-by-default**
+  (`nemotron-3-super:cloud`, `deepseek-v4.1-flash:cloud`), so an undefined `medium` or
+  `large` routes to cloud (EP-13).
+- **Environment overrides** that can redirect a run include `SOP_AGENT_PROVIDER`,
+  `SOP_AGENT_HARNESS`, `SOP_AGENT_MODEL`, `SOP_OLLAMA_MODEL`/`BASE_URL`,
+  `SOP_OPENAI_COMPATIBLE_BASE_URL`, `SOP_OMLX_*` and `SOP_MODEL_*`.
+- **Configuration that prevents unintended cloud routing** (unchanged from §1; production
+  defaults untouched): a validated overlay defining `small`/`medium`/`large` with explicit
+  provider, name and `locality: local`; no `fallback:` blocks and never `--model-class small`;
+  routing, escalation, replan and `allow_cloud_fallback_for_local` off; `expcheck preflight`
+  passing under `env -i` plus the allow-list; the call-ceilinged proxy in front of the only
+  endpoint. Residual: a local Ollama daemon can itself serve a `:cloud` model and still look
+  local to SOP, so `locality` is the operator's statement, not a probe.
+- **Raw-response retention:** hashes only (`result.md`, `resp_sha256`); bodies are not kept
+  unless the operator decides otherwise (§7 item 4).
+
+### 9.3 Remaining execution risks
+
+1. Real-provider concurrency and batch latency unmeasured (EP-15); a missing C timing
+   makes H2 INCONCLUSIVE.
+2. Model identity is client-side only; provider-side substitution is undetectable.
+3. No sampling control; run-to-run variance is uncontrolled.
+4. Whether a real reviewer uses repository tools is unobserved.
+5. SOP's trailing output-requirement line conflicts with a JSON-demanding template.
+6. Ambient `SOP_*` variables on the operator's machine fail preflight (by design).
+7. Token ceiling is a stop threshold, not a spend bound; the call ceiling is the hard bound.
+8. A prior unintended cloud call (earlier report) is outside the experiment data.
+
+### 9.4 EP-15 live-verification plan (not executed)
+
+Procedure is §5. Bounds to fix before any run: **provider and model** named by the
+operator, one `sop` build recorded by sha256; **3 concurrent requests**, one project each,
+synthetic request only; **per-proxy** `--max-calls 2` (hard bound 6 provider calls) and an
+operator token threshold `T` (about `3 × T` plus in-flight overshoot); timeout is SOP's
+120 s per call, with the batch aborted after one full timeout interval; **abort** on any
+`429` from a ceiling, a non-matching model in the request, a preflight failure, any
+unexpected host, or an attribution problem; **evidence** is the three `expcheck attribute`
+records, proxy logs, request and output hashes and the batch wall clock; **cost** bounded by
+the call ceiling and `T`, and recorded as an estimate only. **Limits:** one batch measures
+one provider at one time; it does not predict full-run latency and is not comparable with a
+pilot.
+
+**Exact operator authorization required before a live run:** (a) provider and model id,
+(b) confirmation that cloud use is intended or that the endpoint is local, (c) call count
+(3) and ceiling `N`, (d) token threshold `T` and any cost cap, (e) the credential source,
+(f) permission to pass `--allow-nonlocal-upstream` if the upstream is not loopback, and
+(g) a statement that no corpus or repository content is sent.
+
+### 9.5 Operator decisions, corpus dependencies, minimum evidence
+
+- **Operator decisions:** the five items in §7 remain open (EP-02 disposition, EP-12
+  disposition, EP-15 authorization, raw-body retention, no `small`). Decisions 5–9 in the
+  [operator package](independent-design-review-corpus/OPERATOR-DECISION-PACKAGE.md) are
+  **not approved** here.
+- **Corpus governance dependencies (kept separate):** eligibility rule, floor, seeder,
+  seeded and no-known-defect cases, two human adjudicators, thresholds and freeze remain
+  with the corpus workstream. Execution readiness neither depends on nor decides them.
+- **Minimum evidence before experiment authorization:** a passing preflight record for the
+  frozen overlay; a completed EP-15 live batch (or an explicit decision to accept it
+  UNVERIFIED, which makes C latency first-measured and H2 INCONCLUSIVE if missing); the
+  operator dispositions in §7; and the freeze record citing the limits above.
+
+### 9.6 Statement
+
+**Execution readiness is NOT established.** The harness, isolation and attribution
+instruments are verified on synthetic runtime; EP-15 is UNVERIFIED, EP-02, EP-05/16, EP-09,
+EP-10 and EP-12 are PARTIAL, and no real-provider run has occurred. This section authorizes
+nothing.
