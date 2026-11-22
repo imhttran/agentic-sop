@@ -12,7 +12,7 @@ candidate promotion, adjudication, a corpus freeze, or an experiment result. **E
 
 **The held leads do not supply two more plans.** Nine leads were investigated or re-checked and a sweep of spec amendments was run. The outcome is **0 new strict candidates and 0 new determinable defects**.
 Three held leads gained verified detail (one more defect on `GH2-001` and on `GH-004`, and a persistence check on `IDR-L-001`), but each stays behind an open ruling, so **C0–C3 are unchanged**:
-C0 3 / 4, C1 4 / 5, C2 13 / 15 (2 plans short), C3 11 / 15. Nothing is added to C2. The remaining pool inside this repository is exhausted for plan-level strict evidence; the honest finding is a shortfall, and §10 says what could change it.
+C0 3 / 4, C1 4 / 5, C2 13 / 15 (2 plans short), C3 11 / 15. Nothing is added to C2. By artifact counting the held leads could still add plans **conditionally** (scenario S7 in §8: `IDR-L-001` and `GH-004`, reaching 15 plans / 19 defects without skills or guides), but only if R-D, R-B Option B, every packet kind including approval packets, R-A and every adjudication all go the permissive way, against the recommended rules. No strict plan was added; §10 says what could change the shortfall.
 
 ## 2. Preflight and ownership
 
@@ -120,10 +120,12 @@ Facts are in §5; the following are interpretations. All **PROPOSED — PENDING 
 | C2 conditional, artifact | 13 / 15 | 2 / 0 | none (nothing added) |
 | C3 cluster sensitivity | 11 / 15 | 4 / 0 | none |
 | New verified strict proposals | **0 / 0** | | |
-| C4, held, never totalled | adds only after rulings: `IDR-L-001` (+1 / +1 under R-D), `GH-004` (+0 plans by cluster, 3 defects), `GH-005`, `GH-006`, `GH2-001` (2 defects), `GH2-002` | | `GH2-001` 1 → 2 verified defects; `GH-004` (c) verified |
+| C4, held, never totalled | adds only after rulings: `IDR-L-001` (+1 / +1 under R-D), `GH-004` (+1 plan / +3 defects by artifact counting; +0 plans by cluster counting, which is a C3-style view), `GH-005`, `GH-006`, `GH2-001` (2 defects), `GH2-002` | | `GH2-001` 1 → 2 verified defects; `GH-004` (c) verified |
 
 Reference only: the decision package's permissive scenario S6 (17 / 19) used one verified defect for `GH2-001`; with the second verified here it would read 17 plans / 20 defects. That package is not edited by this report.
-Not added to C2 automatically: `IDR-L-001` (needs R-D), `GH-004` (subject overlap and packet kind), and the R-C leads.
+Not added to C2 automatically: `IDR-L-001` (needs R-D), `GH-004` (packet kind, R-B, R-A) and the R-C leads.
+
+**Conditional scenario S7 (artifact counting; not a total, not added to C2).** Neither `IDR-L-001` nor `GH-004` overlaps a C2 path (§6). `GH-004`'s subject overlap with `DISC-001` / `IDR-H-001` does not reduce an artifact-count increment, because neither of those is in C2. C2 13 / 15 plus `IDR-L-001` (+1 / +1) plus `GH-004` (+1 / +3) = **15 plans / 19 defects** (shortfall 0 / 0), with no skills or guides. It needs R-D **yes** (the report recommends no), approval packets **admitted** (the package recommends rejecting them), R-B Option B, R-A resolved for `GH-004`'s PR-head pins, artifact counting, and every one of the 15 plans surviving adjudication, with no plan slack. It is the minimum-route maximum, not a forecast. Combined with S6 (skills and guides, 17 / 20 on the corrected `GH2-001` count) the conditional ceiling would be higher still.
 
 ## 9. Outstanding operator decisions
 
@@ -131,7 +133,7 @@ R-B, R-C-packet, counting unit, R-C (see the decision package), and R-D (§7). S
 
 ## 10. Remaining evidence gaps and recommended next investigations
 
-- **The registered floor of 15 plans cannot be met from this repository's evidence under any ruling short of R-C Option C** (S6), and S6 rests on skills, guides and reference documents the recommended R-C rule excludes. This pass found no way to add strict plans from the existing pool.
+- **The registered floor of 15 plans is not reached by any scenario that follows the recommended rules** (4 / 5 strictest; 13 / 15 at most without R-C Option C or R-D). It is reachable only conditionally: by S6 (R-C Option C) or by S7 (R-D plus approval packets), each requiring several permissive rulings the packages recommend against and every adjudication to succeed. This pass found no way to add a plan whose evidence meets the conservative reading.
 - Four of the six #620 leads (`GH-010`, `GH-011`, `GH-012`, `GH-014`) were verified once and not re-checked at the line level (#626 §11); that remains the cheapest way to firm up C2 but adds no plans.
 - `GH2-003`–`GH2-005` remain triaged only; `GH-004` (d) is unresolved; no human has verified any item.
 
