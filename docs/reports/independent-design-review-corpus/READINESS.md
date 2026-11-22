@@ -211,7 +211,7 @@ The full options, trade-offs, validity effects, and deferral consequences are in
 | 4   | Proposed protocol amendment        | **REJECTED (unnecessary) 2026-11-21**                                                            | Recorded in DECISION-RECORD-004; protocol unchanged                          |
 | 5   | Independent seeder                 | **Recorded 2026-11-21** — seeder Tom Tran (also corpus owner); construction not authorized       | Recorded in DECISION-RECORD-005; checker, manifest, and construction open    |
 | 6   | Two independent human adjudicators | **PREPARATION ONLY** — package ready; no adjudicator designated or assessed                      | 0 of 2 assessed; PASS unreachable without two independent humans             |
-| 7   | Thresholds and cost limits         | Pre-registered, unapproved                                                                       | No approved threshold or hard cost ceiling; no post-first-run change rule    |
+| 7   | Thresholds and cost limits         | **APPROVED 2026-11-21** — thresholds + 613-call ceiling; no dollar ceiling                       | Recorded in DECISION-RECORD-007; execution still requires Decision 9         |
 | 8   | Corpus and instruction freeze      | **NOT FROZEN**; procedure prepared, not executed                                                 | Decisions 1–7 not recorded; corpus incomplete; instructions draft            |
 | 9   | Full experiment execution          | Not authorized                                                                                   | Workstream B merged but EP-15 open; freeze and decisions 1–8 not recorded    |
 
@@ -714,13 +714,15 @@ stays open, and Decisions 7–9 remain open.
 
 ## 18. Decision 7 readiness (current)
 
-**Decision 7 remains PENDING.** Threshold and cost readiness is assessed in
+**Decision 7 — APPROVED 2026-11-21.** The thresholds and a 613-call ceiling are recorded in
+[DECISION-RECORD-007-THRESHOLDS.md](DECISION-RECORD-007-THRESHOLDS.md); execution remains
+prohibited. Threshold and cost readiness is assessed in
 [DECISION-007-THRESHOLD-COST-READINESS.md](DECISION-007-THRESHOLD-COST-READINESS.md). The
 registered thresholds, the 319–700 (no Arm D) and 499–1,309 (with Arm D) call ranges, the
 arm/repetition model, and the implementation gaps are recorded there. A decision-ready
 proposal (default 7-call, 613-call ceiling, EP-15 UNVERIFIED) is in
-[DECISION-007-OPERATOR-APPROVAL-PROPOSAL.md](DECISION-007-OPERATOR-APPROVAL-PROPOSAL.md); it is
-not approved.
+[DECISION-007-OPERATOR-APPROVAL-PROPOSAL.md](DECISION-007-OPERATOR-APPROVAL-PROPOSAL.md), and the
+approval is recorded in [DECISION-RECORD-007-THRESHOLDS.md](DECISION-RECORD-007-THRESHOLDS.md).
 
 The cost-accounting and ceiling primitives pass their offline tests. The EGM
 threshold/stopping-rule, kappa, cluster-bootstrap, reproducibility, and run-manifest
