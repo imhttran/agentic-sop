@@ -210,7 +210,7 @@ The full options, trade-offs, validity effects, and deferral consequences are in
 | 3   | Strict versus partial eligibility  | **Recorded 2026-11-21** — conservative; seeded set additional                                    | Recorded in DECISION-RECORD-003; the amendment remains pending               |
 | 4   | Proposed protocol amendment        | **REJECTED (unnecessary) 2026-11-21**                                                            | Recorded in DECISION-RECORD-004; protocol unchanged                          |
 | 5   | Independent seeder                 | **Recorded 2026-11-21** — seeder Tom Tran (also corpus owner); construction not authorized       | Recorded in DECISION-RECORD-005; checker, manifest, and construction open    |
-| 6   | Two independent human adjudicators | None identified; operator treated as an author                                                   | No two independent humans; PASS is unreachable                               |
+| 6   | Two independent human adjudicators | **PREPARATION ONLY** — package ready; no adjudicator designated or assessed                      | 0 of 2 assessed; PASS unreachable without two independent humans             |
 | 7   | Thresholds and cost limits         | Pre-registered, unapproved                                                                       | No approved threshold or hard cost ceiling; no post-first-run change rule    |
 | 8   | Corpus and instruction freeze      | **NOT FROZEN**; procedure prepared, not executed                                                 | Decisions 1–7 not recorded; corpus incomplete; instructions draft            |
 | 9   | Full experiment execution          | Not authorized                                                                                   | Workstream B merged but EP-15 open; freeze and decisions 1–8 not recorded    |
@@ -689,3 +689,17 @@ plans / 11 defects; no candidate is promoted and the adjudicated count is 0. The
 remains **NOT FROZEN**, the experiment **NOT YET READY**, and H1/H2 **NOT ESTABLISHED**.
 Decisions 6–9 remain open. Freeze preconditions 1–4 are met; precondition 5 is partially met;
 preconditions 6–7 remain open.
+
+## 17. Decision 6 preparation (current)
+
+**Decision 6 remains PENDING.** A recruitment and qualification package is prepared in
+[DECISION-006-ADJUDICATOR-QUALIFICATION-PACKAGE.md](DECISION-006-ADJUDICATOR-QUALIFICATION-PACKAGE.md).
+It contains the protocol requirement matrix, a per-candidate checklist, two blank
+qualification records, a role description, a copy-ready recruitment message, a
+conflict-of-interest declaration, the blinding procedure, and the double-adjudication rules.
+
+No adjudicator is designated, contacted, or assessed. The repository shows only Tom Tran as a
+human identity; he is the corpus owner and seeder and cannot adjudicate. No qualified external
+human is identified. The package cannot be mistaken for authorization: the corpus remains
+**NOT FROZEN**, the experiment **NOT YET READY**, and H1/H2 **NOT ESTABLISHED**. Decision 6
+stays open, and Decisions 7–9 remain open.

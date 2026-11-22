@@ -234,7 +234,8 @@ recorded in [DECISION-RECORD-005](DECISION-RECORD-005-SEEDER.md) §1–§5.
 
 ## 6. Two independent human adjudicators
 
-**Current status.** Open. No adjudicator is identified.
+**Current status.** Open. No adjudicator is identified. A preparation package is in
+[DECISION-006-ADJUDICATOR-QUALIFICATION-PACKAGE.md](DECISION-006-ADJUDICATOR-QUALIFICATION-PACKAGE.md).
 
 **Verified evidence.** The repository shows only the operator as a human identity. The
 operator is treated conservatively as an author or direct editor of the candidate plans. No

@@ -221,6 +221,8 @@ authorized.
 
 ## 7. Decision 6 — Two independent human adjudicators
 
+**Preparation package:** [DECISION-006-ADJUDICATOR-QUALIFICATION-PACKAGE.md](DECISION-006-ADJUDICATOR-QUALIFICATION-PACKAGE.md).
+
 **Verified current state.** No adjudicator is identified. The repository shows only the
 operator as a human Git identity, and the operator is treated conservatively as an author or
 direct editor of the candidate plans. The protocol requires two distinct humans who are not
