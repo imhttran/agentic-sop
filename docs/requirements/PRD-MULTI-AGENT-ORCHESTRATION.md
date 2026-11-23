@@ -816,7 +816,8 @@ The report records `not run` for any reviewer that did not complete; none did.
 - [x] Implementation plan created in the repository's plan format.
 - [ ] Operator decisions D1, D2, D5–D10 resolved or accepted as deferred (D3 and
       D4 are resolved in this revision).
-- [ ] Documentation-only PR opened and linked; no implementation or merge implied.
+- [x] Documentation-only PR opened and linked; no implementation or merge implied:
+      <https://github.com/imhttran/agentic-sop/pull/645> (draft).
 
 ---
 
